@@ -1,0 +1,107 @@
+<div class="page-container companies-page">
+  <app-navbar />
+
+  <main class="companies-shell">
+    <section class="companies-header panel">
+      <div>
+        <p class="badge badge-success">{{ 'Administrador' | t }}</p>
+        <h1 class="title-xl">{{ 'Mis empresas' | t }}</h1>
+        <p class="text-muted">{{ 'Gestiona las empresas registradas en tu cuenta.' | t }}</p>
+      </div>
+
+      <div class="companies-header-actions">
+        @if (esSuperAdmin) {
+          <a class="btn btn-secondary" routerLink="/superadmin">{{ 'Panel SuperAdmin' | t }}</a>
+        }
+        <a class="btn btn-primary" routerLink="/register-company">
+          {{ 'Registrar Nueva Empresa' | t }}
+        </a>
+      </div>
+    </section>
+
+    @if (cargandoEmpresas) {
+      <section class="companies-state panel" aria-live="polite">
+        <p class="text-muted">{{ 'Cargando empresas...' | t }}</p>
+      </section>
+    } @else if (errorEmpresas) {
+      <section class="companies-state panel" aria-live="polite">
+        <p class="feedback feedback-error">{{ errorEmpresas }}</p>
+      </section>
+    } @else if (companies.length === 0) {
+      <section class="companies-state panel" aria-live="polite">
+        <p class="text-muted">{{ 'Aun no tienes empresas registradas.' | t }}</p>
+      </section>
+    } @else {
+      <section class="companies-grid" aria-label="Empresas registradas">
+        @for (company of companies; track obtenerIdEmpresa(company)) {
+          <article class="card card-hover company-card">
+            <div class="company-card-header">
+              <div>
+                <h2 class="title-md">{{ company.nombre }}</h2>
+                <p class="text-muted">{{ company.razon_social }}</p>
+              </div>
+
+              @if (company.activo) {
+                <span class="badge badge-success">{{ 'Activo' | t }}</span>
+              } @else {
+                <span class="badge badge-danger">{{ 'Inactivo' | t }}</span>
+              }
+              @if (company.suscripcion_activa) {
+                <span class="badge" [class.badge-success]="company.suscripcion_activa.estado === 'activa' || company.suscripcion_activa.estado === 'activo'">{{ 'Plan' | t }}: {{ company.suscripcion_activa.plan_nombre }}</span>
+              } @else {
+                <span class="badge badge-warning">{{ 'Sin plan' | t }}</span>
+              }
+            </div>
+
+            <dl class="company-data">
+              <div>
+                <dt>NIT</dt>
+                <dd>{{ company.nit }}</dd>
+              </div>
+              <div>
+                <dt>{{ 'Correo' | t }}</dt>
+                <dd>{{ company.correo }}</dd>
+              </div>
+              <div>
+                <dt>{{ 'Fecha de registro' | t }}</dt>
+                <dd>{{ company.fecha_registro }}</dd>
+              </div>
+            </dl>
+
+            <div class="company-actions">
+              @if (tienePlanActivo(company)) {
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  [disabled]="empresaEntrandoId === obtenerIdEmpresa(company)"
+                  (click)="entrarEmpresa(company)"
+                >
+                  {{ (empresaEntrandoId === obtenerIdEmpresa(company) ? 'Entrando...' : 'Entrar') | t }}
+                </button>
+              } @else {
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  (click)="abrirModalPago(obtenerIdEmpresa(company))"
+                >{{ 'Pagar Plan' | t }}</button>
+              }
+              <a
+                class="btn btn-secondary"
+                [routerLink]="['/edit-company', obtenerIdEmpresa(company)]"
+                >{{ 'Editar' | t }}</a
+              >
+            </div>
+          </article>
+        }
+      </section>
+    }
+  </main>
+
+  @if (empresaSeleccionadaId !== null) {
+    <app-plan-selector-modal
+      [idEmpresa]="empresaSeleccionadaId"
+      (cerrar)="cerrarModalPago()"
+    ></app-plan-selector-modal>
+  }
+</div>
+

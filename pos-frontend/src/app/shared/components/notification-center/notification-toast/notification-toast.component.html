@@ -1,0 +1,11 @@
+<div *ngIf="notification" class="notification-toast" role="status" aria-live="polite">
+  <button class="notification-toast-close" type="button" aria-label="Cerrar alerta" (click)="close()">×</button>
+  <div class="notification-toast-body">
+    <span class="notification-toast-kicker">Alerta de stock</span>
+    <strong>{{ notification.titulo || 'Notificación' }}</strong>
+    <p *ngIf="notification.mensaje">{{ notification.mensaje }}</p>
+  </div>
+  <div class="notification-toast-actions">
+    <button class="btn btn-primary btn-sm" type="button" (click)="openDetail()">Ver detalle</button>
+  </div>
+</div>

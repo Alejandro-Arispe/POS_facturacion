@@ -1,0 +1,58 @@
+<div class="modal-overlay" (click)="cerrarModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Seleccionar plan</h2>
+      <button class="close-btn" type="button" (click)="cerrarModal()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      @if (cargandoPlanes) {
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Cargando planes disponibles...</p>
+        </div>
+      }
+
+      @if (errorPlanes) {
+        <div class="error-state">
+          <p>{{ errorPlanes }}</p>
+          <button class="retry-btn" type="button" (click)="cargarPlanes()">Reintentar</button>
+        </div>
+      }
+
+      @if (!cargandoPlanes && !errorPlanes) {
+        <div class="plans-grid">
+          @for (plan of planes; track plan.id_plan) {
+            <div class="plan-card" [class.processing]="procesandoPagoId === plan.id_plan">
+              <div class="plan-header">
+                <h3>{{ plan.nombre }}</h3>
+                <div class="plan-price">
+                  <span class="currency">$</span>
+                  <span class="amount">{{ plan.precio }}</span>
+                  <span class="period">/mes</span>
+                </div>
+              </div>
+              <div class="plan-body">
+                <p>{{ plan.descripcion }}</p>
+              </div>
+              <div class="plan-footer">
+                <button
+                  class="select-plan-btn"
+                  type="button"
+                  [disabled]="procesandoPagoId !== null"
+                  (click)="seleccionarPlan(plan)"
+                >
+                  @if (procesandoPagoId === plan.id_plan) {
+                    <span class="spinner small"></span> Procesando...
+                  } @else {
+                    Elegir {{ plan.nombre }}
+                  }
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>

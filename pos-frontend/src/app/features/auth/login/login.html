@@ -1,0 +1,133 @@
+<div class="login-page">
+  <main class="login-shell">
+    <div class="login-container panel">
+      <section class="login-panel">
+        <a class="login-brand" href="/" aria-label="Volver al inicio">POS</a>
+
+        <header class="login-header">
+          <p class="badge badge-success">{{ 'Acceso al sistema' | t }}</p>
+          <h1 class="title-xl">{{ 'Iniciar sesion' | t }}</h1>
+          <p class="text-muted">{{ 'Ingresa tus credenciales para continuar.' | t }}</p>
+        </header>
+
+        <form
+          class="login-form"
+          aria-label="Formulario de inicio de sesion"
+          (submit)="iniciarSesion($event)"
+        >
+          <div class="form-group">
+            <label class="label" for="correo">{{ 'Correo electronico' | t }}</label>
+            <input
+              class="input"
+              id="correo"
+              name="correo"
+              type="email"
+              placeholder="ayrton.daza.1230@gmail.com"
+              autocomplete="email"
+              required
+              [(ngModel)]="email"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="contrasena">{{ 'Contrasena' | t }}</label>
+            <input
+              class="input"
+              id="contrasena"
+              name="contrasena"
+              type="password"
+              placeholder="Ingresa tu contrasena"
+              autocomplete="current-password"
+              required
+              [(ngModel)]="contrasena"
+            />
+          </div>
+
+          @if (errorLogin) {
+            <p class="feedback feedback-error">{{ errorLogin }}</p>
+          }
+
+          <div class="login-options">
+            <label class="remember-option">
+              <input type="checkbox" name="recordarme" />
+              <span>{{ 'Recordarme' | t }}</span>
+            </label>
+            <a href="/" (click)="abrirModalRecuperacion($event)">{{ 'Olvide mi contrasena' | t }}</a>
+          </div>
+
+          <button class="btn btn-primary submit-button" type="submit" [disabled]="cargandoLogin">
+            {{ cargandoLogin ? 'Iniciando...' : 'Iniciar sesion' }}
+          </button>
+        </form>
+
+        <p class="register-link text-muted">
+          {{ 'No tienes cuenta?' | t }}
+          <a routerLink="/register">{{ 'Registrate' | t }}</a>
+        </p>
+
+        <p class="home-link text-muted">
+          {{ 'Volver a la pagina principal?' | t }}
+          <a routerLink="/">{{ 'Ir al inicio' | t }}</a>
+        </p>
+      </section>
+    </div>
+  </main>
+
+  @if (mostrarModalRecuperacion) {
+    <div class="modal-backdrop" role="presentation">
+      <section
+        class="recovery-modal panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recoveryTitle"
+      >
+        <button
+          class="modal-close"
+          type="button"
+          aria-label="Cerrar modal"
+          (click)="cerrarModalRecuperacion()"
+        >
+          x
+        </button>
+
+        <header class="recovery-header">
+          <p class="badge badge-success">{{ 'Recuperacion' | t }}</p>
+          <h2 class="title-lg" id="recoveryTitle">Recuperar contrase&ntilde;a</h2>
+          <p class="text-muted">{{ 'Ingresa tu correo para recibir las instrucciones.' | t }}</p>
+        </header>
+
+        <form class="recovery-form" (submit)="recuperarContrasena($event)">
+          <div class="form-group">
+            <label class="label" for="emailRecuperacion">{{ 'Correo electronico' | t }}</label>
+            <input
+              class="input"
+              id="emailRecuperacion"
+              name="emailRecuperacion"
+              type="email"
+              placeholder="usuario@email.com"
+              autocomplete="email"
+              required
+              [(ngModel)]="emailRecuperacion"
+            />
+          </div>
+
+          @if (errorRecuperacion) {
+            <p class="feedback feedback-error">{{ errorRecuperacion }}</p>
+          }
+
+          @if (mensajeRecuperacion) {
+            <p class="feedback feedback-success">{{ mensajeRecuperacion }}</p>
+          }
+
+          <button
+            class="btn btn-primary submit-button"
+            type="submit"
+            [disabled]="cargandoRecuperacion"
+          >
+            {{ cargandoRecuperacion ? 'Enviando...' : 'Recuperar contrase&ntilde;a' }}
+          </button>
+        </form>
+      </section>
+    </div>
+  }
+</div>

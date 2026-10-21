@@ -1,0 +1,182 @@
+<div class="page-container clients-categories-page">
+  <app-navbar />
+
+  <main class="clients-categories-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="clients-categories-content">
+      <header class="clients-categories-header panel">
+        <div>
+          <p class="badge badge-success">Empresa {{ companyName }}</p>
+          <h1 class="title-xl">Categorias de Clientes</h1>
+          <p class="text-muted">Agrupa tus clientes por tipo para organizar mejor tu operacion.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de categorias de clientes">
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'list'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'list'"
+            (click)="setActiveTab('list')"
+          >
+            Lista de categorias
+          </button>
+          @if (hasPermission('CATEGORIA_CREAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'register'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'register'"
+              (click)="setActiveTab('register')"
+            >
+              Registrar categoria
+            </button>
+          }
+        </div>
+
+        <div class="tab-content">
+          @if (activeTab === 'list') {
+            @if (cargandoCategorias) {
+              <section class="state-panel" aria-live="polite">
+                <p class="text-muted">Cargando categorias...</p>
+              </section>
+            } @else if (errorCategorias) {
+              <section class="state-panel" aria-live="polite">
+                <p class="feedback feedback-error">{{ errorCategorias }}</p>
+              </section>
+            } @else if (categories.length === 0) {
+              <section class="state-panel" aria-live="polite">
+                <p class="text-muted">Aun no hay categorias registradas para clientes.</p>
+              </section>
+            } @else {
+            <section class="categories-list" aria-label="Categorias de clientes registradas">
+              @for (category of categories; track category.id) {
+                <article class="list-item">
+                  <div>
+                    <h3 class="title-sm">{{ category.nombre }}</h3>
+                    <p class="text-muted">{{ category.descripcion || 'Sin descripcion' }}</p>
+                    <div class="category-details">
+                      <span class="badge" [class.badge-info]="category.activo" [class.badge-disabled]="!category.activo">
+                        {{ category.activo ? 'Activo' : 'Inactivo' }}
+                      </span>
+                      @if (false) {
+                        <span class="badge badge-success">Crédito permitido</span>
+                      }
+                      <span class="detail-item">Plazo credito: {{ category.plazoCredito }} dias</span>
+                      <span class="detail-item">Descuento: {{ category.descuentoBase }}%</span>
+                      <span class="detail-item">Limite credito: {{ category.limiteCredito | money }}</span>
+                    </div>
+                  </div>
+                  @if (hasPermission('CATEGORIA_EDITAR')) {
+                    <div class="row-actions">
+                      <a
+                        class="btn btn-primary"
+                        [routerLink]="['/company', companyId, 'clients', 'categories', category.id, 'edit-category']"
+                      >
+                        Editar
+                      </a>
+                    </div>
+                  }
+                </article>
+              }
+            </section>
+          }
+          } @else {
+            <section class="register-panel">
+              <h2 class="title-md">Registrar categoria de cliente</h2>
+              @if (errorRegistro) {
+                <p class="feedback feedback-error">{{ errorRegistro }}</p>
+              }
+
+              @if (mensajeRegistro) {
+                <p class="feedback feedback-success">{{ mensajeRegistro }}</p>
+              }
+
+              <form class="entity-form" (submit)="registrarCategoria($event)">
+                <div class="form-group">
+                  <label class="label" for="categoria_nombre">Nombre <span class="required">*</span></label>
+                  <input
+                    class="input"
+                    id="categoria_nombre"
+                    name="categoria_nombre"
+                    required
+                    [(ngModel)]="categoryForm.nombre"
+                    placeholder="Ej: Mayoristas, Minoristas"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="categoria_descripcion">Descripción</label>
+                  <textarea
+                    class="textarea"
+                    id="categoria_descripcion"
+                    name="categoria_descripcion"
+                    rows="3"
+                    [(ngModel)]="categoryForm.descripcion"
+                    placeholder="Describe el tipo de cliente..."
+                  ></textarea>
+                </div>
+
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="label" for="plazo_credito">Plazo de Credito (dias)</label>
+                    <input
+                      class="input"
+                      id="plazo_credito"
+                      name="plazo_credito"
+                      type="number"
+                      min="0"
+                      step="1"
+                      [(ngModel)]="categoryForm.plazoCredito"
+                      placeholder="30"
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="label" for="descuento_base">Descuento Base (%)</label>
+                    <input
+                      class="input"
+                      id="descuento_base"
+                      name="descuento_base"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      [(ngModel)]="categoryForm.descuentoBase"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="label" for="limite_credito">Limite de Credito ({{ '' | currencySymbol }})</label>
+                    <input
+                      class="input"
+                      id="limite_credito"
+                      name="limite_credito"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [(ngModel)]="categoryForm.limiteCredito"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button class="btn btn-primary" type="submit" [disabled]="cargandoRegistro">
+                    {{ cargandoRegistro ? 'Registrando...' : 'Registrar categoria' }}
+                  </button>
+                </div>
+              </form>
+            </section>
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

@@ -1,0 +1,302 @@
+<div class="page-container bi-page">
+  <app-navbar />
+
+  <main class="bi-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="bi-content viz-root">
+      <header class="panel bi-header">
+        <div>
+          <p class="badge badge-success">Inteligencia de negocios</p>
+          <h1 class="title-xl">Análisis inteligente de ventas</h1>
+          <p class="text-muted">
+            Indicadores, tendencia y pronóstico calculados por el servicio de analítica (Python · pandas).
+          </p>
+        </div>
+        <div class="bi-filters">
+          <label class="form-group">
+            <span class="text-sm">Periodo</span>
+            <select class="input" [(ngModel)]="days" (ngModelChange)="load()">
+              <option [ngValue]="7">Últimos 7 días</option>
+              <option [ngValue]="30">Últimos 30 días</option>
+              <option [ngValue]="60">Últimos 60 días</option>
+              <option [ngValue]="90">Últimos 90 días</option>
+            </select>
+          </label>
+          <label class="form-group">
+            <span class="text-sm">Sucursal</span>
+            <select class="input" [(ngModel)]="branchId" (ngModelChange)="load()">
+              <option value="">Todas</option>
+              @for (b of branches; track branchIdOf(b)) {
+                <option [value]="branchIdOf(b)">{{ b.nombre }}</option>
+              }
+            </select>
+          </label>
+        </div>
+      </header>
+
+      @if (error) {
+        <p class="panel bi-error">{{ error }}</p>
+      }
+      @if (loading && !data) {
+        <p class="panel bi-state text-muted">Analizando ventas…</p>
+      }
+
+      @if (data) {
+        <!-- KPIs -->
+        <section class="kpi-grid" [class.dim]="loading">
+          <article class="panel kpi">
+            <span class="kpi-label">Ingresos</span>
+            <strong class="kpi-value">{{ data.kpis.revenue | money }}</strong>
+            @if (data.kpis.revenue_growth_pct !== null) {
+              <span [class]="'kpi-delta ' + growthClass(data.kpis.revenue_growth_pct)">
+                {{ data.kpis.revenue_growth_pct > 0 ? '+' : '' }}{{ data.kpis.revenue_growth_pct }}% vs. periodo anterior
+              </span>
+            }
+          </article>
+          <article class="panel kpi">
+            <span class="kpi-label">Ventas</span>
+            <strong class="kpi-value">{{ data.kpis.sales }}</strong>
+            @if (data.kpis.sales_growth_pct !== null) {
+              <span [class]="'kpi-delta ' + growthClass(data.kpis.sales_growth_pct)">
+                {{ data.kpis.sales_growth_pct > 0 ? '+' : '' }}{{ data.kpis.sales_growth_pct }}% vs. periodo anterior
+              </span>
+            }
+          </article>
+          <article class="panel kpi">
+            <span class="kpi-label">Ticket promedio</span>
+            <strong class="kpi-value">{{ data.kpis.avg_ticket | money }}</strong>
+            <span class="kpi-delta">{{ data.kpis.items_per_sale }} productos por venta</span>
+          </article>
+          <article class="panel kpi">
+            <span class="kpi-label">Pronóstico 14 días</span>
+            <strong class="kpi-value">{{ data.forecast_total | money }}</strong>
+            <span class="kpi-delta">Tendencia {{ data.trend.direction }}</span>
+          </article>
+        </section>
+
+        <!-- Insights -->
+        <section class="panel bi-card">
+          <h2 class="title-md">Recomendaciones</h2>
+          <ul class="insights">
+            @for (insight of data.insights; track $index) {
+              <li [class]="'insight insight-' + insight.level">
+                <span class="insight-tag">
+                  {{ insight.level === 'warning' ? 'Atención' : insight.level === 'success' ? 'Bien' : insight.level === 'tip' ? 'Sugerencia' : 'Dato' }}
+                </span>
+                <div>
+                  <strong>{{ insight.title }}</strong>
+                  <p class="text-sm text-muted">{{ insight.detail }}</p>
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
+
+        <!-- Serie temporal -->
+        <section class="panel bi-card">
+          <div class="card-head">
+            <div>
+              <h2 class="title-md">Ventas diarias y pronóstico</h2>
+              <p class="text-sm text-muted">
+                {{ formatDate(data.start) }} – {{ formatDate(data.end) }} · pronóstico con estacionalidad semanal e
+                intervalo del 80 %
+              </p>
+            </div>
+            <button class="btn btn-secondary" type="button" (click)="showTable = !showTable">
+              {{ showTable ? 'Ver gráfico' : 'Ver tabla' }}
+            </button>
+          </div>
+
+          <ul class="legend" aria-label="Leyenda">
+            <li><span class="swatch swatch-line s1"></span>Ventas</li>
+            <li><span class="swatch swatch-line s2"></span>Media móvil 7 días</li>
+            <li><span class="swatch swatch-dash s3"></span>Pronóstico</li>
+            <li><span class="swatch swatch-band"></span>Rango probable</li>
+          </ul>
+
+          @if (!showTable) {
+            <div class="line-wrap">
+              <svg
+                #lineSvg
+                class="line-chart"
+                [attr.viewBox]="'0 0 ' + lineW + ' ' + lineH"
+                role="img"
+                aria-label="Ventas diarias, media móvil y pronóstico"
+                (mousemove)="onLineMove($event, lineSvg)"
+                (mouseleave)="clearHover()"
+              >
+                @for (t of yTicks; track t) {
+                  <line class="grid" [attr.x1]="pad.left" [attr.x2]="lineW - pad.right" [attr.y1]="y(t)" [attr.y2]="y(t)" />
+                  <text class="axis" [attr.x]="pad.left - 8" [attr.y]="y(t) + 4" text-anchor="end">{{ compact(t) }}</text>
+                }
+                @for (l of xLabels; track l.x) {
+                  <text class="axis" [attr.x]="l.x" [attr.y]="lineH - 8" text-anchor="middle">{{ l.label }}</text>
+                }
+                <path class="band" [attr.d]="bandPath" />
+                <line class="today" [attr.x1]="todayX" [attr.x2]="todayX" [attr.y1]="pad.top" [attr.y2]="lineH - pad.bottom" />
+                <text class="axis today-label" [attr.x]="todayX + 4" [attr.y]="pad.top + 10">hoy</text>
+                <path class="series s2-stroke" [attr.d]="avgPath" />
+                <path class="series s1-stroke" [attr.d]="revenuePath" />
+                <path class="series s3-stroke dashed" [attr.d]="forecastPath" />
+                @if (hoverIndex !== null) {
+                  <line
+                    class="crosshair"
+                    [attr.x1]="points[hoverIndex].x"
+                    [attr.x2]="points[hoverIndex].x"
+                    [attr.y1]="pad.top"
+                    [attr.y2]="lineH - pad.bottom"
+                  />
+                  @if (points[hoverIndex].revenue !== null) {
+                    <circle class="dot s1-fill" [attr.cx]="points[hoverIndex].x" [attr.cy]="y(points[hoverIndex].revenue!)" r="4.5" />
+                  }
+                  @if (points[hoverIndex].forecast !== null) {
+                    <circle class="dot s3-fill" [attr.cx]="points[hoverIndex].x" [attr.cy]="y(points[hoverIndex].forecast!)" r="4.5" />
+                  }
+                }
+              </svg>
+              @if (tooltip) {
+                <div class="tooltip" [class.flip]="tooltip.flip" [style.left.%]="tooltip.x">
+                  <strong>{{ tooltip.title }}</strong>
+                  @for (line of tooltip.lines; track $index) {
+                    <span>{{ line }}</span>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="table-shell table-scroll">
+              <table class="table">
+                <thead>
+                  <tr><th>Fecha</th><th class="num">Ventas</th><th class="num">Ingresos</th><th class="num">Media 7 días</th><th class="num">Pronóstico</th></tr>
+                </thead>
+                <tbody>
+                  @for (d of data.daily; track d.date) {
+                    <tr>
+                      <td>{{ formatDate(d.date) }}</td>
+                      <td class="num">{{ d.sales }}</td>
+                      <td class="num">{{ d.revenue | money }}</td>
+                      <td class="num">{{ d.moving_avg === null ? '—' : (d.moving_avg | money) }}</td>
+                      <td class="num">—</td>
+                    </tr>
+                  }
+                  @for (f of data.forecast; track f.date) {
+                    <tr class="forecast-row">
+                      <td>{{ formatDate(f.date) }}</td>
+                      <td class="num">—</td>
+                      <td class="num">—</td>
+                      <td class="num">—</td>
+                      <td class="num">{{ f.revenue | money }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+
+        <div class="bi-grid">
+          <!-- Productos ABC -->
+          <section class="panel bi-card">
+            <h2 class="title-md">Productos (análisis ABC)</h2>
+            <p class="text-sm text-muted">A: generan el 80 % de los ingresos · B: el siguiente 15 % · C: el 5 % restante.</p>
+            <ul class="hbars">
+              @for (p of data.products.slice(0, 10); track p.product) {
+                <li class="hbar" [attr.title]="p.product + ': ' + money(p.revenue) + ' (' + p.share_pct + '%) · ' + p.units + ' unidades'">
+                  <span class="hbar-label">
+                    <span [class]="'abc abc-' + p.abc_class">{{ p.abc_class }}</span>
+                    {{ p.product }}
+                  </span>
+                  <span class="hbar-track"><span class="hbar-fill" [style.width.%]="barPct(p.revenue, data.products)"></span></span>
+                  <span class="hbar-value">{{ p.revenue | money }}</span>
+                </li>
+              }
+            </ul>
+          </section>
+
+          <!-- Categorias -->
+          <section class="panel bi-card">
+            <h2 class="title-md">Ingresos por categoría</h2>
+            <p class="text-sm text-muted">Participación de cada categoría en el periodo.</p>
+            <ul class="hbars">
+              @for (c of data.categories; track c.label) {
+                <li class="hbar" [attr.title]="c.label + ': ' + money(c.revenue) + ' en ' + c.sales + ' ventas'">
+                  <span class="hbar-label">{{ c.label }}</span>
+                  <span class="hbar-track"><span class="hbar-fill" [style.width.%]="barPct(c.revenue, data.categories)"></span></span>
+                  <span class="hbar-value">{{ c.share_pct }}%</span>
+                </li>
+              }
+            </ul>
+          </section>
+
+          <!-- Dias de la semana -->
+          <section class="panel bi-card">
+            <h2 class="title-md">Ingresos por día de la semana</h2>
+            <p class="text-sm text-muted">Mejor día: {{ bestWeekday(data.weekdays) }}.</p>
+            <div class="vbars" role="img" aria-label="Ingresos por día de la semana">
+              @for (w of data.weekdays; track w.label; let i = $index) {
+                <div class="vbar" [attr.title]="w.label + ': ' + money(w.revenue) + ' (' + w.sales + ' ventas)'">
+                  <span class="vbar-value">{{ compact(w.revenue) }}</span>
+                  <span class="vbar-track"><span class="vbar-fill" [style.height.%]="barPct(w.revenue, data.weekdays)"></span></span>
+                  <span class="vbar-label">{{ weekdayShort[i] }}</span>
+                </div>
+              }
+            </div>
+          </section>
+
+          <!-- Mapa de calor -->
+          <section class="panel bi-card">
+            <h2 class="title-md">Ventas por día y hora</h2>
+            <p class="text-sm text-muted">Cantidad de ventas: más oscuro = más ventas.</p>
+            <div class="heatmap" [style.grid-template-columns]="'36px repeat(' + heatHours.length + ', minmax(14px, 1fr))'">
+              <span></span>
+              @for (h of heatHours; track h) {
+                <span class="heat-hour">{{ h % 2 === 0 ? h : '' }}</span>
+              }
+              @for (wd of [0, 1, 2, 3, 4, 5, 6]; track wd) {
+                <span class="heat-day">{{ weekdayShort[wd] }}</span>
+                @for (h of heatHours; track h) {
+                  <span
+                    class="heat-cell"
+                    [style.background]="heatColor(heatValue(wd, h))"
+                    [attr.title]="weekdayShort[wd] + ' ' + h + ':00 — ' + heatValue(wd, h) + ' ventas'"
+                  ></span>
+                }
+              }
+            </div>
+          </section>
+
+          @if (data.payment_methods.length) {
+            <section class="panel bi-card">
+              <h2 class="title-md">Métodos de pago</h2>
+              <ul class="hbars">
+                @for (m of data.payment_methods; track m.label) {
+                  <li class="hbar" [attr.title]="m.label + ': ' + money(m.revenue) + ' en ' + m.sales + ' ventas'">
+                    <span class="hbar-label">{{ m.label }}</span>
+                    <span class="hbar-track"><span class="hbar-fill" [style.width.%]="barPct(m.revenue, data.payment_methods)"></span></span>
+                    <span class="hbar-value">{{ m.share_pct }}%</span>
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          @if (data.branches.length > 1) {
+            <section class="panel bi-card">
+              <h2 class="title-md">Ingresos por sucursal</h2>
+              <ul class="hbars">
+                @for (b of data.branches; track b.label) {
+                  <li class="hbar" [attr.title]="b.label + ': ' + money(b.revenue)">
+                    <span class="hbar-label">{{ b.label }}</span>
+                    <span class="hbar-track"><span class="hbar-fill" [style.width.%]="barPct(b.revenue, data.branches)"></span></span>
+                    <span class="hbar-value">{{ b.revenue | money }}</span>
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+        </div>
+      }
+    </section>
+  </main>
+</div>

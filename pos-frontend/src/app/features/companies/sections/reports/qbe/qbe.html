@@ -1,0 +1,176 @@
+<div class="page-container qbe-page">
+  <app-navbar />
+
+  <main class="qbe-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="qbe-content">
+      <header class="panel qbe-header">
+        <p class="badge badge-success">Empresa {{ companyId }}</p>
+        <h1 class="title-xl">Consulta por ejemplo (QBE)</h1>
+        <p class="text-muted">
+          Arma tu propio reporte: elige la fuente de datos, las columnas que quieres ver, las condiciones y, si lo
+          necesitas, agrupa y totaliza.
+        </p>
+      </header>
+
+      @if (error) {
+        <p class="panel qbe-error">{{ error }}</p>
+      }
+
+      @if (source) {
+        <section class="panel qbe-builder">
+          <div class="step">
+            <h2 class="title-sm">1. Fuente de datos</h2>
+            <div class="source-grid">
+              @for (s of sources; track s.codigo) {
+                <button type="button" class="source-card" [class.active]="s.codigo === source.codigo" (click)="selectSource(s.codigo)">
+                  <strong>{{ s.nombre }}</strong>
+                  <span class="text-xs text-muted">{{ s.descripcion }}</span>
+                </button>
+              }
+            </div>
+          </div>
+
+          <div class="step">
+            <h2 class="title-sm">2. Columnas</h2>
+            <p class="text-xs text-muted">Marca las columnas a mostrar. Usa "Agrupar" para resumir por esa columna.</p>
+            <div class="field-table">
+              <div class="field-row field-head">
+                <span>Campo</span>
+                <span>Mostrar</span>
+                <span>Agrupar</span>
+              </div>
+              @for (f of source.campos; track f.codigo) {
+                <div class="field-row">
+                  <span>{{ f.etiqueta }} <small class="text-muted">({{ f.tipo.toLowerCase() }})</small></span>
+                  <input type="checkbox" [checked]="selectedFields.has(f.codigo)" [disabled]="grouped" (change)="toggleField(f.codigo)" />
+                  <input type="checkbox" [checked]="groupBy.has(f.codigo)" (change)="toggleGroup(f.codigo)" />
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="step">
+            <h2 class="title-sm">3. Condiciones</h2>
+            @for (c of conditions; track $index; let i = $index) {
+              <div class="condition-row">
+                <select class="input" [(ngModel)]="c.campo" (ngModelChange)="onConditionField(c)">
+                  @for (f of source.campos; track f.codigo) {
+                    <option [value]="f.codigo">{{ f.etiqueta }}</option>
+                  }
+                </select>
+                <select class="input" [(ngModel)]="c.operador">
+                  @for (op of field(c.campo)?.operadores ?? []; track op) {
+                    <option [value]="op">{{ operatorLabels[op] || op }}</option>
+                  }
+                </select>
+                @if (needsValue(c)) {
+                  @if (field(c.campo)?.tipo === 'BOOLEANO') {
+                    <select class="input" [(ngModel)]="c.valor">
+                      <option value="true">Sí</option>
+                      <option value="false">No</option>
+                    </select>
+                  } @else {
+                    <input class="input" [type]="inputType(c)" [(ngModel)]="c.valor" placeholder="valor" />
+                  }
+                  @if (c.operador === 'entre') {
+                    <input class="input" [type]="inputType(c)" [(ngModel)]="c.valor2" placeholder="hasta" />
+                  }
+                }
+                <button class="btn btn-secondary" type="button" (click)="removeCondition(i)">Quitar</button>
+              </div>
+            } @empty {
+              <p class="text-xs text-muted">Sin condiciones: se muestran todos los registros.</p>
+            }
+            <button class="btn btn-secondary" type="button" (click)="addCondition()">Agregar condición</button>
+          </div>
+
+          @if (grouped) {
+            <div class="step">
+              <h2 class="title-sm">4. Totales</h2>
+              @for (a of aggregates; track $index; let i = $index) {
+                <div class="condition-row">
+                  <select class="input" [(ngModel)]="a.funcion">
+                    @for (fn of aggregateFunctions; track fn) {
+                      <option [value]="fn">{{ aggregateLabels[fn] }}</option>
+                    }
+                  </select>
+                  @if (a.funcion !== 'CONTEO') {
+                    <select class="input" [(ngModel)]="a.campo">
+                      @for (f of numericFields; track f.codigo) {
+                        <option [value]="f.codigo">{{ f.etiqueta }}</option>
+                      }
+                    </select>
+                  }
+                  <button class="btn btn-secondary" type="button" (click)="removeAggregate(i)">Quitar</button>
+                </div>
+              }
+              <button class="btn btn-secondary" type="button" (click)="addAggregate()">Agregar total</button>
+            </div>
+          }
+
+          <div class="step options-row">
+            <label class="form-group">
+              <span class="text-sm">Ordenar por</span>
+              <select class="input" [(ngModel)]="orderField">
+                <option value="">Sin orden</option>
+                @for (o of orderOptions; track o.codigo) {
+                  <option [value]="o.codigo">{{ o.etiqueta }}</option>
+                }
+              </select>
+            </label>
+            <label class="form-group">
+              <span class="text-sm">Dirección</span>
+              <select class="input" [(ngModel)]="orderDirection">
+                <option value="asc">Ascendente</option>
+                <option value="desc">Descendente</option>
+              </select>
+            </label>
+            <label class="form-group">
+              <span class="text-sm">Máximo de filas</span>
+              <input class="input" type="number" min="1" max="1000" [(ngModel)]="limit" />
+            </label>
+            <button class="btn btn-primary run-button" type="button" [disabled]="loading" (click)="run()">
+              {{ loading ? 'Consultando…' : 'Ejecutar consulta' }}
+            </button>
+          </div>
+        </section>
+      }
+
+      @if (result) {
+        <section class="panel qbe-result">
+          <div class="result-header">
+            <div>
+              <h2 class="title-md">Resultado</h2>
+              <p class="text-sm text-muted">{{ result.descripcion }} · {{ result.total_filas }} fila(s){{ result.truncado ? ' (limitado)' : '' }}</p>
+            </div>
+            <button class="btn btn-secondary" type="button" [disabled]="!result.filas.length" (click)="exportExcel()">Exportar a Excel</button>
+          </div>
+          <div class="table-shell">
+            <table class="table">
+              <thead>
+                <tr>
+                  @for (col of result.columnas; track col.codigo) {
+                    <th [class.num]="col.tipo === 'NUMERO'">{{ col.etiqueta }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of result.filas; track $index) {
+                  <tr>
+                    @for (cell of row; track $index; let i = $index) {
+                      <td [class.num]="result.columnas[i].tipo === 'NUMERO'">{{ format(cell, result.columnas[i].tipo, result.columnas[i].codigo) }}</td>
+                    }
+                  </tr>
+                } @empty {
+                  <tr><td [attr.colspan]="result.columnas.length" class="text-muted">No hay registros que cumplan las condiciones.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </section>
+      }
+    </section>
+  </main>
+</div>

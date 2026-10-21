@@ -1,0 +1,128 @@
+.prediction-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.prediction-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-lg);
+  width: min(var(--content-max-width), 100%);
+  margin: 0 auto;
+}
+
+.prediction-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.prediction-header,
+.prediction-panel {
+  padding: var(--space-xl);
+}
+
+.prediction-header {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-sm);
+}
+
+.prediction-form {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.field-group {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.field-group label {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.prediction-controls {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-md);
+}
+
+.prediction-controls .select {
+  width: min(320px, 100%);
+}
+
+.prediction-controls .btn {
+  white-space: nowrap;
+}
+
+.field-error {
+  color: var(--color-danger, #c62828);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.result-header {
+  display: grid;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-lg);
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.details-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.details-table th,
+.details-table td {
+  padding: var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.details-table th {
+  background: var(--color-surface);
+  color: var(--color-text-soft);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.details-table td {
+  color: var(--color-text);
+}
+
+.details-table tbody tr:hover {
+  background: rgba(16, 185, 129, 0.08);
+}
+
+@media (max-width: 900px) {
+  .prediction-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .prediction-header,
+  .prediction-panel {
+    padding: var(--space-lg);
+  }
+
+  .prediction-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .prediction-controls .select,
+  .prediction-controls .btn {
+    width: 100%;
+  }
+}

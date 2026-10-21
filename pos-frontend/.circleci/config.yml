@@ -1,0 +1,72 @@
+version: 2.1
+
+jobs:
+  test-node:
+    docker:
+      - image: cimg/node:24.11
+    steps:
+      - checkout
+      - run:
+          name: Node version
+          command: |
+            node -v
+            npm -v
+      - run:
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Run tests
+          command: npm test --passWithNoTests
+
+  build-node:
+    docker:
+      - image: cimg/node:24.11
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Build Angular App
+          command: npx ng build --configuration production
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist/
+
+  deploy-to-ec2:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - attach_workspace:
+          at: .
+      - add_ssh_keys:
+          fingerprints:
+            - "SHA256:uCVfqBjyVKiA0cwiL8ppWVv5CM9/WB7ru1sl6w3VfVQ"
+      - run:
+          name: Add EC2 to known_hosts
+          command: ssh-keyscan -H $EC2_HOST >> ~/.ssh/known_hosts
+      - run:
+          name: Deploy static files to EC2
+          command: |
+            scp -r dist/pos-frontend-web/* $EC2_USERNAME@$EC2_HOST:/var/www/html/pos-frontend/
+
+workflows:
+  build-and-test:
+    jobs:
+      - test-node:
+          filters:
+            branches:
+              only: main
+      - build-node:
+          requires:
+            - test-node
+          filters:
+            branches:
+              only: main
+      - deploy-to-ec2:
+          requires:
+            - build-node
+          filters:
+            branches:
+              only: main

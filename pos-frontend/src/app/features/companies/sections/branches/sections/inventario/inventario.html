@@ -1,0 +1,278 @@
+<div class="page-container inventory-page">
+  <app-navbar />
+
+  <main class="inventory-layout">
+    <app-sidebar context="branch" [companyId]="companyId" [branchId]="branchId" />
+
+    <section class="inventory-content">
+      <header class="inventory-header panel">
+        <div>
+          <p class="badge badge-success">Sucursal {{ branchId }}</p>
+          <h1 class="title-xl">Inventario</h1>
+          <p class="text-muted">Administra el stock y los movimientos asignados a esta sucursal.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de inventario">
+          @if (hasPermission('STOCK_VER')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'stock'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'stock'"
+              (click)="setActiveTab('stock')"
+            >
+              Stock
+            </button>
+          }
+          @if (hasPermission('MOVIMIENTO_VER')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'movements'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'movements'"
+              (click)="setActiveTab('movements')"
+            >
+              Movimientos
+            </button>
+          }
+        </div>
+
+        <div class="tab-content">
+          @if (activeTab === 'stock') {
+            @if (mensajeStock) {
+              <p class="feedback feedback-success">{{ mensajeStock }}</p>
+            }
+
+            @if (cargandoStock) {
+              <section class="inventory-state" aria-live="polite">
+                <p class="text-muted">Cargando stock...</p>
+              </section>
+            } @else if (errorStock) {
+              <section class="inventory-state" aria-live="polite">
+                <p class="feedback feedback-error">{{ errorStock }}</p>
+              </section>
+            } @else if (stockItems.length === 0) {
+              <section class="inventory-state" aria-live="polite">
+                <p class="text-muted">Aun no hay productos registrados en el stock de esta sucursal.</p>
+              </section>
+            } @else {
+              <section class="table-panel" aria-label="Listado de stock">
+                <div class="table-shell">
+                  <table class="table inventory-table">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Cantidad</th>
+                        <th>Stock minimo</th>
+                        <th>Stock maximo</th>
+                        <th class="inventory-actions-header">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (item of stockItems; track item.idProducto) {
+                        <tr [class.stock-warning-row]="isStockWarning(item)">
+                          <td>{{ item.nombre }}</td>
+                          <td [class.stock-warning-cell]="isStockWarning(item)">{{ item.cantidad }}</td>
+                          <td [class.stock-warning-cell]="isStockNearMin(item)">
+                            @if (editandoStockProductoId === item.idProducto && hasPermission('STOCK_CONFIGURAR')) {
+                              <input
+                                class="input stock-input"
+                                type="number"
+                                min="0"
+                                [(ngModel)]="stockEditForm.stockMin"
+                                [ngModelOptions]="{ standalone: true }"
+                              />
+                            } @else {
+                              {{ item.stockMin ?? '-' }}
+                            }
+                          </td>
+                          <td [class.stock-warning-cell]="isStockNearMax(item)">
+                            @if (editandoStockProductoId === item.idProducto && hasPermission('STOCK_CONFIGURAR')) {
+                              <input
+                                class="input stock-input"
+                                type="number"
+                                min="0"
+                                [(ngModel)]="stockEditForm.stockMax"
+                                [ngModelOptions]="{ standalone: true }"
+                              />
+                            } @else {
+                              {{ item.stockMax ?? '-' }}
+                            }
+                          </td>
+                          <td class="inventory-actions-cell">
+                            @if (editandoStockProductoId === item.idProducto && hasPermission('STOCK_CONFIGURAR')) {
+                              <div class="stock-actions">
+                                <button
+                                  class="btn btn-primary btn-sm"
+                                  type="button"
+                                  [disabled]="guardandoStock"
+                                  (click)="guardarStock(item)"
+                                >
+                                  {{ guardandoStock ? 'Guardando...' : 'Aceptar' }}
+                                </button>
+                                <button class="btn btn-secondary btn-sm" type="button" (click)="cancelarEdicionStock()">
+                                  Cancelar
+                                </button>
+                              </div>
+                            } @else if (hasPermission('STOCK_CONFIGURAR')) {
+                              <button class="btn btn-primary btn-sm" type="button" (click)="iniciarEdicionStock(item)">
+                                Editar
+                              </button>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            }
+          } @else {
+            @if (errorMovimiento) {
+              <p class="feedback feedback-error">{{ errorMovimiento }}</p>
+            }
+
+            @if (mensajeMovimiento) {
+              <p class="feedback feedback-success">{{ mensajeMovimiento }}</p>
+            }
+
+            <section class="movement-tabs-panel">
+              <div class="movement-tabs" role="tablist" aria-label="Acciones de movimientos">
+                @if (showRegisterMovementTab) {
+                  <button class="tab-button active register-tab" type="button">
+                    Registrar movimiento
+                  </button>
+                }
+
+                @if (!showRegisterMovementTab && hasPermission('MOVIMIENTO_REGISTRAR')) {
+                  <button class="btn btn-primary movement-action" type="button" (click)="openRegisterMovementTab()">
+                    Registrar movimiento
+                  </button>
+                }
+              </div>
+
+              @if (showRegisterMovementTab) {
+                <form
+                  class="movement-form"
+                  aria-label="Formulario para registrar movimiento"
+                  (submit)="registrarMovimiento($event)"
+                >
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label class="label" for="producto">Producto</label>
+                      <select
+                        class="select"
+                        id="producto"
+                        name="producto"
+                        required
+                        [(ngModel)]="movimientoProductoId"
+                      >
+                        @for (producto of productos; track producto.id_producto) {
+                          <option [ngValue]="producto.id_producto">{{ producto.nombre }}</option>
+                        }
+                      </select>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="label" for="cantidad">Cantidad</label>
+                      <input
+                        class="input"
+                        id="cantidad"
+                        name="cantidad"
+                        type="number"
+                        min="1"
+                        required
+                        [(ngModel)]="movimientoCantidad"
+                      />
+                    </div>
+
+                    <div class="form-group">
+                      <label class="label" for="tipoMovimiento">Tipo movimiento</label>
+                      <select
+                        class="select"
+                        id="tipoMovimiento"
+                        name="tipoMovimiento"
+                        required
+                        [(ngModel)]="movimientoTipoId"
+                        [disabled]="movementTypes.length === 0"
+                      >
+                        @for (type of movementTypes; track type.id_tipo_movimiento) {
+                          <option [ngValue]="type.id_tipo_movimiento">{{ type.nombre }}</option>
+                        }
+                      </select>
+                      @if (errorTiposMovimiento) {
+                        <p class="feedback feedback-error">{{ errorTiposMovimiento }}</p>
+                      }
+                    </div>
+
+                    <div class="form-group form-group-full">
+                      <label class="label" for="observacion">Observacion</label>
+                      <textarea
+                        class="textarea"
+                        id="observacion"
+                        name="observacion"
+                        rows="4"
+                        placeholder="Escribe una observacion opcional"
+                        [(ngModel)]="movimientoObservacion"
+                      ></textarea>
+                    </div>
+                  </div>
+
+                  <div class="movement-form-actions">
+                    <button class="btn btn-secondary" type="button" (click)="closeRegisterMovementTab()">
+                      Cancelar
+                    </button>
+                    <button class="btn btn-primary" type="submit" [disabled]="guardandoMovimiento">
+                      {{ guardandoMovimiento ? 'Registrando...' : 'Registrar movimiento' }}
+                    </button>
+                  </div>
+                </form>
+              }
+
+              @if (cargandoMovimientos) {
+                <section class="inventory-state" aria-live="polite">
+                  <p class="text-muted">Cargando movimientos...</p>
+                </section>
+              } @else if (errorMovimientos) {
+                <section class="inventory-state" aria-live="polite">
+                  <p class="feedback feedback-error">{{ errorMovimientos }}</p>
+                </section>
+              } @else if (movements.length === 0) {
+                <section class="inventory-state" aria-live="polite">
+                  <p class="text-muted">Aun no hay movimientos registrados en esta sucursal.</p>
+                </section>
+              } @else {
+                <section class="table-panel" aria-label="Listado de movimientos">
+                  <div class="table-shell">
+                    <table class="table inventory-table">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Cantidad</th>
+                          <th>Tipo movimiento</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (movement of movements; track movement.id) {
+                          <tr>
+                            <td>{{ movement.producto }}</td>
+                            <td>{{ movement.cantidad }}</td>
+                            <td>{{ movement.tipoMovimiento }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              }
+            </section>
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

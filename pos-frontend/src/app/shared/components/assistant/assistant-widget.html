@@ -1,0 +1,77 @@
+@if (auth.isAuthenticated()) {
+  <button
+    class="assistant-fab"
+    type="button"
+    [class.open]="open"
+    [attr.aria-label]="(open ? 'Cerrar asistente' : 'Abrir asistente de ayuda') | t"
+    (click)="toggle()"
+  >
+    @if (open) {
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+    } @else {
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M8 9.5h8M8 12.5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    }
+  </button>
+
+  @if (open) {
+    <section class="assistant-panel" role="dialog" [attr.aria-label]="'Asistente POS' | t">
+      <header class="assistant-header">
+        <strong>{{ 'Asistente POS' | t }}</strong>
+        <button class="assistant-close" type="button" [attr.aria-label]="'Cerrar asistente' | t" (click)="toggle()"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg></button>
+      </header>
+
+      <div class="assistant-messages" #messagesBox>
+        @for (message of messages; track $index) {
+          <div class="bubble" [class.user]="message.from === 'user'" [class.bot]="message.from === 'bot'">
+            @if (message.text) {
+              <p class="bubble-title">{{ message.text }}</p>
+            }
+            @if (message.steps?.length) {
+              <ol class="bubble-steps">
+                @for (step of message.steps; track $index) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
+            }
+            @if (message.from === 'bot' && (message.link || message.steps?.length)) {
+              <div class="bubble-actions">
+                @if (message.link) {
+                  <a class="bubble-link" [routerLink]="message.link.commands" [queryParams]="message.link.queryParams">
+                    {{ 'Ir a la pantalla' | t }}
+                  </a>
+                }
+                @if (message.steps?.length) {
+                  <button class="bubble-link" type="button" (click)="speak(message)">{{ 'Escuchar respuesta' | t }}</button>
+                }
+              </div>
+            }
+            @if (message.suggestions?.length) {
+              <div class="bubble-suggestions">
+                @for (topic of message.suggestions; track topic.id) {
+                  <button type="button" class="suggestion" (click)="pick(topic)">{{ topic.question }}</button>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <form class="assistant-input" (submit)="$event.preventDefault(); ask()">
+        <input
+          class="input"
+          type="text"
+          name="question"
+          autocomplete="off"
+          [placeholder]="'Escribe tu pregunta...' | t"
+          [(ngModel)]="question"
+        />
+        @if (voiceSupported) {
+          <button class="btn btn-secondary mic" type="button" [class.listening]="listening" (click)="toggleVoice()" aria-label="Dictar">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+          </button>
+        }
+        <button class="btn btn-primary" type="submit">{{ 'Enviar' | t }}</button>
+      </form>
+    </section>
+  }
+}

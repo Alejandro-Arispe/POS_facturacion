@@ -1,0 +1,76 @@
+<aside class="sidebar panel" aria-label="Menu lateral">
+  <nav class="sidebar-nav">
+    @for (item of displayedItems; track item.label) {
+      @if (item.children?.length) {
+        <section class="sidebar-group">
+          @if (item.link) {
+            <a
+              class="sidebar-link"
+              [class.active]="item.active"
+              [routerLink]="item.link"
+              [queryParams]="item.queryParams"
+              [attr.aria-expanded]="isGroupOpen(item)"
+              (click)="toggleGroup(item.label)"
+            >
+              <span>{{ item.label | t }}</span>
+              <span class="sidebar-caret" [class.open]="isGroupOpen(item)">&#9662;</span>
+            </a>
+          } @else {
+            <button
+              class="sidebar-link"
+              [class.active]="item.active"
+              [attr.aria-expanded]="isGroupOpen(item)"
+              type="button"
+              (click)="toggleGroup(item.label)"
+            >
+              <span>{{ item.label | t }}</span>
+              <span class="sidebar-caret" [class.open]="isGroupOpen(item)">&#9662;</span>
+            </button>
+          }
+
+          @if (isGroupOpen(item)) {
+            <div class="sidebar-submenu">
+              @for (child of item.children; track child.label) {
+                @if (child.link) {
+                  <a
+                    class="sidebar-sublink"
+                    [class.active]="child.active"
+                    [routerLink]="child.link"
+                    [queryParams]="child.queryParams"
+                  >
+                    {{ child.label | t }}
+                  </a>
+                } @else {
+                  <button class="sidebar-sublink" [class.active]="child.active" type="button">
+                    {{ child.label | t }}
+                  </button>
+                }
+              }
+            </div>
+          }
+        </section>
+      } @else {
+        @if (item.link) {
+          <a
+            class="sidebar-link"
+            [class.active]="item.active"
+            [routerLink]="item.link"
+            [queryParams]="item.queryParams"
+          >
+            {{ item.label | t }}
+          </a>
+        } @else {
+          <button class="sidebar-link" [class.active]="item.active" type="button">
+            {{ item.label | t }}
+          </button>
+        }
+      }
+    }
+  </nav>
+
+  <div class="sidebar-actions">
+    <a class="btn btn-primary sidebar-back-link" [routerLink]="backButtonLink">
+      {{ backButtonLabel | t }}
+    </a>
+  </div>
+</aside>

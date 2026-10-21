@@ -1,0 +1,74 @@
+<div class="page-container view-branch-page">
+  <app-navbar />
+
+  <main class="view-branch-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="view-branch-content">
+      <section class="view-branch-panel panel">
+        <a class="back-link" [routerLink]="['/company', companyId, 'branches']"
+          >Volver a Sucursales</a
+        >
+
+        <header class="view-branch-header">
+          <p class="badge badge-success">Sucursal {{ branchId }}</p>
+          <h1 class="title-xl">Detalle de Sucursal</h1>
+          <p class="text-muted">Consulta los datos registrados de esta sucursal.</p>
+        </header>
+
+        @if (cargandoSucursal) {
+          <p class="feedback feedback-info">Cargando datos de la sucursal...</p>
+        } @else if (errorSucursal) {
+          <p class="feedback feedback-error">{{ errorSucursal }}</p>
+        } @else {
+          <dl class="branch-detail">
+            <div>
+              <dt>Nombre</dt>
+              <dd>{{ branch.nombre }}</dd>
+            </div>
+            <div>
+              <dt>Direccion</dt>
+              <dd>{{ branch.direccion }}</dd>
+            </div>
+            <div>
+              <dt>Telefono</dt>
+              <dd>{{ branch.telefono }}</dd>
+            </div>
+            <div>
+              <dt>Ciudad</dt>
+              <dd>{{ branch.ciudad }}</dd>
+            </div>
+            <div>
+              <dt>Activo</dt>
+              <dd>
+                @if (branch.activo ?? true) {
+                  <span class="badge badge-success">Activo</span>
+                } @else {
+                  <span class="badge badge-danger">Inactivo</span>
+                }
+              </dd>
+            </div>
+            <div>
+              <dt>Fecha de registro</dt>
+              <dd>{{ branch.fecha_registro || 'Sin fecha' }}</dd>
+            </div>
+          </dl>
+        }
+
+        <div class="view-actions">
+          <a
+            class="btn btn-secondary"
+            [routerLink]="['/company', companyId, 'branches']"
+            >Cerrar</a
+          >
+          <a
+            class="btn btn-primary"
+            [routerLink]="['/company', companyId, 'branch', branchId, 'edit-branch']"
+            >Editar</a
+          >
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+

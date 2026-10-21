@@ -1,0 +1,185 @@
+<div class="page-container edit-category-page">
+  <app-navbar />
+
+  <main class="edit-category-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="edit-category-content">
+      <section class="edit-category-panel panel">
+        <a
+          class="back-link"
+          [routerLink]="['/company', companyId, 'products', 'categories']"
+        >Cancelar</a>
+
+        <header class="edit-category-header">
+          <p class="badge badge-success">Categoria {{ categoryId }}</p>
+          <h1 class="title-xl">Editar Categoria</h1>
+          <p class="text-muted">Actualiza la categoria y sus subcategorias.</p>
+        </header>
+
+        @if (errorEdicion) {
+          <p class="feedback feedback-error">{{ errorEdicion }}</p>
+        }
+
+        @if (mensajeEdicion) {
+          <p class="feedback feedback-success">{{ mensajeEdicion }}</p>
+        }
+
+        @if (cargandoCategoria) {
+          <p class="feedback feedback-info">Cargando datos de la categoria...</p>
+        }
+
+        <form id="category-edit-form" class="category-form" (submit)="guardarCategoria($event)">
+          <h3 class="title-md">Categoria</h3>
+
+          <div class="form-group">
+            <label class="label" for="categoria_nombre">Nombre</label>
+            <input class="input" id="categoria_nombre" name="categoria_nombre" required [(ngModel)]="form.nombre" />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="categoria_descripcion">Descripcion</label>
+            <input class="input" id="categoria_descripcion" name="categoria_descripcion" [(ngModel)]="form.descripcion" />
+          </div>
+
+          <div class="form-group status-field">
+            <span class="label">Estado</span>
+            <label class="toggle-switch" for="categoria_activo">
+              <input id="categoria_activo" name="categoria_activo" type="checkbox" [(ngModel)]="form.activo" />
+              <span class="toggle-track" aria-hidden="true"></span>
+              <span class="toggle-text">{{ form.activo ? 'Categoria activa' : 'Categoria inactiva' }}</span>
+            </label>
+          </div>
+        </form>
+
+        <section class="subcategory-section">
+          <h3 class="title-md">Subcategorias</h3>
+
+          @if (subcategoriasDeCategoria().length === 0) {
+            <p class="text-muted">No hay subcategorias para esta categoria.</p>
+          } @else {
+            <div class="subcategory-list">
+              @for (subcategoria of subcategoriasDeCategoria(); track subcategoria.id_subcategoria) {
+                <article class="subcategory-item">
+                  <div>
+                    <p class="title-sm">{{ subcategoria.nombre }}</p>
+                    <p class="text-muted">{{ subcategoria.descripcion || 'Sin descripcion' }}</p>
+                  </div>
+                  <button class="btn btn-secondary" type="button" (click)="seleccionarSubcategoria(subcategoria)">
+                    Editar
+                  </button>
+                </article>
+              }
+            </div>
+          }
+
+          @if (subcategoriaSeleccionada) {
+            <form class="subcategory-form" (submit)="guardarSubcategoria($event)">
+              <h4 class="title-sm">Editar subcategoria: {{ subcategoriaSeleccionada.nombre }}</h4>
+
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label class="label" for="subcategoria_nombre">Nombre</label>
+                  <input class="input" id="subcategoria_nombre" name="subcategoria_nombre" required [(ngModel)]="subcategoriaForm.nombre" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="subcategoria_descripcion">Descripcion</label>
+                  <input class="input" id="subcategoria_descripcion" name="subcategoria_descripcion" [(ngModel)]="subcategoriaForm.descripcion" />
+                </div>
+              </div>
+
+              <div class="form-group status-field">
+                <span class="label">Estado</span>
+                <label class="toggle-switch" for="subcategoria_activo">
+                  <input id="subcategoria_activo" name="subcategoria_activo" type="checkbox" [(ngModel)]="subcategoriaForm.activo" />
+                  <span class="toggle-track" aria-hidden="true"></span>
+                  <span class="toggle-text">{{ subcategoriaForm.activo ? 'Subcategoria activa' : 'Subcategoria inactiva' }}</span>
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit" [disabled]="guardandoSubcategoria">
+                  {{ guardandoSubcategoria ? 'Guardando...' : 'Guardar subcategoria' }}
+                </button>
+                <button class="btn btn-secondary" type="button" (click)="subcategoriaSeleccionada = null" [disabled]="guardandoSubcategoria">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          }
+
+          <form class="subcategory-form" (submit)="agregarNuevaSubcategoriaTemporal(); $event.preventDefault()">
+            <h4 class="title-sm">Agregar nueva subcategoria</h4>
+
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label class="label" for="nueva_subcategoria_nombre">Nombre</label>
+                <input
+                  class="input"
+                  id="nueva_subcategoria_nombre"
+                  name="nueva_subcategoria_nombre"
+                  required
+                  [(ngModel)]="nuevaSubcategoriaForm.nombre"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="label" for="nueva_subcategoria_descripcion">Descripcion</label>
+                <input
+                  class="input"
+                  id="nueva_subcategoria_descripcion"
+                  name="nueva_subcategoria_descripcion"
+                  [(ngModel)]="nuevaSubcategoriaForm.descripcion"
+                />
+              </div>
+            </div>
+
+            <div class="form-group status-field">
+              <span class="label">Estado</span>
+              <label class="toggle-switch" for="nueva_subcategoria_activo">
+                <input id="nueva_subcategoria_activo" name="nueva_subcategoria_activo" type="checkbox" [(ngModel)]="nuevaSubcategoriaForm.activo" />
+                <span class="toggle-track" aria-hidden="true"></span>
+                <span class="toggle-text">{{ nuevaSubcategoriaForm.activo ? 'Subcategoria activa' : 'Subcategoria inactiva' }}</span>
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-secondary" type="submit">Agregar subcategoria</button>
+            </div>
+          </form>
+
+          @if (subcategoriasNuevasTemporales.length > 0) {
+            <div class="subcategory-list">
+              <h4 class="title-sm">Nuevas subcategorias a crear ({{ subcategoriasNuevasTemporales.length }})</h4>
+              @for (subcategoria of subcategoriasNuevasTemporales; track $index) {
+                <article class="subcategory-item">
+                  <div>
+                    <p class="title-sm">{{ subcategoria.nombre }}</p>
+                    <p class="text-muted">{{ subcategoria.descripcion || 'Sin descripcion' }}</p>
+                  </div>
+                  <button class="btn btn-danger btn-small" type="button" (click)="eliminarNuevaSubcategoriaTemporal($index)">
+                    Eliminar
+                  </button>
+                </article>
+              }
+            </div>
+          }
+        </section>
+
+        <div class="form-actions">
+          <button
+            class="btn btn-primary"
+            type="submit"
+            form="category-edit-form"
+            [disabled]="cargandoCategoria || guardandoCategoria"
+          >
+            {{ guardandoCategoria ? 'Guardando...' : 'Guardar categoria' }}
+          </button>
+          <button class="btn btn-secondary" type="button" (click)="volverListado()">Cancelar</button>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+

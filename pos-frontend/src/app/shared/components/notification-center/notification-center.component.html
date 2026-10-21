@@ -1,0 +1,22 @@
+<div class="notification-center">
+  <div class="notification-header">
+    <div>
+      <h3>Notificaciones</h3>
+      <p>Historial de alertas y eventos recientes</p>
+    </div>
+    <button class="panel-close" type="button" (click)="requestClose()" aria-label="Cerrar historial">×</button>
+  </div>
+
+  <div class="notification-list" aria-label="Historial de notificaciones">
+    <ul>
+    <li *ngFor="let it of items" class="notif-item" [class.unread]="!it.leido" [class.read]="it.leido">
+      <button class="notif-button" [class.unread]="!it.leido" [class.read]="it.leido" (click)="openDetail(it)">
+        <div class="notif-title">{{ it.titulo || (it.payload?.title) }}</div>
+        <div class="notif-body">{{ it.mensaje || it.payload?.body }}</div>
+        <div class="notif-meta"><small>{{ it.fechaLegible || it.fecha }}</small></div>
+      </button>
+    </li>
+    </ul>
+  </div>
+</div>
+

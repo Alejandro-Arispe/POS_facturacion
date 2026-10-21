@@ -1,0 +1,330 @@
+.credit-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.credit-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-lg);
+  width: min(var(--content-max-width), 100%);
+  margin: 0 auto;
+}
+
+.credit-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.credit-header {
+  display: grid;
+  min-height: 150px;
+  align-content: center;
+  padding: var(--space-xl);
+}
+
+.credit-header > div:first-child {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.badge-neutral {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--color-text-soft);
+}
+
+.tabs-panel {
+  display: grid;
+  overflow: hidden;
+  padding: 0;
+}
+
+.tabs {
+  display: flex;
+  align-items: end;
+  padding: var(--space-sm) var(--space-sm) 0;
+  background: var(--color-tabs-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tab-button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: transparent;
+  color: var(--color-text-soft);
+  font-weight: var(--font-weight-semibold);
+  padding: 10px var(--space-md);
+  transition: all 0.2s ease;
+}
+
+.tab-button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-title);
+}
+
+.tab-button.active {
+  position: relative;
+  top: 1px;
+  background: var(--color-tab-active-bg);
+  border-color: var(--color-border-glow);
+  border-bottom: 2px solid var(--color-accent-green);
+  color: var(--color-tab-active-text);
+  font-weight: 700;
+  box-shadow: 0 -2px 10px rgba(16, 185, 129, 0.15);
+}
+
+.tab-content {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+}
+
+.feedback {
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  padding: 10px 12px;
+}
+
+.feedback-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+}
+
+.feedback-success {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success);
+}
+
+.credit-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.client-search-panel,
+.account-panel {
+  display: grid;
+  gap: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-lg);
+}
+
+.client-results {
+  display: grid;
+  max-height: 430px;
+  gap: var(--space-sm);
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+}
+
+.client-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.client-result:hover,
+.client-result.selected {
+  border-color: rgba(0, 198, 254, 0.55);
+  background: rgba(0, 198, 254, 0.08);
+}
+
+.client-result span,
+.client-meta {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.client-result small {
+  color: var(--color-text-soft);
+  font-size: var(--font-size-xs);
+}
+
+.client-meta {
+  justify-items: end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.account-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.receivables-table-shell {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.receivables-table {
+  min-width: 980px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.receivables-table tbody tr:hover {
+  background: rgba(0, 198, 254, 0.06);
+}
+
+.status-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.status-pending {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
+.status-paid {
+  background: rgba(34, 197, 94, 0.14);
+  color: #15803d;
+}
+
+.status-overdue {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.actions-header,
+.actions-cell {
+  text-align: right;
+}
+
+.btn-sm {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
+.payment-panel {
+  display: grid;
+  gap: var(--space-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-lg);
+}
+
+.payment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.payment-header > div {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.payment-rows {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.payment-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) auto;
+  gap: var(--space-md);
+  align-items: end;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  padding: var(--space-md);
+}
+
+.payment-balance {
+  justify-self: end;
+  color: var(--color-text-soft);
+}
+
+.payment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.credit-state {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+}
+
+.credit-state.compact {
+  min-height: 140px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+@media (max-width: 640px) {
+  .credit-page {
+    padding: var(--space-md);
+  }
+
+  .credit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .credit-header {
+    min-height: auto;
+    padding: var(--space-lg);
+  }
+
+  .tab-content,
+  .client-search-panel,
+  .account-panel {
+    padding: var(--space-md);
+  }
+
+  .client-result {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .client-meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .payment-row {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-header,
+  .payment-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payment-actions button {
+    width: 100%;
+  }
+}

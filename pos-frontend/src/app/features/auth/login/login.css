@@ -1,0 +1,220 @@
+.login-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #93c5fd 100%);
+  padding: var(--space-lg);
+}
+
+.login-shell {
+  display: grid;
+  min-height: calc(100vh - (var(--space-lg) * 2));
+  place-items: center;
+}
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  background: var(--color-surface-solid);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  color: var(--color-text);
+}
+
+.login-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+}
+
+.login-brand {
+  width: fit-content;
+  color: var(--color-tab-active-text);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.02em;
+}
+
+.login-header {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-sm);
+}
+
+.login-form {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.login-form .label {
+  color: var(--color-text-title);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.login-form .input {
+  background: #f8fafc;
+  border: 1px solid var(--color-input-border);
+  color: var(--color-input-text);
+}
+
+.login-form .input:focus {
+  background: #ffffff;
+  border-color: var(--color-accent-green);
+  box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.18);
+}
+
+.login-form .input::placeholder {
+  color: var(--color-input-placeholder);
+  opacity: 0.8;
+}
+
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  color: var(--color-text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.remember-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.remember-option input {
+  accent-color: var(--color-primary);
+}
+
+.login-options a,
+.register-link a,
+.home-link a {
+  color: var(--color-tab-active-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.submit-button {
+  min-height: 44px;
+  margin-top: var(--space-sm);
+}
+
+.submit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.register-link,
+.home-link {
+  text-align: center;
+}
+
+.feedback {
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 10px 12px;
+}
+
+.feedback-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+}
+
+.feedback-success {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  padding: var(--space-md);
+  z-index: 20;
+}
+
+.recovery-modal {
+  position: relative;
+  display: grid;
+  width: min(420px, 100%);
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+  color: var(--color-text);
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-soft);
+  color: var(--color-text-soft);
+  cursor: pointer;
+  font-weight: var(--font-weight-bold);
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.recovery-header {
+  display: grid;
+  gap: var(--space-sm);
+  padding-right: var(--space-xl);
+}
+
+.recovery-form {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.recovery-form .input {
+  background: #f8fafc;
+  border: 1px solid var(--color-input-border);
+  color: var(--color-input-text);
+}
+
+.recovery-form .input:focus {
+  background: #ffffff;
+  border-color: var(--color-accent-green);
+  box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.18);
+}
+
+@media (max-width: 520px) {
+  .login-page {
+    padding: var(--space-md);
+  }
+
+  .login-panel {
+    padding: var(--space-lg);
+  }
+
+  .login-options {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recovery-modal {
+    padding: var(--space-lg);
+  }
+}

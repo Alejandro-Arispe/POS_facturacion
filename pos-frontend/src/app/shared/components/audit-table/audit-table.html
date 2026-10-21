@@ -1,0 +1,121 @@
+<section class="panel audit-filters">
+  <div class="filter-grid">
+    <label class="form-group">
+      <span class="text-sm">Desde</span>
+      <input class="input" type="date" [(ngModel)]="filters.desde" />
+    </label>
+    <label class="form-group">
+      <span class="text-sm">Hasta</span>
+      <input class="input" type="date" [(ngModel)]="filters.hasta" />
+    </label>
+    <label class="form-group">
+      <span class="text-sm">Acción</span>
+      <select class="input" [(ngModel)]="filters.accion">
+        <option value="">Todas</option>
+        @for (action of actions; track action) {
+          <option [value]="action">{{ action }}</option>
+        }
+      </select>
+    </label>
+    <label class="form-group">
+      <span class="text-sm">Módulo</span>
+      <select class="input" [(ngModel)]="filters.modulo">
+        <option value="">Todos</option>
+        @for (module of modules; track module) {
+          <option [value]="module">{{ module }}</option>
+        }
+      </select>
+    </label>
+    <label class="form-group">
+      <span class="text-sm">Usuario</span>
+      <input class="input" type="text" placeholder="correo@..." [(ngModel)]="filters.usuario" />
+    </label>
+    @if (showCompany) {
+      <label class="form-group">
+        <span class="text-sm">ID empresa</span>
+        <input class="input" type="number" min="1" [(ngModel)]="filters.id_empresa" />
+      </label>
+    }
+  </div>
+  <div class="filter-actions">
+    <button class="btn btn-secondary" type="button" (click)="clear()">Limpiar</button>
+    <button class="btn btn-primary" type="button" (click)="apply()">Filtrar</button>
+  </div>
+</section>
+
+<section class="panel audit-results">
+  <div class="table-shell">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Fecha</th>
+          <th>Usuario</th>
+          @if (showCompany) {
+            <th>Empresa</th>
+          }
+          <th>Acción</th>
+          <th>Módulo</th>
+          <th>Detalle</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (loading) {
+          <tr><td [attr.colspan]="showCompany ? 8 : 7" class="text-muted">Cargando…</td></tr>
+        } @else if (items.length === 0) {
+          <tr><td [attr.colspan]="showCompany ? 8 : 7" class="text-muted">No hay registros para estos filtros.</td></tr>
+        } @else {
+          @for (item of items; track item.id_bitacora) {
+            <tr class="clickable" (click)="selected = item">
+              <td>{{ item.id_bitacora }}</td>
+              <td>{{ item.fecha | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
+              <td>{{ item.email_usuario || '—' }}</td>
+              @if (showCompany) {
+                <td>{{ item.id_empresa ?? '—' }}</td>
+              }
+              <td><span [class]="'badge ' + badgeClass(item.accion)">{{ item.accion }}</span></td>
+              <td>{{ item.modulo || '—' }}</td>
+              <td>{{ item.detalle }}</td>
+              <td class="text-muted">{{ item.ip }}</td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="pager">
+    <span class="text-muted text-sm">{{ total }} registro(s) · página {{ page + 1 }} de {{ totalPages }}</span>
+    <div class="pager-buttons">
+      <button class="btn btn-secondary" type="button" [disabled]="page === 0" (click)="goTo(page - 1)">Anterior</button>
+      <button class="btn btn-secondary" type="button" [disabled]="page + 1 >= totalPages" (click)="goTo(page + 1)">Siguiente</button>
+    </div>
+  </footer>
+</section>
+
+@if (selected) {
+  <div class="audit-modal-backdrop" (click)="selected = null">
+    <div class="audit-modal panel" (click)="$event.stopPropagation()">
+      <h2 class="title-md">Registro #{{ selected.id_bitacora }}</h2>
+      <dl class="audit-detail">
+        <dt>Fecha</dt><dd>{{ selected.fecha | date: 'dd/MM/yyyy HH:mm:ss.SSS' }}</dd>
+        <dt>Usuario</dt><dd>{{ selected.email_usuario || '—' }} (id {{ selected.id_usuario ?? '—' }})</dd>
+        <dt>Empresa</dt><dd>{{ selected.id_empresa ?? '—' }}</dd>
+        <dt>Acción</dt><dd>{{ selected.accion }}</dd>
+        <dt>Módulo</dt><dd>{{ selected.modulo }}</dd>
+        <dt>Petición</dt><dd><code>{{ selected.metodo }} {{ selected.ruta }}</code> (HTTP {{ selected.estado_http ?? '—' }})</dd>
+        <dt>IP</dt><dd>{{ selected.ip }}</dd>
+        <dt>Detalle</dt><dd>{{ selected.detalle }}</dd>
+        <dt>Huella (SHA-256)</dt><dd><code class="hash">{{ selected.hash }}</code></dd>
+      </dl>
+      <p class="text-muted text-sm">
+        Los registros de la bitácora no se pueden editar ni eliminar. Cada uno está encadenado al anterior mediante su
+        huella, por lo que cualquier alteración se detecta al verificar la integridad.
+      </p>
+      <div class="filter-actions">
+        <button class="btn btn-primary" type="button" (click)="selected = null">Cerrar</button>
+      </div>
+    </div>
+  </div>
+}

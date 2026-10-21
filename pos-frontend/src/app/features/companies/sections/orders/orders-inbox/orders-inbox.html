@@ -1,0 +1,123 @@
+<div class="p-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Bandeja de Pedidos</h1>
+  </div>
+
+  <div class="mb-6 flex gap-2">
+    <button (click)="setFilter('todos')" [class.bg-blue-600]="currentFilter === 'todos'" [class.text-white]="currentFilter === 'todos'" class="px-4 py-2 border rounded-md hover:bg-gray-100 transition-colors">Todos</button>
+    <button (click)="setFilter('enviado')" [class.bg-yellow-500]="currentFilter === 'enviado'" [class.text-white]="currentFilter === 'enviado'" class="px-4 py-2 border rounded-md hover:bg-gray-100 transition-colors">Nuevos</button>
+    <button (click)="setFilter('en_revision')" [class.bg-blue-500]="currentFilter === 'en_revision'" [class.text-white]="currentFilter === 'en_revision'" class="px-4 py-2 border rounded-md hover:bg-gray-100 transition-colors">En Revisión</button>
+    <button (click)="setFilter('confirmado')" [class.bg-green-500]="currentFilter === 'confirmado'" [class.text-white]="currentFilter === 'confirmado'" class="px-4 py-2 border rounded-md hover:bg-gray-100 transition-colors">Confirmados</button>
+    <button (click)="setFilter('en_preparacion')" [class.bg-purple-500]="currentFilter === 'en_preparacion'" [class.text-white]="currentFilter === 'en_preparacion'" class="px-4 py-2 border rounded-md hover:bg-gray-100 transition-colors">En Preparación</button>
+  </div>
+
+  <div *ngIf="isLoading" class="text-center py-8">
+    <p class="text-gray-500">Cargando pedidos...</p>
+  </div>
+
+  <div *ngIf="!isLoading && errorMessage" class="text-center py-8">
+    <p class="text-red-500">{{ errorMessage }}</p>
+  </div>
+
+  <div *ngIf="!isLoading && !errorMessage" class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente ID</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sucursal</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Estimado</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        <tr *ngIf="filteredOrders.length === 0">
+          <td colspan="7" class="px-6 py-4 text-center text-gray-500">No hay pedidos para mostrar.</td>
+        </tr>
+        <tr *ngFor="let order of filteredOrders">
+          <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{{ order.id_pedido }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.fecha_creacion | date:'short' }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ order.id_cliente }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Sucursal #{{ order.id_sucursal }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">{{ order.total_estimado | currency }}</td>
+          <td class="px-6 py-4 whitespace-nowrap text-sm">
+            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+              {{ order.estado }}
+            </span>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <button (click)="viewDetails(order)" class="text-indigo-600 hover:text-indigo-900 mx-2">Ver Detalles</button>
+            <ng-container *ngIf="order.estado === 'enviado'">
+              <button (click)="changeStatus(order.id_pedido, 'en_revision')" class="text-blue-600 hover:text-blue-900 mx-2">Revisar</button>
+              <button (click)="changeStatus(order.id_pedido, 'cancelado')" class="text-red-600 hover:text-red-900 mx-2">Cancelar</button>
+            </ng-container>
+            <ng-container *ngIf="order.estado === 'en_revision'">
+              <button (click)="changeStatus(order.id_pedido, 'confirmado')" class="text-green-600 hover:text-green-900 mx-2">Confirmar</button>
+              <button (click)="changeStatus(order.id_pedido, 'rechazado')" class="text-red-600 hover:text-red-900 mx-2">Rechazar</button>
+            </ng-container>
+            <ng-container *ngIf="order.estado === 'confirmado'">
+              <button (click)="changeStatus(order.id_pedido, 'en_preparacion')" class="text-purple-600 hover:text-purple-900 mx-2">Preparar</button>
+            </ng-container>
+            <ng-container *ngIf="order.estado === 'en_preparacion'">
+              <button (click)="changeStatus(order.id_pedido, 'listo_para_recoger')" class="text-indigo-600 hover:text-indigo-900 mx-2">Marcar Listo</button>
+            </ng-container>
+            <ng-container *ngIf="order.estado === 'listo_para_recoger'">
+              <button (click)="cargarEnPOS(order)" class="text-green-600 hover:text-green-900 mx-2 font-bold">Cargar en POS</button>
+            </ng-container>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Modal Detalles del Pedido -->
+<div *ngIf="isModalOpen && selectedOrder" class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" (click)="closeModal()"></div>
+    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+      <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+        <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+          Detalles del Pedido #{{ selectedOrder.id_pedido }}
+        </h3>
+        <div class="mt-4">
+          <p class="text-sm text-gray-500"><strong>Fecha:</strong> {{ selectedOrder.fecha_creacion | date:'medium' }}</p>
+          <p class="text-sm text-gray-500"><strong>Estado:</strong> {{ selectedOrder.estado }}</p>
+          <p class="text-sm text-gray-500 mt-2" *ngIf="selectedOrder.observacion_cliente">
+            <strong>Observaciones:</strong><br>
+            {{ selectedOrder.observacion_cliente }}
+          </p>
+
+          <h4 class="text-md font-medium text-gray-900 mt-6 mb-2">Productos</h4>
+          <table class="min-w-full divide-y divide-gray-200 border">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Producto ID</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Cantidad</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Precio Unit.</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr *ngFor="let item of selectedOrder.detalles">
+                <td class="px-4 py-2 text-sm text-gray-900">{{ item.id_producto }}</td>
+                <td class="px-4 py-2 text-sm text-gray-500 text-right">{{ item.cantidad }}</td>
+                <td class="px-4 py-2 text-sm text-gray-500 text-right">{{ item.precio_unitario_estimado }}</td>
+                <td class="px-4 py-2 text-sm text-gray-900 text-right font-medium">{{ item.subtotal_estimado }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+        <button type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" (click)="closeModal()">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

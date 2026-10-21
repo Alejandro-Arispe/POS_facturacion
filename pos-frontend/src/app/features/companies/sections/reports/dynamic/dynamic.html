@@ -1,0 +1,172 @@
+<div class="page-container reports-page">
+  <app-navbar />
+
+  <main class="reports-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="reports-content">
+      <header class="reports-header panel">
+        <div class="header-copy">
+          <p class="badge badge-success">Empresa {{ companyId }}</p>
+          <h1 class="title-xl">Reportes dinamicos</h1>
+          <p class="text-muted">
+            Escribe un prompt en lenguaje natural para consumir el backend dinamico y ver el resultado sin asumir una
+            plantilla fija.
+          </p>
+        </div>
+
+        <form class="report-form" (submit)="$event.preventDefault(); runReport()" novalidate>
+          <label class="field-label" for="dynamic-report-prompt">Prompt</label>
+          <textarea
+            id="dynamic-report-prompt"
+            class="prompt-input"
+            [formControl]="promptControl"
+            rows="4"
+            placeholder="Ejemplo: ventas de los ultimos 30 dias"
+          ></textarea>
+
+          @if (promptControl.touched && promptControl.invalid) {
+            <p class="field-error">Ingresa un prompt valido para generar el reporte.</p>
+          }
+
+          <div class="action-row">
+            @if (voiceSupported) {
+              <button
+                class="voice-action"
+                type="button"
+                [class.listening]="listening()"
+                [disabled]="loading()"
+                (click)="toggleVoice()"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+                {{ listening() ? 'Escuchando… (toca para detener)' : 'Dictar por voz' }}
+              </button>
+            }
+            @if (report() && speechSupported) {
+              <button class="voice-action" type="button" (click)="speakSummary()">Leer resumen en voz alta</button>
+            }
+            <button class="primary-action" type="submit" [disabled]="loading()">
+              {{ loading() ? 'Generando…' : 'Generar reporte' }}
+            </button>
+          </div>
+        </form>
+      </header>
+
+      @if (errorMessage()) {
+        <section class="status-panel panel status-panel-error" role="alert">
+          <strong>Error</strong>
+          <p>{{ errorMessage() }}</p>
+        </section>
+      }
+      <section class="report-panel panel" aria-live="polite">
+        <div class="report-panel-header">
+          <div>
+            <p class="section-kicker">Resultado</p>
+            <h2 class="title-lg">{{ reportTitle() }}</h2>
+            <p class="text-muted">
+              @if (reportId()) {
+                ID del reporte: {{ reportId() }}
+              } @else if (loading()) {
+                Generando reporte...
+              } @else {
+                Esperando un reporte generado.
+              }
+              @if (reportDate()) {
+                <span> | Generado el {{ reportDate() }}</span>
+              }
+              @if (reportStatus()) {
+                <span> | Estado: {{ formatLabel(reportStatus()) }}</span>
+              }
+            </p>
+          </div>
+        </div>
+
+        @if (!report() && !loading()) {
+          <section class="empty-state">
+            <h3 class="title-md">Aun no hay reporte</h3>
+            <p class="text-muted">Escribe un prompt y presiona Generar reporte para ver aqui la respuesta del backend.</p>
+          </section>
+        }
+
+        @if (report()) {
+          @if (clarificationQuestion()) {
+            <section class="clarification-box">
+              <p class="section-kicker">Aclaración requerida</p>
+              <h3 class="title-md">{{ clarificationQuestion() }}</h3>
+              <p class="text-muted">
+                Responde la pregunta en el prompt y vuelve a generar el reporte para desbloquear la tabla.
+              </p>
+            </section>
+          }
+
+          @if (reportSpecification() && specificationFilters().length > 0) {
+            <section class="response-overview" style="margin-top: var(--space-md); margin-bottom: var(--space-md);">
+              <div class="specification-grid" style="grid-template-columns: 1fr; margin-bottom: 0;">
+                <article class="spec-card spec-card-full">
+                  <p class="section-kicker">Filtros</p>
+                  <div class="filters-grid">
+                    @for (filter of specificationFilters(); track filter.key) {
+                      <div class="filter-item">
+                        <span class="spec-label">{{ filter.label }}</span>
+                        <strong>{{ formatValue(filter.value) }}</strong>
+                      </div>
+                    }
+                  </div>
+                </article>
+              </div>
+            </section>
+          }
+
+          @if (showEmptyState()) {
+            <section class="empty-state">
+              <h3 class="title-md">Sin filas para mostrar</h3>
+              <p class="text-muted">
+                El backend devolvió una estructura válida, pero no hay filas ni agregados para este prompt.
+              </p>
+            </section>
+          } @else if (hasRows() && !clarificationQuestion()) {
+            <section class="table-section">
+              <div class="section-heading">
+                <p class="section-kicker">Detalle</p>
+                <h3 class="title-md">Tabla dinamica</h3>
+              </div>
+
+              <div class="table-wrapper" tabindex="0">
+                <table class="dynamic-table">
+                  <thead>
+                    <tr>
+                      @for (column of reportColumns(); track column.nombre) {
+                        <th scope="col">{{ column.etiqueta ?? formatLabel(column.nombre) }}</th>
+                      }
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    @for (row of reportRows(); track $index) {
+                      <tr>
+                        @for (column of reportColumns(); track column.nombre) {
+                          <td>{{ formatValue(row[column.nombre], column.tipo) }}</td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (hasPermission('REPORTE_EXPORTAR')) {
+            <div class="export-actions" style="margin-top: var(--space-lg); justify-content: flex-end;" aria-label="Exportar reporte">
+              <button class="secondary-action" type="button" (click)="exportReport('excel')" [disabled]="!hasRows() || exportingFormat() !== null">
+                {{ exportingFormat() === 'excel' ? 'Exportando Excel...' : 'Excel' }}
+              </button>
+              <button class="secondary-action" type="button" (click)="exportReport('pdf')" [disabled]="!hasReport() || exportingFormat() !== null">
+                {{ exportingFormat() === 'pdf' ? 'Exportando PDF...' : 'PDF' }}
+              </button>
+            </div>
+          }
+        }
+      </section>
+    </section>
+  </main>
+</div>

@@ -1,0 +1,130 @@
+<div class="page-container clients-page">
+  <app-navbar />
+
+  <main class="clients-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="clients-content">
+      <header class="clients-header panel">
+        <div>
+          <p class="badge badge-success">Empresa {{ companyName }}</p>
+          <h1 class="title-xl">Catalogo de Clientes</h1>
+          <p class="text-muted">Invita clientes nuevos y revisa las invitaciones registradas.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de clientes">
+          @if (hasPermission('CLIENTE_CREAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'invite'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'invite'"
+              (click)="setActiveTab('invite')"
+            >
+              Invitar Cliente
+            </button>
+          }
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'list'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'list'"
+            (click)="setActiveTab('list')"
+          >
+            Listar Clientes
+          </button>
+        </div>
+
+        <div class="tab-content">
+          @if (errorInvitacion) {
+            <p class="feedback feedback-error">{{ errorInvitacion }}</p>
+          }
+
+          @if (mensajeInvitacion) {
+            <p class="feedback feedback-success">{{ mensajeInvitacion }}</p>
+          }
+
+          @if (activeTab === 'invite') {
+            <section class="invite-panel">
+              <h2 class="title-md">Invitar Cliente</h2>
+              <p class="text-muted">Ingresa el correo del cliente para enviar la invitacion.</p>
+
+              <form class="entity-form" (submit)="invitarCliente($event)">
+                <div class="form-group">
+                  <label class="label" for="cliente_correo">Correo</label>
+                  <input
+                    class="input"
+                    id="cliente_correo"
+                    name="cliente_correo"
+                    type="email"
+                    required
+                    [(ngModel)]="inviteForm.correo"
+                  />
+                </div>
+
+                <div class="form-actions">
+                  <button class="btn btn-primary" type="submit" [disabled]="cargandoInvitacion">
+                    {{ cargandoInvitacion ? 'Enviando...' : 'Enviar invitacion' }}
+                  </button>
+                </div>
+              </form>
+            </section>
+          } @else {
+            @if (cargandoClientes) {
+              <section class="state-panel" aria-live="polite">
+                <p class="text-muted">Cargando clientes...</p>
+              </section>
+            } @else if (errorClientes) {
+              <section class="state-panel" aria-live="polite">
+                <p class="feedback feedback-error">{{ errorClientes }}</p>
+              </section>
+            } @else if (clients.length === 0) {
+              <section class="state-panel" aria-live="polite">
+                <p class="text-muted">Aun no hay clientes registrados para esta empresa.</p>
+              </section>
+            } @else {
+              <section class="table-panel" aria-label="Clientes registrados">
+                <div class="table-shell">
+                  <table class="table clients-table">
+                    <thead>
+                      <tr>
+                        <th>Codigo</th>
+                        <th>Nombre</th>
+                        <th>Correo</th>
+                        <th class="actions-header">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (client of clients; track client.correo) {
+                        <tr>
+                          <td>{{ client.codigo }}</td>
+                          <td>{{ client.nombre }}</td>
+                          <td>{{ client.correo }}</td>
+                          <td class="actions-cell">
+                            @if (hasPermission('CLIENTE_EDITAR')) {
+                              <a
+                                class="btn btn-primary btn-sm"
+                                [routerLink]="['/company', companyId, 'clients', client.idCliente, 'edit-client']"
+                              >
+                                Editar
+                              </a>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            }
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+

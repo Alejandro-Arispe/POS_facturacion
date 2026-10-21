@@ -1,0 +1,537 @@
+/* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+/* ========================================================
+   SISTEMA DE DISEÑO Y VARIABLES GLOBALES (TOKENS SEMÁNTICOS)
+   Diseñado para alta legibilidad, contraste y soporte a futuro
+   de Modo Claro, Modo Oscuro y Personalización de Colores.
+======================================================== */
+:root {
+  /* Identidad de Marca y Acentos (Compartidos) */
+  --color-primary: #0e0e35;
+  --color-primary-hover: #1a1a54;
+
+  --color-accent-green: #047857;   /* Emerald-700 para alto contraste en modo claro */
+  --color-accent-mint: #059669;    /* Emerald-600 */
+  --color-info: #0284c7;          /* Sky-600 */
+  --color-success: #059669;
+  --color-success-hover: #047857;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-warning-text: #b45309;   /* Ámbar oscuro legible para textos de alerta */
+
+  /* Superficies y Fondos - TEMA CLARO (Default) */
+  --color-bg-page: linear-gradient(135deg, #f0fdf4 0%, #ecfeff 35%, #f0f9ff 70%, #e0f2fe 100%);
+  --color-bg: #f8fafc;
+  --color-bg-soft: #f1f5f9;
+  --color-surface: rgba(255, 255, 255, 0.92);
+  --color-surface-solid: #ffffff;
+  --color-surface-2: rgba(248, 250, 252, 0.95);
+  --color-surface-hover: rgba(241, 245, 249, 0.98);
+  --color-surface-header: rgba(248, 250, 252, 0.98);
+
+  /* Textos con Alto Contraste - TEMA CLARO */
+  --color-text: #0f172a;           /* Slate-900: texto principal muy oscuro y 100% nítido */
+  --color-text-title: #0e0e35;     /* Deep navy: títulos principales */
+  --color-text-soft: #334155;      /* Slate-700: texto secundario, subtítulos y descripciones legibles */
+  --color-text-muted: #475569;     /* Slate-600 */
+
+  /* Bordes y Resplandores - TEMA CLARO */
+  --color-border: rgba(203, 213, 225, 0.85); /* Slate-300: bordes definidos */
+  --color-border-glow: rgba(4, 120, 87, 0.35);
+  --color-glass-border: rgba(255, 255, 255, 0.9);
+
+  /* Controles de Formulario - TEMA CLARO */
+  --color-input-bg: #ffffff;
+  --color-input-text: #0f172a;
+  --color-input-placeholder: #64748b;
+  --color-input-border: #cbd5e1;
+
+  /* Tablas y Navegación (Tabs) - TEMA CLARO */
+  --color-table-bg: #ffffff;
+  --color-table-header: #f1f5f9;
+  --color-table-header-text: #065f46;
+  --color-table-row-hover: rgba(4, 120, 87, 0.05);
+  --color-tabs-bg: #e2e8f0;
+  --color-tab-active-bg: #ffffff;
+  --color-tab-active-text: #047857;
+
+  /* Sombras */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 24px rgba(14, 20, 50, 0.07);
+  --shadow-lg: 0 16px 40px rgba(14, 20, 50, 0.09);
+  --shadow-glass: 0 12px 32px rgba(14, 20, 50, 0.06);
+
+  /* Bordes Rectos */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  /* Espaciados */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Tipografia */
+  --font-family-base: 'Raleway', 'Segoe UI', Arial, sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 28px;
+  --font-size-2xl: 36px;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Layout */
+  --sidebar-width: 88px;
+  --header-height: 72px;
+  --content-max-width: 1240px;
+}
+
+/* ========================================================
+   TEMA OSCURO GLOBAL (Activado por body.dark-theme)
+======================================================== */
+body.dark-theme,
+html.dark-theme {
+  --color-accent-green: #34d399;
+  --color-accent-mint: #6ee7b7;
+  --color-info: #00c6fe;
+  --color-warning-text: #fbbf24;
+
+  /* Superficies y Fondos - TEMA OSCURO */
+  --color-bg-page: linear-gradient(135deg, #091326 0%, #0e2a47 35%, #064e3b 70%, #00c6fe 100%);
+  --color-bg: #0b0f19;
+  --color-bg-soft: #111827;
+  --color-surface: rgba(15, 23, 42, 0.55);
+  --color-surface-solid: #0f172a;
+  --color-surface-2: rgba(15, 23, 42, 0.65);
+  --color-surface-hover: rgba(255, 255, 255, 0.12);
+  --color-surface-header: rgba(15, 23, 42, 0.88);
+
+  /* Textos - TEMA OSCURO */
+  --color-text: #f8fafc;
+  --color-text-title: #ffffff;
+  --color-text-soft: #cbd5e1;
+  --color-text-muted: #94a3b8;
+
+  /* Bordes y Resplandores - TEMA OSCURO */
+  --color-border: rgba(255, 255, 255, 0.15);
+  --color-border-glow: rgba(52, 211, 153, 0.35);
+  --color-glass-border: rgba(52, 211, 153, 0.25);
+
+  /* Controles de Formulario - TEMA OSCURO */
+  --color-input-bg: rgba(15, 23, 42, 0.65);
+  --color-input-text: #f8fafc;
+  --color-input-placeholder: rgba(203, 213, 225, 0.5);
+  --color-input-border: rgba(255, 255, 255, 0.18);
+
+  /* Tablas y Navegación (Tabs) - TEMA OSCURO */
+  --color-table-bg: rgba(15, 23, 42, 0.65);
+  --color-table-header: rgba(15, 23, 42, 0.88);
+  --color-table-header-text: #34d399;
+  --color-table-row-hover: rgba(52, 211, 153, 0.08);
+  --color-tabs-bg: rgba(15, 23, 42, 0.4);
+  --color-tab-active-bg: rgba(16, 185, 129, 0.22);
+  --color-tab-active-text: #34d399;
+
+  /* Sombras */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.4);
+  --shadow-glass: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* =========================
+   ESTILOS BASE
+========================= */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: var(--font-family-base);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+body {
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* =========================
+   SUPERFICIES Y CONTENEDORES
+========================= */
+.page-container {
+  min-height: 100vh;
+  background: var(--color-bg-page);
+  padding: calc(var(--header-height) + (var(--space-lg) * 2)) var(--space-lg) var(--space-lg);
+  color: var(--color-text);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.page-container .text-muted {
+  color: var(--color-text-soft);
+}
+
+.panel,
+.glass-panel {
+  background: var(--color-surface);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--color-glass-border);
+  border-radius: 0 !important;
+  box-shadow: var(--shadow-glass);
+  color: var(--color-text);
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.panel .text-muted,
+.glass-panel .text-muted {
+  color: var(--color-text-soft);
+  font-weight: 500;
+}
+
+.card,
+.glass-panel-dark {
+  background: var(--color-surface-2);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--color-border);
+  border-radius: 0 !important;
+  box-shadow: var(--shadow-md);
+  padding: var(--space-md);
+  color: var(--color-text);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.card .text-muted,
+.glass-panel-dark .text-muted {
+  color: var(--color-text-soft);
+  font-weight: 500;
+}
+
+.card-hover {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* =========================
+   BOTONES
+========================= */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 0 !important;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  text-align: center;
+  transition: all 0.2s ease;
+  letter-spacing: 0.02em;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-accent-green) 0%, var(--color-success-hover) 100%);
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.35);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--color-accent-mint) 0%, var(--color-success-hover) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(4, 120, 87, 0.45);
+}
+
+.btn-secondary {
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-accent-green);
+  border-color: var(--color-accent-green);
+}
+
+.btn-success {
+  background: var(--color-success);
+  color: #ffffff !important;
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #ffffff !important;
+}
+
+/* =========================
+   FORMULARIOS
+========================= */
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid var(--color-input-border);
+  background: var(--color-input-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+  color: var(--color-input-text);
+  font-weight: 500;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--color-input-placeholder);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--color-accent-green);
+  box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.2);
+}
+
+select option,
+.select option,
+.input option {
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+}
+
+.input[type="file"] {
+  color: var(--color-text-soft);
+  padding: 8px 12px;
+}
+
+.input[type="file"]::file-selector-button {
+  background: rgba(4, 120, 87, 0.12);
+  color: var(--color-accent-green);
+  border: 1px solid var(--color-border-glow);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  margin-right: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  transition: all 0.2s ease;
+}
+
+.input[type="file"]::file-selector-button:hover {
+  background: rgba(4, 120, 87, 0.22);
+  color: var(--color-text);
+}
+
+.label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-text-title);
+  letter-spacing: 0.02em;
+}
+
+.form-group {
+  margin-bottom: var(--space-md);
+}
+
+/* =========================
+   TIPOGRAFÍA CON ALTO CONTRASTE
+========================= */
+.title-xl {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-title);
+}
+
+.title-lg {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-title);
+}
+
+.title-md {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text-title);
+}
+
+.title-sm {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: var(--color-text-title);
+}
+
+.text-muted {
+  color: var(--color-text-soft);
+}
+
+.text-sm {
+  font-size: var(--font-size-sm);
+}
+
+.text-xs {
+  font-size: var(--font-size-xs);
+}
+
+/* =========================
+   TABLAS
+========================= */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-table-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--color-text);
+  border-radius: 0 !important;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+}
+
+.table thead {
+  background: var(--color-table-header);
+}
+
+.table th,
+.table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.table th {
+  font-size: var(--font-size-sm);
+  color: var(--color-table-header-text);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table td {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.table td .text-muted,
+.table .text-muted {
+  color: var(--color-text-muted) !important;
+  font-weight: 500;
+}
+
+.table tbody tr:hover {
+  background: var(--color-table-row-hover);
+}
+
+.table-shell {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 0 !important;
+  background: var(--color-table-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* =========================
+   PESTAÑAS / TABS GLOBALES
+========================= */
+.tabs {
+  background: var(--color-tabs-bg) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+  border-radius: 0 !important;
+}
+
+.tab-button {
+  color: var(--color-text-soft) !important;
+  font-weight: 600 !important;
+  border-radius: 0 !important;
+  transition: all 0.2s ease !important;
+}
+
+.tab-button:hover:not(:disabled) {
+  background: var(--color-surface-hover) !important;
+  color: var(--color-text-title) !important;
+}
+
+.tab-button.active {
+  background: var(--color-tab-active-bg) !important;
+  color: var(--color-tab-active-text) !important;
+  font-weight: 700 !important;
+  border-color: var(--color-border-glow) !important;
+  border-bottom: 2px solid var(--color-accent-green) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 -2px 10px rgba(4, 120, 87, 0.15) !important;
+}
+
+/* =========================
+   ESTADOS / BADGES
+========================= */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+.badge-success {
+  background: rgba(4, 120, 87, 0.15);
+  color: var(--color-accent-green);
+}
+
+.badge-warning {
+  background: rgba(217, 119, 6, 0.15);
+  color: var(--color-warning-text);
+}
+
+.badge-danger {
+  background: rgba(220, 38, 38, 0.15);
+  color: var(--color-danger);
+}

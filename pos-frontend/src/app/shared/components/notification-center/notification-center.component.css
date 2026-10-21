@@ -1,0 +1,250 @@
+.notification-center {
+	width: min(620px, calc(100vw - 24px));
+	max-height: 72vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	padding: 0;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 14px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.notification-header {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 16px 18px 12px;
+	border-bottom: 1px solid #ececec;
+	background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+}
+
+.panel-close {
+	width: 32px;
+	height: 32px;
+	border: none;
+	border-radius: 999px;
+	background: #eef2f7;
+	color: #334155;
+	font-size: 1.15rem;
+	cursor: pointer;
+	flex: 0 0 auto;
+}
+
+.notification-header h3 {
+	margin: 0;
+	font-size: 1.05rem;
+	font-weight: 700;
+	color: #111;
+}
+
+.notification-header p {
+	margin: 4px 0 0;
+	color: #666;
+	font-size: 0.88rem;
+}
+
+.notification-list {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 8px 10px 10px;
+}
+
+.notification-list ul {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.notification-center li {
+	padding: 8px 4px;
+	margin-bottom: 8px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.notif-item .notif-button {
+	width: 100%;
+	text-align: left;
+	padding: 10px 12px;
+	border: 0;
+	background: #eef2f7;
+	cursor: pointer;
+	border-radius: 10px;
+	transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.notif-item .notif-button:hover {
+	background: #e2e8f0;
+	transform: translateY(-1px);
+	box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.notif-item.unread {
+	background: #fef0d9;
+	border-left: 4px solid #f6b64a;
+}
+
+.notif-button.unread {
+	background: #fef0d9;
+	border: 1px solid #f8d79a;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.notif-item.read {
+	background: #f8fafc;
+	border-left: 4px solid #dbe4ee;
+}
+
+.notif-button.read {
+	background: #f8fafc;
+	border: 1px solid #e5edf5;
+}
+
+.notif-title {
+	font-weight: 700;
+	color: #0f172a;
+}
+
+.notif-body {
+	color: #334155;
+	font-size: 0.95rem;
+	margin-top: 2px;
+}
+
+.notif-meta {
+	margin-top: 6px;
+	color: #64748b;
+}
+
+.modal-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.4);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2000;
+	padding: 20px;
+}
+
+.modal-window {
+	position: relative;
+	margin: auto;
+	background: #fff;
+	width: min(720px, calc(100vw - 40px));
+	max-height: calc(100vh - 40px);
+	overflow: hidden;
+	border-radius: 18px;
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.26);
+	border: 1px solid rgba(0, 0, 0, 0.06);
+	display: flex;
+	flex-direction: column;
+}
+
+.modal-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 20px 22px 12px;
+	background: linear-gradient(180deg, #f9fbff 0%, #ffffff 100%);
+	border-bottom: 1px solid #edf0f5;
+}
+
+.modal-kicker {
+	display: inline-block;
+	margin-bottom: 4px;
+	color: #6b7280;
+	font-size: 0.78rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.modal-header h4 {
+	margin: 0;
+	font-size: 1.2rem;
+	line-height: 1.2;
+	color: #111827;
+}
+
+.modal-close {
+	width: 36px;
+	height: 36px;
+	border: none;
+	border-radius: 999px;
+	background: #eef2f7;
+	color: #334155;
+	font-size: 1.25rem;
+	cursor: pointer;
+	flex: 0 0 auto;
+}
+
+.modal-content {
+	padding: 18px 22px;
+	overflow-y: auto;
+}
+
+.modal-card {
+	background: #ffffff;
+	border: 1px solid #edf0f5;
+	border-radius: 16px;
+	padding: 18px;
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.modal-summary {
+	margin: 0 0 16px;
+	color: #334155;
+	font-size: 0.98rem;
+	line-height: 1.6;
+}
+
+.modal-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.modal-grid div {
+	padding: 14px;
+	border-radius: 12px;
+	background: #f8fafc;
+	border: 1px solid #e8edf4;
+}
+
+.modal-label {
+	display: block;
+	margin-bottom: 4px;
+	color: #64748b;
+	font-size: 0.8rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.modal-grid strong {
+	color: #0f172a;
+	font-size: 1rem;
+}
+
+@media (max-width: 640px) {
+	.modal-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.modal-window {
+		border-radius: 14px;
+	}
+}
+
+@media (max-width: 640px) {
+	.notification-center {
+		width: min(96vw, 620px);
+		max-height: 78vh;
+	}
+}

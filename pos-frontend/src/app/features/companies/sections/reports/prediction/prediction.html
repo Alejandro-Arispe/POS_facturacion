@@ -1,0 +1,105 @@
+<div class="page-container prediction-page">
+  <app-navbar />
+
+  <main class="prediction-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="prediction-content">
+      <header class="prediction-header panel">
+        <p class="badge badge-success">Empresa {{ companyId }}</p>
+        <h1 class="title-xl">Prediccion de ventas</h1>
+        <p class="text-muted">Selecciona una sucursal para generar su predicción de ventas.</p>
+      </header>
+
+      <section class="prediction-panel panel">
+        <form class="prediction-form" (ngSubmit)="generatePrediction()" novalidate>
+          <div class="field-group">
+            <label for="predictionBranch">Sucursal</label>
+            <div class="prediction-controls">
+              <select
+                class="select"
+                id="predictionBranch"
+                name="predictionBranch"
+                [(ngModel)]="selectedBranchId"
+                [disabled]="loadingBranches || branches.length === 0"
+                required
+              >
+                <option value="" disabled>
+                  {{ loadingBranches ? 'Cargando sucursales...' : 'Selecciona una sucursal' }}
+                </option>
+                @for (branch of branches; track branchId(branch)) {
+                  <option [value]="branchId(branch)">{{ branch.nombre }}</option>
+                }
+              </select>
+
+              <button
+                class="btn btn-primary"
+                type="submit"
+                [disabled]="!selectedBranchId || loadingPrediction"
+              >
+                {{ loadingPrediction ? 'Generando...' : 'Generar predicción de ventas' }}
+              </button>
+            </div>
+          </div>
+
+          @if (submitAttempted && !selectedBranchId) {
+            <p class="field-error" role="alert">Selecciona una sucursal para generar la predicción.</p>
+          }
+
+          @if (branchesError) {
+            <p class="feedback feedback-error" role="alert">{{ branchesError }}</p>
+          } @else if (!loadingBranches && branches.length === 0) {
+            <p class="feedback feedback-info">Esta empresa no tiene sucursales activas.</p>
+          }
+
+        </form>
+      </section>
+
+      @if (predictionError) {
+        <section class="prediction-panel panel" role="alert">
+          <p class="feedback feedback-error">{{ predictionError }}</p>
+        </section>
+      }
+
+      @if (predictionResults) {
+        <section class="prediction-panel panel" aria-live="polite">
+          <div class="result-header">
+            <h2 class="title-lg">Predicción de abastecimiento</h2>
+            <p class="text-muted">Proyección de productos para los próximos 30 días.</p>
+          </div>
+
+          @if (predictionResults.length === 0) {
+            <p class="feedback feedback-info">No hay datos de ventas para generar una predicción.</p>
+          } @else {
+            <div class="table-responsive">
+              <table class="details-table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Vendido últimos 30 días</th>
+                    <th>Stock actual</th>
+                    <th>Promedio diario</th>
+                    <th>Predicción próximos 30 días</th>
+                    <th>Recomendado comprar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of predictionResults; track item.id_producto) {
+                    <tr>
+                      <td>{{ item.producto }}</td>
+                      <td>{{ item.vendido_ultimos_30_dias }}</td>
+                      <td>{{ item.stock_actual }}</td>
+                      <td>{{ item.promedio_diario }}</td>
+                      <td>{{ item.prediccion_proximos_30_dias }}</td>
+                      <td>{{ item.recomendado_comprar }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+    </section>
+  </main>
+</div>

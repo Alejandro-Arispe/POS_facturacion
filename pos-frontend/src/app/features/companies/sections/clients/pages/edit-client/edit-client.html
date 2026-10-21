@@ -1,0 +1,84 @@
+<div class="page-container edit-client-page">
+  <app-navbar></app-navbar>
+
+  <main class="edit-client-layout">
+    <app-sidebar context="company" [companyId]="companyId"></app-sidebar>
+
+    <section class="edit-client-content">
+      <section class="edit-client-panel panel">
+        <header class="edit-client-header">
+          <p class="badge badge-success">Cliente {{ clientId }}</p>
+          <h1 class="title-xl">Editar Cliente</h1>
+          <p class="text-muted">Actualiza categoria, codigo y estado del cliente.</p>
+        </header>
+
+        @if (errorEdicion) {
+          <p class="feedback feedback-error">{{ errorEdicion }}</p>
+        }
+
+        @if (mensajeEdicion) {
+          <p class="feedback feedback-success">{{ mensajeEdicion }}</p>
+        }
+
+        @if (cargandoDatos) {
+          <p class="feedback feedback-info">Cargando datos del cliente...</p>
+        }
+
+        <form class="client-form" (submit)="guardarCliente($event)">
+          <div class="form-group category-selector-group">
+            <label class="label" for="cliente_categoria">Categoria de cliente</label>
+
+            <select
+              class="select"
+              id="cliente_categoria"
+              name="cliente_categoria"
+              [(ngModel)]="form.id_categoria_cliente"
+            >
+              <option [ngValue]="null">Selecciona una categoria</option>
+              @if (categories.length === 0) {
+                <option [ngValue]="null" disabled>No hay categorias disponibles</option>
+              } @else {
+                @for (category of categories; track trackCategory($index, category)) {
+                  <option [ngValue]="category.id_categoria_cliente">
+                    {{ category.nombre }}
+                    @if (category.permite_credito) {
+                      - Credito permitido
+                    }
+                  </option>
+                }
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="cliente_codigo">Codigo cliente</label>
+            <input
+              class="input"
+              id="cliente_codigo"
+              name="cliente_codigo"
+              type="text"
+              [(ngModel)]="form.codigo_cliente"
+            />
+          </div>
+
+          <div class="form-group status-field">
+            <span class="label">Estado</span>
+            <label class="toggle-switch" for="cliente_activo">
+              <input id="cliente_activo" name="cliente_activo" type="checkbox" [(ngModel)]="form.activo" />
+              <span class="toggle-track" aria-hidden="true"></span>
+              <span class="toggle-text">{{ form.activo ? 'Cliente activo' : 'Cliente inactivo' }}</span>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit" [disabled]="cargandoDatos || guardandoCliente">
+              {{ guardandoCliente ? 'Guardando...' : 'Guardar cliente' }}
+            </button>
+            <button class="btn btn-secondary" type="button" (click)="volverListado()">Cancelar</button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+</div>
+

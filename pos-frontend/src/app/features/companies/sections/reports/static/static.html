@@ -1,0 +1,577 @@
+<div class="page-container reports-page">
+  <app-navbar />
+
+  <main class="reports-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="reports-content">
+      <header class="reports-header panel">
+        <div>
+          <p class="badge badge-success">Sucursal {{ branchId }}</p>
+          <h1 class="title-xl">Reportes Estaticos</h1>
+          <p class="text-muted">Consulta reportes predefinidos de ventas, inventario y cajas de esta sucursal.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de reportes estaticos">
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'sales'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'sales'"
+            (click)="setActiveTab('sales')"
+          >
+            Ventas
+          </button>
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'inventory'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'inventory'"
+            (click)="setActiveTab('inventory')"
+          >
+            Inventario
+          </button>
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'cash-registers'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'cash-registers'"
+            (click)="setActiveTab('cash-registers')"
+          >
+            Cajas
+          </button>
+        </div>
+
+        <div class="tab-content">
+          <div *ngIf="activeTab === 'sales'" class="report-items">
+            <article class="report-card">
+              <div class="report-card-header">
+                <h2>Resumen de ventas de hoy</h2>
+                <button class="btn btn-primary" type="button" [disabled]="loadingSalesSummary" (click)="showSalesReport('summary')">
+                  {{ loadingSalesSummary ? 'Generando...' : 'Generar' }}
+                </button>
+              </div>
+              <p class="report-card-description">Visualiza el resumen de ventas realizadas en tus sucursales durante el día de hoy.</p>
+            </article>
+
+            <article class="report-card">
+              <div class="report-card-header">
+                <h2>Detalle de ventas de hoy</h2>
+                <button class="btn btn-primary" type="button" [disabled]="loadingSalesDetails" (click)="showSalesReport('details')">
+                  {{ loadingSalesDetails ? 'Generando...' : 'Generar' }}
+                </button>
+              </div>
+              <p class="report-card-description">Consulta el detalle de cada ticket de venta generado en el día actual.</p>
+            </article>
+
+            <section *ngIf="salesReportType !== 'none'" class="report-result panel">
+              <h1 class="title-xl">
+                REPORTE: {{ salesReportType === 'summary' ? 'RESUMEN DE VENTAS' : 'DETALLE DE VENTAS' }}
+              </h1>
+
+              <div *ngIf="salesReportType === 'summary'" class="report-summary">
+                <p *ngIf="loadingSalesSummary" class="text-muted">Generando resumen de ventas...</p>
+                <p *ngIf="salesSummaryError" class="feedback feedback-error">{{ salesSummaryError }}</p>
+                <p *ngIf="!loadingSalesSummary && !salesSummaryError && !hasSalesSummaryData()" class="text-muted">
+                  No hay datos suficientes para mostrar el resumen de ventas de hoy.
+                </p>
+
+                <ng-container *ngIf="!loadingSalesSummary && !salesSummaryError && hasSalesSummaryData()">
+                <p class="report-meta">Fecha: {{ salesSummaryReport.date }}</p>
+
+                <ng-container *ngFor="let branch of salesSummaryReport.branches; let isLast = last">
+                  <div class="report-section">
+                    <h3>Sucursal: {{ branch.name }}</h3>
+                    <div class="separator"></div>
+
+                    <p class="report-section-subtitle">VENTAS DEL DÍA</p>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <tbody>
+                          <tr>
+                            <td class="table-label">Total de ventas</td>
+                            <td>{{ branch.totalSales }}</td>
+                          </tr>
+                          <tr>
+                            <td class="table-label">Monto vendido</td>
+                            <td>{{ branch.amount }}</td>
+                          </tr>
+                          <tr>
+                            <td class="table-label">Ticket promedio</td>
+                            <td>{{ branch.averageTicket }}</td>
+                          </tr>
+                          <tr>
+                            <td class="table-label">Productos vendidos</td>
+                            <td>{{ branch.productsSold }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <p class="report-section-subtitle">TOP 3 PRODUCTOS MÁS VENDIDOS</p>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <thead>
+                          <tr>
+                            <th>Posición</th>
+                            <th>Producto</th>
+                            <th>Unidades</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let product of branch.topProducts">
+                            <td>{{ product.rank }}</td>
+                            <td>{{ product.name }}</td>
+                            <td>{{ product.quantity }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div *ngIf="!isLast" class="report-divider"></div>
+                </ng-container>
+
+                <div class="report-section">
+                  <h3>TOTAL EMPRESA</h3>
+                  <div class="table-shell">
+                    <table class="table report-table">
+                      <tbody>
+                        <tr>
+                          <td class="table-label">Total de ventas</td>
+                          <td>{{ salesSummaryReport.companyTotal.totalSales }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Monto vendido</td>
+                          <td>{{ salesSummaryReport.companyTotal.amount }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Ticket promedio</td>
+                          <td>{{ salesSummaryReport.companyTotal.averageTicket }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Productos vendidos</td>
+                          <td>{{ salesSummaryReport.companyTotal.productsSold }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="report-actions" *ngIf="hasPermission('REPORTE_EXPORTAR')">
+                  <button class="btn btn-secondary" type="button" (click)="exportSalesSummaryReport('excel')">EXCEL</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportSalesSummaryReport('pdf')">PDF</button>
+                </div>
+                </ng-container>
+              </div>
+
+              <div *ngIf="salesReportType === 'details'" class="report-details">
+                <p *ngIf="loadingSalesDetails" class="text-muted">Generando detalle de ventas...</p>
+                <p *ngIf="salesDetailsError" class="feedback feedback-error">{{ salesDetailsError }}</p>
+                <p *ngIf="!loadingSalesDetails && !salesDetailsError && !hasSalesDetailsData()" class="text-muted">
+                  No hay datos suficientes para mostrar el detalle de ventas de hoy.
+                </p>
+
+                <ng-container *ngIf="!loadingSalesDetails && !salesDetailsError && hasSalesDetailsData()">
+                <p class="report-meta">Fecha: {{ salesDetailsReport.date }}</p>
+
+                <ng-container *ngFor="let branch of salesDetailsReport.branches">
+                  <div class="report-section">
+                    <h3>Sucursal: {{ branch.name }}</h3>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <thead>
+                          <tr>
+                            <th>N° Venta</th>
+                            <th>Hora</th>
+                            <th>Cliente</th>
+                            <th>Subtotal</th>
+                            <th>Descuento</th>
+                            <th>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let sale of branch.sales">
+                            <td>{{ sale.id }}</td>
+                            <td>{{ sale.time }}</td>
+                            <td>{{ sale.client }}</td>
+                            <td>{{ sale.subtotal }}</td>
+                            <td>{{ sale.discount }}</td>
+                            <td>{{ sale.total }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="report-summary-box">
+                      <p><strong>Resumen de sucursal:</strong></p>
+                      <p>Total registros: {{ branch.summary.records }}</p>
+                      <p>Total vendido: {{ branch.summary.total }}</p>
+                    </div>
+                  </div>
+                </ng-container>
+                <div class="report-section">
+                  <h3>TOTAL EMPRESA</h3>
+                  <div class="report-summary-box">
+                    <p>Total registros: {{ salesDetailsReport.companyTotal.records }}</p>
+                    <p>Total vendido: {{ salesDetailsReport.companyTotal.total }}</p>
+                  </div>
+                </div>
+               <div class="report-actions" *ngIf="hasPermission('REPORTE_EXPORTAR')">
+                  <button class="btn btn-secondary" type="button" (click)="exportSalesDetailsReport('excel')">EXCEL</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportSalesDetailsReport('pdf')">PDF</button>
+                </div>
+                </ng-container>
+              </div>
+            </section>
+          </div>
+
+          <div *ngIf="activeTab === 'inventory'" class="report-items">
+            <article class="report-card">
+              <div class="report-card-header">
+                <h2>Estado de inventario actual</h2>
+                <button class="btn btn-primary" type="button" [disabled]="loadingInventoryStatus" (click)="showInventoryReport('status')">
+                  {{ loadingInventoryStatus ? 'Generando...' : 'Generar' }}
+                </button>
+              </div>
+              <p class="report-card-description">Obtén el estado actual del inventario de productos en todas las sucursales.</p>
+            </article>
+
+            <article class="report-card">
+              <div class="report-card-header">
+                <h2>Movimientos de inventario de los últimos 7 días</h2>
+                <button class="btn btn-primary" type="button" [disabled]="loadingInventoryMovements" (click)="showInventoryReport('movements')">
+                  {{ loadingInventoryMovements ? 'Generando...' : 'Generar' }}
+                </button>
+              </div>
+              <p class="report-card-description">Revisa los movimientos de inventario registrados en la última semana.</p>
+            </article>
+
+            <section *ngIf="inventoryReportType !== 'none'" class="report-result panel">
+              <h1 class="title-xl">
+                REPORTE: {{ inventoryReportType === 'status' ? 'ESTADO DE INVENTARIO' : 'MOVIMIENTOS DE INVENTARIO' }}
+              </h1>
+
+              <div *ngIf="inventoryReportType === 'status'" class="report-summary">
+                <p *ngIf="loadingInventoryStatus" class="text-muted">Generando estado de inventario...</p>
+                <p *ngIf="inventoryStatusError" class="feedback feedback-error">{{ inventoryStatusError }}</p>
+                <p *ngIf="!loadingInventoryStatus && !inventoryStatusError && !hasInventoryStatusData()" class="text-muted">
+                  No hay datos suficientes para mostrar el estado de inventario actual.
+                </p>
+
+                <ng-container *ngIf="!loadingInventoryStatus && !inventoryStatusError && hasInventoryStatusData()">
+                <p class="report-meta">Fecha: {{ inventoryStatusReport.date }}</p>
+
+                <ng-container *ngFor="let branch of inventoryStatusReport.branches; let isLast = last">
+                  <div class="report-section">
+                    <h3>Sucursal: {{ branch.name }}</h3>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <thead>
+                          <tr>
+                            <th>Producto</th>
+                            <th>Stock Actual</th>
+                            <th>Stock Mínimo</th>
+                            <th>Stock Máximo</th>
+                            <th>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let item of branch.items">
+                            <td>{{ item.product }}</td>
+                            <td>{{ item.actual }}</td>
+                            <td>{{ item.minimum }}</td>
+                            <td>{{ item.maximum }}</td>
+                            <td>{{ item.status }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="report-summary-box">
+                      <p><strong>Resumen:</strong></p>
+                      <p>Total productos: {{ branch.summary.totalProducts }}</p>
+                      <p>Productos con bajo stock: {{ branch.summary.lowStock }}</p>
+                      <p>Productos con sobre stock: {{ branch.summary.overStock }}</p>
+                      <p>Productos agotados: {{ branch.summary.outOfStock }}</p>
+                    </div>
+                  </div>
+                  <div *ngIf="!isLast" class="report-divider"></div>
+                </ng-container>
+
+                <div class="report-section">
+                  <h3>TOTAL EMPRESA</h3>
+                  <div class="table-shell">
+                    <table class="table report-table">
+                      <tbody>
+                        <tr>
+                          <td class="table-label">Total productos</td>
+                          <td>{{ inventoryStatusReport.companyTotal.totalProducts }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Productos con bajo stock</td>
+                          <td>{{ inventoryStatusReport.companyTotal.lowStock }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Productos con sobre stock</td>
+                          <td>{{ inventoryStatusReport.companyTotal.overStock }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Productos agotados</td>
+                          <td>{{ inventoryStatusReport.companyTotal.outOfStock }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                 <div class="report-actions" *ngIf="hasPermission('REPORTE_EXPORTAR')">
+                  <button class="btn btn-secondary" type="button" (click)="exportInventoryStatusReport('excel')">Exportar como EXCEL</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportInventoryStatusReport('pdf')">Exportar como PDF</button>
+                </div>
+                </ng-container>
+              </div>
+
+              <div *ngIf="inventoryReportType === 'movements'" class="report-details">
+                <p *ngIf="loadingInventoryMovements" class="text-muted">Generando movimientos de inventario...</p>
+                <p *ngIf="inventoryMovementsError" class="feedback feedback-error">{{ inventoryMovementsError }}</p>
+                <p *ngIf="!loadingInventoryMovements && !inventoryMovementsError && !hasInventoryMovementsData()" class="text-muted">
+                  No hay datos suficientes para mostrar los movimientos de inventario.
+                </p>
+
+                <ng-container *ngIf="!loadingInventoryMovements && !inventoryMovementsError && hasInventoryMovementsData()">
+                <p class="report-meta">Período: {{ inventoryMovementsReport.period }}</p>
+
+                <ng-container *ngFor="let branch of inventoryMovementsReport.branches; let isLast = last">
+                  <div class="report-section">
+                    <h3>Sucursal: {{ branch.name }}</h3>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <thead>
+                          <tr>
+                            <th>Fecha</th>
+                            <th>Tipo Movimiento</th>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let movement of branch.movements">
+                            <td>{{ movement.date }}</td>
+                            <td>{{ movement.type }}</td>
+                            <td>{{ movement.product }}</td>
+                            <td>{{ movement.quantity }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="report-summary-box">
+                      <p><strong>Resumen:</strong></p>
+                      <p>Total entradas: {{ branch.summary.entries }}</p>
+                      <p>Total salidas: {{ branch.summary.exits }}</p>
+                    </div>
+                  </div>
+                  <div *ngIf="!isLast" class="report-divider"></div>
+                </ng-container>
+                <div class="report-section">
+                  <h3>TOTAL EMPRESA</h3>
+                  <div class="report-summary-box">
+                    <p>Total entradas: {{ inventoryMovementsReport.companyTotal.entries }}</p>
+                    <p>Total salidas: {{ inventoryMovementsReport.companyTotal.exits }}</p>
+                  </div>
+                </div>
+
+                 <div class="report-actions" *ngIf="hasPermission('REPORTE_EXPORTAR')">
+                  <button class="btn btn-secondary" type="button" (click)="exportInventoryMovementsReport('excel')">Exportar como EXCEL</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportInventoryMovementsReport('pdf')">Exportar como PDF</button>
+                </div>
+                </ng-container>
+              </div>
+            </section>
+          </div>
+
+          <div *ngIf="activeTab === 'cash-registers'" class="report-items">
+            <article class="report-card">
+              <div class="report-card-header">
+                <h2>Resumen de cajas de hoy</h2>
+                <button class="btn btn-primary" type="button" [disabled]="loadingCashSummary" (click)="showCashReport('summary')">
+                  {{ loadingCashSummary ? 'Generando...' : 'Generar' }}
+                </button>
+              </div>
+              <p class="report-card-description">Mira el resumen de las cajas activas durante el día.</p>
+            </article>
+
+            <article class="report-card">
+              <div class="report-card-header">
+                <h2>Movimientos de cajas de hoy</h2>
+                <button class="btn btn-primary" type="button" [disabled]="loadingCashMovements" (click)="showCashReport('movements')">
+                  {{ loadingCashMovements ? 'Generando...' : 'Generar' }}
+                </button>
+              </div>
+              <p class="report-card-description">Consulta los movimientos de caja registrados en el día de hoy.</p>
+            </article>
+
+            <section *ngIf="cashReportType !== 'none'" class="report-result panel">
+              <h1 class="title-xl">
+                REPORTE: {{ cashReportType === 'summary' ? 'RESUMEN DE CAJAS' : 'MOVIMIENTOS DE CAJAS' }}
+              </h1>
+
+              <div *ngIf="cashReportType === 'summary'" class="report-summary">
+                <p *ngIf="loadingCashSummary" class="text-muted">Generando resumen de cajas...</p>
+                <p *ngIf="cashSummaryError" class="feedback feedback-error">{{ cashSummaryError }}</p>
+                <p *ngIf="!loadingCashSummary && !cashSummaryError && !hasCashSummaryData()" class="text-muted">
+                  No hay datos suficientes para mostrar el resumen de cajas de hoy.
+                </p>
+
+                <ng-container *ngIf="!loadingCashSummary && !cashSummaryError && hasCashSummaryData()">
+                <p class="report-meta">Fecha: {{ cashSummaryReport.date }}</p>
+
+                <ng-container *ngFor="let branch of cashSummaryReport.branches; let isLast = last">
+                  <div class="report-section">
+                    <h3>Sucursal: {{ branch.name }}</h3>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <thead>
+                          <tr>
+                            <th>Caja</th>
+                            <th>Estado</th>
+                            <th>Apertura</th>
+                            <th>Cierre</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let box of branch.boxes">
+                            <td>{{ box.name }}</td>
+                            <td>{{ box.state }}</td>
+                            <td>{{ box.opening }}</td>
+                            <td>{{ box.closing }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="report-summary-box">
+                      <p><strong>Resumen:</strong></p>
+                      <p>Total cajas: {{ branch.summary.totalBoxes }}</p>
+                      <p>Cajas abiertas: {{ branch.summary.openBoxes }}</p>
+                      <p>Cajas cerradas: {{ branch.summary.closedBoxes }}</p>
+                      <p>Ingresos: {{ branch.summary.income }}</p>
+                      <p>Egresos: {{ branch.summary.expenses }}</p>
+                      <p>Flujo neto: {{ branch.summary.netFlow }}</p>
+                    </div>
+                  </div>
+                  <div *ngIf="!isLast" class="report-divider"></div>
+                </ng-container>
+
+                <div class="report-section">
+                  <h3>TOTAL EMPRESA</h3>
+                  <div class="table-shell">
+                    <table class="table report-table">
+                      <tbody>
+                        <tr>
+                          <td class="table-label">Total cajas</td>
+                          <td>{{ cashSummaryReport.companyTotal.totalBoxes }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Cajas abiertas</td>
+                          <td>{{ cashSummaryReport.companyTotal.openBoxes }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Cajas cerradas</td>
+                          <td>{{ cashSummaryReport.companyTotal.closedBoxes }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Ingresos</td>
+                          <td>{{ cashSummaryReport.companyTotal.income }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Egresos</td>
+                          <td>{{ cashSummaryReport.companyTotal.expenses }}</td>
+                        </tr>
+                        <tr>
+                          <td class="table-label">Flujo neto</td>
+                          <td>{{ cashSummaryReport.companyTotal.netFlow }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                 <div class="report-actions" *ngIf="hasPermission('REPORTE_EXPORTAR')">
+                  <button class="btn btn-secondary" type="button" (click)="exportCashSummaryReport('excel')">Exportar como EXCEL</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportCashSummaryReport('pdf')">Exportar como PDF</button>
+                </div>
+                </ng-container>
+              </div>
+
+              <div *ngIf="cashReportType === 'movements'" class="report-details">
+                <p *ngIf="loadingCashMovements" class="text-muted">Generando movimientos de caja...</p>
+                <p *ngIf="cashMovementsError" class="feedback feedback-error">{{ cashMovementsError }}</p>
+                <p *ngIf="!loadingCashMovements && !cashMovementsError && !hasCashMovementsData()" class="text-muted">
+                  No hay datos suficientes para mostrar los movimientos de caja de hoy.
+                </p>
+
+                <ng-container *ngIf="!loadingCashMovements && !cashMovementsError && hasCashMovementsData()">
+                <p class="report-meta">Fecha: {{ cashMovementsReport.date }}</p>
+
+                <ng-container *ngFor="let branch of cashMovementsReport.branches; let isLast = last">
+                  <div class="report-section">
+                    <h3>Sucursal: {{ branch.name }}</h3>
+                    <div class="table-shell">
+                      <table class="table report-table">
+                        <thead>
+                          <tr>
+                            <th>Hora</th>
+                            <th>Caja</th>
+                            <th>Tipo</th>
+                            <th>Concepto</th>
+                            <th>Monto</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let movement of branch.movements">
+                            <td>{{ movement.time }}</td>
+                            <td>{{ movement.box }}</td>
+                            <td>{{ movement.type }}</td>
+                            <td>{{ movement.concept }}</td>
+                            <td>{{ movement.amount }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="report-summary-box">
+                      <p><strong>Resumen:</strong></p>
+                      <p>Total movimientos: {{ branch.summary.totalMovements }}</p>
+                      <p>Total ingresos: {{ branch.summary.totalIncome }}</p>
+                      <p>Total egresos: {{ branch.summary.totalExpenses }}</p>
+                    </div>
+                  </div>
+                  <div *ngIf="!isLast" class="report-divider"></div>
+                </ng-container>
+                <div class="report-section">
+                  <h3>TOTAL EMPRESA</h3>
+                  <div class="report-summary-box">
+                    <p>Total movimientos: {{ cashMovementsReport.companyTotal.totalMovements }}</p>
+                    <p>Total ingresos: {{ cashMovementsReport.companyTotal.totalIncome }}</p>
+                    <p>Total egresos: {{ cashMovementsReport.companyTotal.totalExpenses }}</p>
+                  </div>
+                </div>
+
+                 <div class="report-actions" *ngIf="hasPermission('REPORTE_EXPORTAR')">
+                  <button class="btn btn-secondary" type="button" (click)="exportCashMovementsReport('excel')">Exportar como EXCEL</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportCashMovementsReport('pdf')">Exportar como PDF</button>
+                </div>
+                </ng-container>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

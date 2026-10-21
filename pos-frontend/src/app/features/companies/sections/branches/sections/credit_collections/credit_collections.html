@@ -1,0 +1,276 @@
+<div class="page-container credit-page">
+  <app-navbar />
+
+  <main class="credit-layout">
+    <app-sidebar
+      context="cash_register"
+      [companyId]="companyId"
+      [branchId]="branchId"
+      [cashRegisterId]="cashRegisterId"
+      [cashRegisterSessionId]="cashRegisterSessionId"
+    />
+
+    <section class="credit-content">
+      <section class="credit-header panel">
+        <div>
+          <p class="badge badge-success">Caja {{ cashRegisterId }}</p>
+          @if (cashRegisterSessionId) {
+            <p class="badge badge-neutral">Sesion {{ cashRegisterSessionId }}</p>
+          }
+          <h1 class="title-xl">Cobro de Creditos</h1>
+          <p class="text-muted">Consulta las cuentas por cobrar de tus clientes en esta sesion.</p>
+        </div>
+      </section>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de cobro de creditos">
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'receivables'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'receivables'"
+            (click)="closePaymentTab()"
+          >
+            CxC
+          </button>
+          @if (selectedReceivable) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'payment'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'payment'"
+              (click)="activeTab = 'payment'"
+            >
+              Registrar pago
+            </button>
+          }
+        </div>
+
+        <div class="tab-content">
+          @if (activeTab === 'receivables') {
+            @if (paymentMessage) {
+              <p class="feedback feedback-success">{{ paymentMessage }}</p>
+            }
+
+            @if (clientsError) {
+              <p class="feedback feedback-error">{{ clientsError }}</p>
+            }
+
+            @if (loadingClients) {
+              <section class="credit-state" aria-live="polite">
+                <p class="text-muted">Cargando clientes...</p>
+              </section>
+            } @else {
+              <section class="credit-workspace" aria-label="Cuentas por cobrar">
+              <section class="client-search-panel" aria-label="Buscar clientes">
+                <div class="form-group">
+                  <label class="label" for="clientSearch">Buscar cliente</label>
+                  <input
+                    class="input"
+                    id="clientSearch"
+                    name="clientSearch"
+                    type="search"
+                    placeholder="Nombre, documento, correo o codigo"
+                    autocomplete="off"
+                    [(ngModel)]="searchTerm"
+                  />
+                </div>
+
+                @if (clients.length === 0) {
+                  <section class="credit-state compact">
+                    <p class="text-muted">No hay clientes registrados.</p>
+                  </section>
+                } @else if (filteredClients.length === 0) {
+                  <section class="credit-state compact">
+                    <p class="text-muted">No se encontraron clientes.</p>
+                  </section>
+                } @else {
+                  <div class="client-results" aria-label="Resultados de clientes">
+                    @for (client of filteredClients; track trackClient($index, client)) {
+                      <button
+                        class="client-result"
+                        [class.selected]="selectedClient?.id === client.id"
+                        type="button"
+                        (click)="selectClient(client)"
+                      >
+                        <span>
+                          <strong>{{ client.name }}</strong>
+                          <small>
+                            {{ client.code || 'Sin codigo' }}
+                            @if (client.document) {
+                              · CI {{ client.document }}
+                            }
+                          </small>
+                        </span>
+                        <span class="client-meta">
+                          <strong>{{ client.balance | money }}</strong>
+                          <small>Saldo pendiente</small>
+                        </span>
+                      </button>
+                    }
+                  </div>
+                }
+              </section>
+
+              <section class="account-panel" aria-label="Cuentas por cobrar del cliente">
+                @if (selectedClient) {
+                  <div class="account-heading">
+                    <div>
+                      <p class="text-muted text-sm">Cuentas por cobrar</p>
+                      <h2 class="title-md">{{ selectedClient.name }}</h2>
+                    </div>
+                  </div>
+
+                  @if (receivablesError) {
+                    <p class="feedback feedback-error">{{ receivablesError }}</p>
+                  }
+
+                  @if (loadingReceivables) {
+                    <section class="credit-state compact" aria-live="polite">
+                      <p class="text-muted">Cargando cuentas por cobrar...</p>
+                    </section>
+                  } @else if (!receivablesError && receivables.length === 0) {
+                    <section class="credit-state compact">
+                      <p class="text-muted">El cliente no tiene cuentas por cobrar.</p>
+                    </section>
+                  } @else if (receivables.length > 0) {
+                    <div class="receivables-table-shell">
+                      <table class="table receivables-table">
+                        <thead>
+                          <tr>
+                            <th>Venta Origen</th>
+                            <th>Fecha</th>
+                            <th>Fecha Vencimiento</th>
+                            <th>Monto Total</th>
+                            <th>Saldo Pendiente</th>
+                            <th>Estado</th>
+                            <th class="actions-header">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (receivable of receivables; track trackReceivable($index, receivable)) {
+                            <tr>
+                              <td><strong>{{ receivable.id_venta }}</strong></td>
+                              <td>{{ formatDate(receivable.fecha_inicio) }}</td>
+                              <td>{{ formatDate(receivable.fecha_vencimiento) }}</td>
+                              <td>{{ receivable.monto_credito | money }}</td>
+                              <td><strong>{{ receivable.saldo_pendiente | money }}</strong></td>
+                              <td>
+                                <span class="status-badge {{ getStatusClass(receivable.estado) }}">
+                                  {{ receivable.estado }}
+                                </span>
+                              </td>
+                              <td class="actions-cell">
+                                <button
+                                  class="btn btn-primary btn-sm"
+                                  type="button"
+                                  (click)="openPaymentTab(receivable)"
+                                >
+                                  Cobrar
+                                </button>
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  }
+                } @else {
+                  <section class="credit-state compact">
+                    <div>
+                      <h2 class="title-md">Selecciona un cliente</h2>
+                      <p class="text-muted">Veras aqui el detalle de su cuenta por cobrar.</p>
+                    </div>
+                  </section>
+                }
+              </section>
+              </section>
+            }
+          } @else if (selectedReceivable) {
+            <section class="payment-panel" aria-label="Registrar pago de cuenta por cobrar">
+              @if (paymentError) {
+                <p class="feedback feedback-error">{{ paymentError }}</p>
+              }
+
+              <div class="payment-header">
+                <div>
+                  <h2 class="title-md">Registrar pago</h2>
+                  <p class="text-muted">
+                    Venta origen {{ selectedReceivable.id_venta }} · Saldo a cobrar:
+                    {{ selectedReceivable.saldo_pendiente | money }}
+                  </p>
+                </div>
+
+              </div>
+
+              <div class="payment-rows" aria-label="Formas de pago">
+                @for (paymentRow of paymentRows; track trackPaymentRow($index, paymentRow)) {
+                  <div class="payment-row">
+                    <div class="form-group">
+                      <label class="label" [for]="'creditPaymentMethod-' + paymentRow.id">
+                        Metodo de pago
+                      </label>
+                      <select
+                        class="select"
+                        [id]="'creditPaymentMethod-' + paymentRow.id"
+                        [name]="'creditPaymentMethod-' + paymentRow.id"
+                        [(ngModel)]="paymentRow.paymentMethodId"
+                        [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
+                      >
+                        @for (paymentMethod of paymentMethods; track paymentMethod.id) {
+                          <option
+                            [ngValue]="paymentMethod.id"
+                          >
+                            {{ paymentMethod.name }}
+                          </option>
+                        }
+                      </select>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="label" [for]="'creditPaymentAmount-' + paymentRow.id">
+                        Monto
+                      </label>
+                      <input
+                        class="input"
+                        [id]="'creditPaymentAmount-' + paymentRow.id"
+                        [name]="'creditPaymentAmount-' + paymentRow.id"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        [ngModel]="paymentRow.amount"
+                        (ngModelChange)="updatePaymentAmount(paymentRow, $event)"
+                      />
+                    </div>
+
+                  </div>
+                }
+              </div>
+
+              <p class="payment-balance">
+                Saldo restante: <strong>{{ remainingPaymentAmount | money }}</strong>
+              </p>
+
+              <div class="payment-actions">
+                <button class="btn btn-secondary" type="button" (click)="closePaymentTab()">
+                  Cancelar
+                </button>
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  [disabled]="savingPayment"
+                  (click)="registerCreditPayment()"
+                >
+                  {{ savingPayment ? 'Registrando...' : 'Registrar' }}
+                </button>
+              </div>
+            </section>
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

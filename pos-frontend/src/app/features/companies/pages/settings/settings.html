@@ -1,0 +1,316 @@
+<div class="page-container settings-page">
+  <app-navbar />
+
+  <main class="settings-layout">
+    <app-sidebar context="company" [companyId]="companyId" activeItemLabel="Configuración" />
+
+    <section class="settings-content">
+      <header class="settings-header panel">
+        <div>
+          <p class="badge badge-success">{{ 'Empresa' | t }} {{ companyId }}</p>
+          <h1 class="title-xl">{{ 'Configuración del Sistema' | t }}</h1>
+          <p class="text-muted">{{ 'Personaliza y gestiona las preferencias generales para {empresa}.' | t: { empresa: companyName } }}</p>
+        </div>
+      </header>
+
+      <!-- Alertas de Éxito / Error -->
+      @if (successMsg) {
+        <div class="alert alert-success panel" role="alert">
+          <span class="alert-icon">✓</span>
+          <div class="alert-content">{{ successMsg }}</div>
+        </div>
+      }
+      @if (errorMsg) {
+        <div class="alert alert-danger panel" role="alert">
+          <span class="alert-icon">⚠</span>
+          <div class="alert-content">{{ errorMsg }}</div>
+        </div>
+      }
+
+      <section class="tabs-panel panel">
+        <!-- Navegación por pestañas (Tabs) -->
+        <div class="tabs" role="tablist" aria-label="Secciones de configuración">
+          <button 
+            type="button" 
+            class="tab-button" 
+            [class.active]="activeTab === 'general'" 
+            role="tab"
+            [attr.aria-selected]="activeTab === 'general'"
+            (click)="setTab('general')">
+            <span class="tab-icon">⚙</span> {{ 'General' | t }}
+          </button>
+          <button 
+            type="button" 
+            class="tab-button" 
+            [class.active]="activeTab === 'appearance'" 
+            role="tab"
+            [attr.aria-selected]="activeTab === 'appearance'"
+            (click)="setTab('appearance')">
+            <span class="tab-icon">🎨</span> {{ 'Apariencia' | t }}
+          </button>
+          <button 
+            type="button" 
+            class="tab-button" 
+            [class.active]="activeTab === 'notifications'" 
+            role="tab"
+            [attr.aria-selected]="activeTab === 'notifications'"
+            (click)="setTab('notifications')">
+            <span class="tab-icon">🔔</span> {{ 'Notificaciones' | t }}
+          </button>
+          <button 
+            type="button" 
+            class="tab-button" 
+            [class.active]="activeTab === 'printing'" 
+            role="tab"
+            [attr.aria-selected]="activeTab === 'printing'"
+            (click)="setTab('printing')">
+            <span class="tab-icon">🖨</span> {{ 'Impresión' | t }}
+          </button>
+          <button 
+            type="button" 
+            class="tab-button" 
+            [class.active]="activeTab === 'security'" 
+            role="tab"
+            [attr.aria-selected]="activeTab === 'security'"
+            (click)="setTab('security')">
+            <span class="tab-icon">🔒</span> {{ 'Seguridad' | t }}
+          </button>
+        </div>
+
+        <div class="tab-content">
+          <form (submit)="$event.preventDefault(); saveSettings()" class="settings-form">
+          
+          <!-- Pestaña 1: General -->
+          @if (activeTab === 'general') {
+            <fieldset class="settings-fieldset">
+              <legend class="fieldset-legend">{{ 'Preferencias Generales' | t }}</legend>
+              
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="label" for="idioma">{{ 'Idioma del sistema' | t }}</label>
+                  <select id="idioma" name="idioma" class="select" [(ngModel)]="config.idioma" (ngModelChange)="previewLanguage($event)">
+                    @for (language of languages; track language.code) {
+                      <option [value]="language.code">{{ language.label }} ({{ language.code }})</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="moneda">{{ 'Moneda base' | t }}</label>
+                  <select id="moneda" name="moneda" class="select" [(ngModel)]="config.moneda">
+                    @for (currency of currencies; track currency.code) {
+                      <option [value]="currency.code">{{ currency.label | t }} ({{ currency.symbol }} · {{ currency.code }})</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="zona_horaria">{{ 'Zona horaria' | t }}</label>
+                  <select id="zona_horaria" name="zona_horaria" class="select" [(ngModel)]="config.zona_horaria">
+                    <option value="America/La_Paz">America/La_Paz (UTC -04:00)</option>
+                    <option value="America/Bogota">America/Bogota (UTC -05:00)</option>
+                    <option value="America/Argentina/Buenos_Aires">America/Buenos_Aires (UTC -03:00)</option>
+                    <option value="UTC">Coordinated Universal Time (UTC)</option>
+                  </select>
+                </div>
+              </div>
+            </fieldset>
+          }
+
+          <!-- Pestaña 2: Apariencia -->
+          @if (activeTab === 'appearance') {
+            <fieldset class="settings-fieldset">
+              <legend class="fieldset-legend">{{ 'Personalización Visual' | t }}</legend>
+              
+              <div class="theme-selector-grid">
+                <label class="theme-option" [class.selected]="config.tema === 'claro'">
+                  <input type="radio" name="tema" value="claro" [(ngModel)]="config.tema" class="sr-only">
+                  <div class="theme-preview claro">
+                    <div class="preview-header"></div>
+                    <div class="preview-body"></div>
+                  </div>
+                  <span class="theme-label">{{ 'Tema Claro' | t }}</span>
+                </label>
+
+                <label class="theme-option" [class.selected]="config.tema === 'oscuro'">
+                  <input type="radio" name="tema" value="oscuro" [(ngModel)]="config.tema" class="sr-only">
+                  <div class="theme-preview oscuro">
+                    <div class="preview-header"></div>
+                    <div class="preview-body"></div>
+                  </div>
+                  <span class="theme-label">{{ 'Tema Oscuro' | t }}</span>
+                </label>
+              </div>
+
+              <div class="accent-picker">
+                <span class="label">{{ 'Color de acento' | t }}</span>
+                <p class="text-muted text-sm">{{ 'Se aplica a botones, pestañas y resaltados de toda la aplicación.' | t }}</p>
+                <div class="accent-swatches">
+                  @for (color of accentPresets; track color) {
+                    <button
+                      type="button"
+                      class="accent-swatch"
+                      [class.selected]="config.color_primario === color"
+                      [style.background]="color"
+                      [attr.aria-label]="color"
+                      (click)="previewAccent(color)"
+                    ></button>
+                  }
+                  <label class="accent-custom">
+                    <input type="color" name="color_primario" [ngModel]="config.color_primario || '#047857'" (ngModelChange)="previewAccent($event)" />
+                    <span class="text-sm">{{ 'Personalizado' | t }}</span>
+                  </label>
+                </div>
+              </div>
+            </fieldset>
+          }
+
+          <!-- Pestaña 3: Notificaciones -->
+          @if (activeTab === 'notifications') {
+            <fieldset class="settings-fieldset">
+              <legend class="fieldset-legend">{{ 'Canales y Alertas' | t }}</legend>
+              
+              <div class="settings-switches-list">
+                <div class="switch-group">
+                  <div class="switch-info">
+                    <span class="switch-title">{{ 'Notificaciones Push' | t }}</span>
+                    <span class="switch-desc">{{ 'Recibir alertas en tiempo real de ventas y caja en este dispositivo.' | t }}</span>
+                  </div>
+                  <label class="switch-control">
+                    <input type="checkbox" name="activar_notificaciones_push" [(ngModel)]="config.activar_notificaciones_push">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="switch-group">
+                  <div class="switch-info">
+                    <span class="switch-title">{{ 'Activar Sonido' | t }}</span>
+                    <span class="switch-desc">{{ 'Reproducir un tono al completar operaciones.' | t }}</span>
+                  </div>
+                  <label class="switch-control">
+                    <input type="checkbox" name="activar_sonido" [(ngModel)]="config.activar_sonido">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="switch-group">
+                  <div class="switch-info">
+                    <span class="switch-title">{{ 'Activar Vibración' | t }}</span>
+                    <span class="switch-desc">{{ 'Efecto háptico en dispositivos compatibles al realizar acciones.' | t }}</span>
+                  </div>
+                  <label class="switch-control">
+                    <input type="checkbox" name="activar_vibracion" [(ngModel)]="config.activar_vibracion">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+            </fieldset>
+          }
+
+          <!-- Pestaña 4: Impresión -->
+          @if (activeTab === 'printing') {
+            <fieldset class="settings-fieldset">
+              <legend class="fieldset-legend">{{ 'Preferencias de Facturación y Tickets' | t }}</legend>
+              
+              <div class="settings-switches-list">
+                <div class="switch-group">
+                  <div class="switch-info">
+                    <span class="switch-title">{{ 'Imprimir Automáticamente' | t }}</span>
+                    <span class="switch-desc">{{ 'Lanzar impresión del ticket inmediatamente al registrar una venta.' | t }}</span>
+                  </div>
+                  <label class="switch-control">
+                    <input type="checkbox" name="imprimir_automaticamente" [(ngModel)]="config.imprimir_automaticamente">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-grid margin-top-md">
+                <div class="form-group">
+                  <label class="label" for="numero_copias">{{ 'Número de copias' | t }}</label>
+                  <input 
+                    type="number" 
+                    id="numero_copias" 
+                    name="numero_copias" 
+                    class="input" 
+                    min="1" 
+                    max="10" 
+                    [(ngModel)]="config.numero_copias">
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="tamano_ticket">{{ 'Tamaño de Ticket' | t }}</label>
+                  <select id="tamano_ticket" name="tamano_ticket" class="select" [(ngModel)]="config.tamano_ticket">
+                    <option value="80mm">{{ '80mm (Estándar Térmico)' | t }}</option>
+                    <option value="58mm">{{ '58mm (Portátil/Miniprinter)' | t }}</option>
+                    <option value="carta">{{ 'Carta (Hoja Completa)' | t }}</option>
+                  </select>
+                </div>
+              </div>
+            </fieldset>
+          }
+
+          <!-- Pestaña 5: Seguridad -->
+          @if (activeTab === 'security') {
+            <fieldset class="settings-fieldset">
+              <legend class="fieldset-legend">{{ 'Control y Sesión' | t }}</legend>
+              
+              <div class="settings-switches-list">
+                <div class="switch-group">
+                  <div class="switch-info">
+                    <span class="switch-title">{{ 'Confirmar antes de eliminar' | t }}</span>
+                    <span class="switch-desc">{{ 'Pedir confirmación explícita para borrar productos, clientes o transacciones.' | t }}</span>
+                  </div>
+                  <label class="switch-control">
+                    <input type="checkbox" name="confirmar_antes_de_eliminar" [(ngModel)]="config.confirmar_antes_de_eliminar">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="switch-group">
+                  <div class="switch-info">
+                    <span class="switch-title">{{ 'Cerrar sesión por inactividad' | t }}</span>
+                    <span class="switch-desc">{{ 'Desconectar automáticamente al usuario tras pasar un tiempo inactivo.' | t }}</span>
+                  </div>
+                  <label class="switch-control">
+                    <input type="checkbox" name="cerrar_sesion_por_inactividad" [(ngModel)]="config.cerrar_sesion_por_inactividad">
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              @if (config.cerrar_sesion_por_inactividad) {
+                <div class="form-group margin-top-md animate-fade-in">
+                  <label class="label" for="minutos_inactividad">{{ 'Minutos de inactividad permitidos' | t }}</label>
+                  <input 
+                    type="number" 
+                    id="minutos_inactividad" 
+                    name="minutos_inactividad" 
+                    class="input" 
+                    min="1" 
+                    max="180" 
+                    [(ngModel)]="config.minutos_inactividad">
+                </div>
+              }
+            </fieldset>
+          }
+
+          <div class="form-actions">
+            <button 
+              type="submit" 
+              class="btn btn-primary btn-save" 
+              [disabled]="saving || loading">
+              @if (saving) {
+                <span>{{ 'Guardando...' | t }}</span>
+              } @else {
+                <span>{{ 'Guardar Configuración' | t }}</span>
+              }
+            </button>
+          </div>
+
+        </form>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

@@ -1,0 +1,223 @@
+<div class="page-container catalog-page">
+  <app-navbar />
+
+  <main class="catalog-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="catalog-content">
+      <header class="catalog-header panel">
+        <div>
+          <p class="badge badge-success">Empresa {{ companyName }}</p>
+          <h1 class="title-xl">Catalogo de Productos</h1>
+          <p class="text-muted">Registra productos y consulta la lista principal del catalogo.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de productos">
+          @if (hasPermission('PRODUCTO_CREAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'register'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'register'"
+              (click)="setActiveTab('register')"
+            >
+              Registrar producto
+            </button>
+          }
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'list'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'list'"
+            (click)="setActiveTab('list')"
+          >
+            Lista de productos
+          </button>
+        </div>
+
+        <div class="tab-content">
+          @if (errorGeneral) {
+            <p class="feedback feedback-error">{{ errorGeneral }}</p>
+          }
+
+          @if (mensajeGeneral) {
+            <p class="feedback feedback-success">{{ mensajeGeneral }}</p>
+          }
+
+          @if (activeTab === 'register') {
+            <section class="product-register">
+              <h2 class="title-md">Registrar producto</h2>
+              <form class="entity-form" (submit)="registrarProducto($event)">
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="label" for="producto_nombre">Nombre</label>
+                    <input
+                      class="input"
+                      id="producto_nombre"
+                      name="producto_nombre"
+                      required
+                      [(ngModel)]="productoForm.nombre"
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="label" for="producto_subcategoria">Subcategoria</label>
+                    <select
+                      class="input"
+                      id="producto_subcategoria"
+                      name="producto_subcategoria"
+                      required
+                      [(ngModel)]="productoForm.id_subcategoria"
+                    >
+                      <option [ngValue]="0" disabled>Selecciona una subcategoria</option>
+                      @for (subcategoria of subcategorias; track subcategoria.id_subcategoria) {
+                        <option [ngValue]="subcategoria.id_subcategoria">{{ subcategoria.nombre }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="producto_descripcion">Descripcion</label>
+                  <textarea
+                    class="textarea"
+                    id="producto_descripcion"
+                    name="producto_descripcion"
+                    rows="3"
+                    [(ngModel)]="productoForm.descripcion"
+                  ></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="producto_codigo_barra">Codigo de barras</label>
+                  <input
+                    class="input"
+                    id="producto_codigo_barra"
+                    name="producto_codigo_barra"
+                    placeholder="Opcional"
+                    [(ngModel)]="productoForm.codigo_barra"
+                  />
+                </div>
+
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label class="label" for="producto_unidad_medida">Unidad de medida</label>
+                    <input
+                      class="input"
+                      id="producto_unidad_medida"
+                      name="producto_unidad_medida"
+                      required
+                      [(ngModel)]="productoForm.unidad_medida"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label class="label" for="producto_precio">Precio</label>
+                    <input
+                      class="input"
+                      id="producto_precio"
+                      name="producto_precio"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [(ngModel)]="productoForm.precio"
+                    />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="producto_imagen">Imagen del producto</label>
+                  <input
+                    class="input"
+                    id="producto_imagen"
+                    name="producto_imagen"
+                    type="file"
+                    accept="image/*"
+                    (change)="onImagenProductoSeleccionada($event)"
+                  />
+                </div>
+
+                <div class="form-actions">
+                  <button class="btn btn-primary" type="submit" [disabled]="guardandoProducto">
+                    {{ guardandoProducto ? 'Guardando...' : 'Registrar producto' }}
+                  </button>
+                  <button class="btn btn-secondary" type="button" (click)="cancelarRegistroProducto()" [disabled]="guardandoProducto">
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          } @else {
+            @if (cargandoDatos) {
+              <section class="products-state" aria-live="polite">
+                <p class="text-muted">Cargando productos...</p>
+              </section>
+            } @else if (errorGeneral) {
+              <section class="products-state" aria-live="polite">
+                <p class="feedback feedback-error">{{ errorGeneral }}</p>
+              </section>
+            } @else if (productos.length === 0) {
+              <section class="products-state" aria-live="polite">
+                <p class="text-muted">Aun no tienes productos registrados para esta empresa.</p>
+              </section>
+            } @else {
+              <section class="products-table-wrap" aria-label="Productos registrados">
+                <table class="table products-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Codigo de barras</th>
+                      <th>Subcategoria</th>
+                      <th>Unidad</th>
+                      <th>Precio</th>
+                      <th>Imagen</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (product of productos; track product.id_producto) {
+                      <tr>
+                        <td>{{ product.nombre }}</td>
+                        <td>{{ product.codigo_barra || 'Sin codigo de barras' }}</td>
+                        <td>{{ product.subcategoria ? product.subcategoria.nombre : 'Sin subcategoria' }}</td>
+                        <td>{{ product.unidad_medida || 'Sin unidad' }}</td>
+                        <td>{{ product.precio | money }}</td>
+                        <td>
+                          @if (product.imagen) {
+                            <img class="product-image-thumb" [src]="product.imagen.startsWith('http') ? product.imagen : apiBaseUrl + product.imagen" [alt]="'Sin imagen'" loading="lazy" />
+                          } @else {
+                            <span class="text-muted">Sin imagen</span>
+                          }
+                        </td>
+                        <td>
+                          <div class="row-actions">
+                            <a
+                              class="btn btn-secondary"
+                              [routerLink]="['/company', companyId, 'product', product.id_producto, 'view-product']"
+                              >Ver</a
+                            >
+                            @if (hasPermission('PRODUCTO_EDITAR')) {
+                              <a
+                                class="btn btn-primary"
+                                [routerLink]="['/company', companyId, 'product', product.id_producto, 'edit-product']"
+                                >Editar</a
+                              >
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </section>
+            }
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+

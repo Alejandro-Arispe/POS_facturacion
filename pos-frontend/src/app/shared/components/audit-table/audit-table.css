@@ -1,0 +1,90 @@
+:host {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.audit-filters {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-md);
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.audit-results {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  min-width: 0;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.badge-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.pager-buttons {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.audit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: var(--space-md);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.audit-modal {
+  display: grid;
+  gap: var(--space-md);
+  width: min(640px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  padding: var(--space-xl);
+}
+
+.audit-detail {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+}
+
+.audit-detail dt {
+  font-weight: var(--font-weight-bold);
+}
+
+.audit-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.hash {
+  font-size: 0.75rem;
+}

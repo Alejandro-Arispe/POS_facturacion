@@ -1,0 +1,124 @@
+<div class="page-container company-dashboard-page">
+  <app-navbar />
+
+  <main class="company-dashboard-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="company-dashboard-content">
+      <header class="dashboard-header panel">
+        <div class="dashboard-header-main">
+          <h1 class="title-xl">{{ companyName }}</h1>
+          <p class="text-muted">Resumen ejecutivo de rendimiento comercial por sucursal.</p>
+        </div>
+
+      </header>
+
+      @if (shouldShowLoadingState) {
+        <section class="dashboard-loading panel" aria-live="polite">
+          <p class="text-muted">Esperando informacion del dashboard...</p>
+          <div class="kpi-grid">
+            @for (_ of [1,2,3,4,5,6,7,8,9]; track $index) {
+              <article class="kpi-card kpi-skeleton"></article>
+            }
+          </div>
+        </section>
+      }
+
+      @if (shouldShowErrorState) {
+        <section class="dashboard-state panel" aria-live="assertive">
+          <h2 class="title-md">No pudimos cargar el dashboard</h2>
+          <p class="text-muted">Intenta nuevamente o recarga la pagina.</p>
+        </section>
+      }
+
+      @if (shouldShowEmptyState) {
+        <section class="dashboard-state panel" aria-live="polite">
+          <h2 class="title-md">Sin datos para mostrar</h2>
+          <p class="text-muted">Aun no hay informacion consolidada disponible.</p>
+        </section>
+      }
+
+      @if (shouldShowDashboard) {
+        <section class="kpi-grid" aria-label="Indicadores principales del dashboard">
+          @for (kpi of kpiCards; track kpi.title) {
+            <article class="kpi-card panel">
+              <div class="kpi-icon">{{ kpi.icon }}</div>
+              <p class="kpi-title">{{ kpi.title }}</p>
+              <p class="kpi-value">{{ kpi.value }}</p>
+            </article>
+          }
+        </section>
+
+        <div class="dashboard-extended-grid">
+          <!-- Ranking de clientes -->
+          <section class="dashboard-section panel">
+            <h2 class="title-md">Ranking de clientes</h2>
+            @if (rankingClientes.length > 0) {
+              <div class="table-responsive">
+                <table class="table ranking-table">
+                  <thead>
+                    <tr>
+                      <th>Pos</th>
+                      <th>Cliente</th>
+                      <th>Categoría</th>
+                      <th class="text-right">Total Comprado</th>
+                      <th>Última Compra</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (cliente of rankingClientes; track cliente.id_cliente) {
+                      <tr>
+                        <td><strong>#{{ cliente.posicion }}</strong></td>
+                        <td>
+                          <div class="client-name">{{ cliente.nombre }}</div>
+                          <div class="text-muted text-sm">{{ cliente.cantidad_compras }} compras (TP: {{ cliente.ticket_promedio | money }})</div>
+                        </td>
+                        <td>
+                          <span class="badge" [ngClass]="'badge-' + cliente.categoria.toLowerCase()">{{ cliente.categoria }}</span>
+                        </td>
+                        <td class="text-right"><strong>{{ cliente.total_comprado | money }}</strong></td>
+                        <td>{{ cliente.ultima_compra ? (cliente.ultima_compra | date:'dd/MM/yyyy') : '-' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state-section">
+                <p class="text-muted">No hay ventas suficientes para generar un ranking.</p>
+              </div>
+            }
+          </section>
+
+          <!-- Recomendaciones -->
+          <section class="dashboard-section panel">
+            <h2 class="title-md">Recomendaciones Inteligentes</h2>
+            @if (recomendaciones.length > 0) {
+              <div class="recommendations-list">
+                @for (rec of recomendaciones; track rec.titulo) {
+                  <div class="recommendation-card" [ngClass]="'rec-card-' + rec.prioridad">
+                    <div class="rec-header">
+                      <h3 class="rec-title">{{ rec.titulo }}</h3>
+                      <span class="badge" [ngClass]="'badge-priority-' + rec.prioridad">{{ rec.prioridad | uppercase }}</span>
+                    </div>
+                    <p class="rec-message">{{ rec.mensaje }}</p>
+                    @if (rec.valor !== undefined) {
+                      <div class="rec-meta">
+                        <span class="text-muted text-sm">Registro detectado: <strong>{{ rec.valor }}</strong></span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="empty-state-section">
+                <p class="text-muted">No hay recomendaciones importantes en este momento.</p>
+              </div>
+            }
+          </section>
+        </div>
+
+      }
+    </section>
+  </main>
+</div>

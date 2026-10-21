@@ -1,0 +1,110 @@
+<div class="page-container edit-product-page">
+  <app-navbar />
+
+  <main class="edit-product-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="edit-product-content">
+      <section class="edit-product-panel panel">
+        <a class="back-link" [routerLink]="['/company', companyId, 'products']">Volver a Productos</a>
+
+        <header class="edit-product-header">
+          <p class="badge badge-success">Producto {{ productId }}</p>
+          <h1 class="title-xl">Editar Producto</h1>
+          <p class="text-muted">Actualiza los datos del producto.</p>
+        </header>
+
+        @if (errorEdicion) {
+          <p class="feedback feedback-error">{{ errorEdicion }}</p>
+        }
+
+        @if (mensajeEdicion) {
+          <p class="feedback feedback-success">{{ mensajeEdicion }}</p>
+        }
+
+        @if (cargandoProducto) {
+          <p class="feedback feedback-info">Cargando datos del producto...</p>
+        }
+
+        <form class="product-form" (submit)="guardarProducto($event)">
+          <div class="form-group">
+            <label class="label" for="producto_nombre">Nombre</label>
+            <input class="input" id="producto_nombre" name="producto_nombre" required [(ngModel)]="form.nombre" />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="producto_descripcion">Descripcion</label>
+            <input class="input" id="producto_descripcion" name="producto_descripcion" [(ngModel)]="form.descripcion" />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="producto_codigo_barra">Codigo de barras</label>
+            <input class="input" id="producto_codigo_barra" name="producto_codigo_barra" placeholder="Opcional" [(ngModel)]="form.codigo_barra" />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="producto_subcategoria">Subcategoria</label>
+            <select
+              class="input"
+              id="producto_subcategoria"
+              name="producto_subcategoria"
+              required
+              [(ngModel)]="form.id_subcategoria"
+            >
+              <option [ngValue]="0" disabled>Selecciona una subcategoria</option>
+              @for (subcategoria of subcategorias; track subcategoria.id_subcategoria) {
+                <option [ngValue]="subcategoria.id_subcategoria">{{ subcategoria.nombre }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="label" for="producto_unidad_medida">Unidad de medida</label>
+              <input class="input" id="producto_unidad_medida" name="producto_unidad_medida" required [(ngModel)]="form.unidad_medida" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="producto_precio">Precio</label>
+              <input class="input" id="producto_precio" name="producto_precio" type="number" min="0" step="0.01" [(ngModel)]="form.precio" />
+            </div>
+          </div>
+
+          <div class="form-group status-field">
+            <span class="label">Estado</span>
+            <label class="toggle-switch" for="producto_activo">
+              <input id="producto_activo" name="producto_activo" type="checkbox" [(ngModel)]="form.activo" />
+              <span class="toggle-track" aria-hidden="true"></span>
+              <span class="toggle-text">{{ form.activo ? 'Producto activo' : 'Producto inactivo' }}</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="producto_imagen">Imagen del producto</label>
+            <input
+              class="input"
+              id="producto_imagen"
+              name="producto_imagen"
+              type="file"
+              accept="image/*"
+              (change)="onImagenSeleccionada($event)"
+            />
+            @if (imagenActual) {
+              <p class="text-muted">Imagen actual: {{ imagenActual }}</p>
+            }
+            @if (imagenSeleccionada) {
+              <p class="text-muted">Nueva imagen: {{ imagenSeleccionada.name }}</p>
+            }
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit" [disabled]="cargandoProducto || guardandoProducto || guardandoImagen">
+              {{ guardandoProducto || guardandoImagen ? 'Guardando...' : 'Guardar producto' }}
+            </button>
+            <button class="btn btn-secondary" type="button" (click)="volverListado()">Volver al listado</button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+</div>
+

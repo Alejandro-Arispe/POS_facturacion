@@ -1,0 +1,295 @@
+<div class="page-container sa-page">
+  <app-navbar />
+
+  <main class="sa-main">
+    <header class="panel sa-header">
+      <div>
+        <p class="badge badge-warning">SuperAdmin</p>
+        <h1 class="title-xl">Administración del sistema</h1>
+        <p class="text-muted">Gestiona las empresas clientes, sus planes de suscripción, las cuentas y la auditoría global.</p>
+      </div>
+      <a class="btn btn-secondary" routerLink="/my-companies">Ir a mis empresas</a>
+    </header>
+
+    <nav class="panel tabs" role="tablist">
+      <button type="button" class="tab-button" [class.active]="activeTab === 'summary'" (click)="setTab('summary')">Resumen</button>
+      <button type="button" class="tab-button" [class.active]="activeTab === 'companies'" (click)="setTab('companies')">Empresas</button>
+      <button type="button" class="tab-button" [class.active]="activeTab === 'plans'" (click)="setTab('plans')">Planes</button>
+      <button type="button" class="tab-button" [class.active]="activeTab === 'users'" (click)="setTab('users')">Usuarios</button>
+      <button type="button" class="tab-button" [class.active]="activeTab === 'audit'" (click)="setTab('audit')">Bitácora global</button>
+    </nav>
+
+    @if (message) {
+      <p class="panel sa-feedback sa-ok">{{ message }}</p>
+    }
+    @if (error) {
+      <p class="panel sa-feedback sa-error">{{ error }}</p>
+    }
+
+    <!-- RESUMEN -->
+    @if (activeTab === 'summary' && summary) {
+      <section class="sa-kpis">
+        <article class="panel kpi">
+          <span class="text-muted text-sm">Empresas</span>
+          <strong>{{ summary.total_empresas }}</strong>
+          <span class="text-xs text-muted">{{ summary.empresas_activas }} activas</span>
+        </article>
+        <article class="panel kpi">
+          <span class="text-muted text-sm">Con plan vigente</span>
+          <strong>{{ summary.empresas_con_plan }}</strong>
+          <span class="text-xs text-muted">de {{ summary.total_empresas }}</span>
+        </article>
+        <article class="panel kpi">
+          <span class="text-muted text-sm">Ingreso mensual recurrente</span>
+          <strong>{{ summary.ingresos_mensuales | currency: 'USD' }}</strong>
+          <span class="text-xs text-muted">suma de planes activos</span>
+        </article>
+        <article class="panel kpi">
+          <span class="text-muted text-sm">Usuarios</span>
+          <strong>{{ summary.total_usuarios }}</strong>
+          <span class="text-xs text-muted">{{ summary.usuarios_activos }} activos</span>
+        </article>
+        <article class="panel kpi">
+          <span class="text-muted text-sm">Eventos de auditoría hoy</span>
+          <strong>{{ summary.eventos_bitacora_hoy }}</strong>
+          <span class="text-xs text-muted">{{ summary.eventos_bitacora_total }} en total</span>
+        </article>
+      </section>
+    }
+
+    <!-- EMPRESAS -->
+    @if (activeTab === 'companies') {
+      <section class="panel sa-section">
+        <div class="sa-toolbar">
+          <input class="input" type="search" placeholder="Buscar por nombre, NIT, correo o administrador" [(ngModel)]="companySearch" />
+        </div>
+        <div class="table-shell">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Empresa</th>
+                <th>Administrador</th>
+                <th>Sucursales</th>
+                <th>Plan</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (company of filteredCompanies; track company.id_empresa) {
+                <tr>
+                  <td>
+                    <strong>{{ company.nombre }}</strong>
+                    <div class="text-xs text-muted">NIT {{ company.nit }} · {{ company.correo }}</div>
+                  </td>
+                  <td class="text-sm">{{ company.administradores.join(', ') || '—' }}</td>
+                  <td>{{ company.sucursales }}</td>
+                  <td>
+                    @if (company.suscripcion_activa) {
+                      <span class="badge badge-success">{{ company.suscripcion_activa.plan_nombre }}</span>
+                      <div class="text-xs text-muted">hasta {{ company.suscripcion_activa.fecha_fin | date: 'dd/MM/yyyy' }}</div>
+                    } @else {
+                      <span class="badge badge-warning">Sin plan</span>
+                    }
+                  </td>
+                  <td>
+                    <span class="badge" [class.badge-success]="company.activo" [class.badge-danger]="!company.activo">
+                      {{ company.activo ? 'Activa' : 'Suspendida' }}
+                    </span>
+                  </td>
+                  <td class="sa-actions">
+                    <button class="btn btn-secondary" type="button" (click)="openAssign(company)">Asignar plan</button>
+                    @if (company.suscripcion_activa) {
+                      <button class="btn btn-secondary" type="button" (click)="cancelPlan(company)">Cancelar plan</button>
+                    }
+                    <button class="btn" type="button" [class.btn-danger]="company.activo" [class.btn-success]="!company.activo" (click)="toggleCompany(company)">
+                      {{ company.activo ? 'Suspender' : 'Reactivar' }}
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="text-muted">No hay empresas registradas.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    <!-- PLANES -->
+    @if (activeTab === 'plans') {
+      <section class="panel sa-section">
+        <div class="sa-toolbar">
+          <p class="text-muted">Los planes definen qué módulos puede usar cada empresa cliente.</p>
+          <button class="btn btn-primary" type="button" (click)="newPlan()">Nuevo plan</button>
+        </div>
+        <div class="plan-grid">
+          @for (plan of plans; track plan.id_plan) {
+            <article class="card plan-card">
+              <header>
+                <h3 class="title-md">{{ plan.nombre }}</h3>
+                <strong class="plan-price">{{ plan.precio | currency: 'USD' }}<small>/mes</small></strong>
+              </header>
+              <p class="text-muted text-sm">{{ plan.descripcion }}</p>
+              <div class="chips">
+                @for (m of plan.modulos; track m.id_modulo) {
+                  <span class="chip">{{ m.nombre || m.codigo }}</span>
+                }
+              </div>
+              <footer class="plan-footer">
+                <span class="text-xs text-muted">{{ plan.empresas_suscritas }} empresa(s) suscritas</span>
+                <button class="btn btn-secondary" type="button" (click)="editPlan(plan)">Editar</button>
+              </footer>
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- USUARIOS -->
+    @if (activeTab === 'users') {
+      <section class="panel sa-section">
+        <div class="sa-toolbar">
+          <input class="input" type="search" placeholder="Buscar por correo, nombre o empresa" [(ngModel)]="userSearch" />
+        </div>
+        <div class="table-shell">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Empresas</th>
+                <th>Registro</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (user of filteredUsers; track user.id_usuario) {
+                <tr>
+                  <td>
+                    <strong>{{ user.email }}</strong>
+                    @if (user.super_admin) {
+                      <span class="badge badge-warning">SuperAdmin</span>
+                    }
+                    <div class="text-xs text-muted">{{ user.nombre_completo }}</div>
+                  </td>
+                  <td class="text-sm">{{ user.empresas.join(', ') || '—' }}</td>
+                  <td class="text-sm">{{ user.fecha_creacion | date: 'dd/MM/yyyy' }}</td>
+                  <td>
+                    <span class="badge" [class.badge-success]="user.activo" [class.badge-danger]="!user.activo">
+                      {{ user.activo ? 'Activa' : 'Bloqueada' }}
+                    </span>
+                  </td>
+                  <td>
+                    @if (!user.super_admin) {
+                      <button class="btn" type="button" [class.btn-danger]="user.activo" [class.btn-success]="!user.activo" (click)="toggleUser(user)">
+                        {{ user.activo ? 'Bloquear' : 'Activar' }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
+    <!-- BITÁCORA GLOBAL -->
+    @if (activeTab === 'audit') {
+      <section class="panel sa-section sa-integrity">
+        <div>
+          <h2 class="title-md">Integridad de la bitácora</h2>
+          <p class="text-muted text-sm">
+            Recalcula la cadena de huellas SHA-256 de todos los registros para comprobar que nadie modificó ni borró datos.
+          </p>
+          @if (verification) {
+            <p class="integrity-result" [class.ok]="verification.integra" [class.bad]="!verification.integra">
+              {{ verification.mensaje }} ({{ verification.total_registros }} registros revisados)
+              @if (verification.registros_alterados.length) {
+                <br />Registros afectados: {{ verification.registros_alterados.join(', ') }}
+              }
+            </p>
+          }
+        </div>
+        <button class="btn btn-primary" type="button" [disabled]="verifying" (click)="verifyIntegrity()">
+          {{ verifying ? 'Verificando…' : 'Verificar integridad' }}
+        </button>
+      </section>
+      <app-audit-table
+        [items]="auditItems"
+        [total]="auditTotal"
+        [loading]="auditLoading"
+        [filters]="auditFilters"
+        [showCompany]="true"
+        (filtersChange)="onAuditFilters($event)"
+      />
+    }
+  </main>
+
+  <!-- Modal asignar plan -->
+  @if (assigningCompany) {
+    <div class="sa-backdrop" (click)="assigningCompany = null">
+      <div class="panel sa-modal" (click)="$event.stopPropagation()">
+        <h2 class="title-md">Asignar plan a {{ assigningCompany.nombre }}</h2>
+        <label class="form-group">
+          <span class="text-sm">Plan</span>
+          <select class="input" [(ngModel)]="assignPlanId">
+            @for (plan of plans; track plan.id_plan) {
+              <option [ngValue]="plan.id_plan">{{ plan.nombre }} — {{ plan.precio | currency: 'USD' }}/mes</option>
+            }
+          </select>
+        </label>
+        <label class="form-group">
+          <span class="text-sm">Duración (meses)</span>
+          <input class="input" type="number" min="1" max="36" [(ngModel)]="assignMonths" />
+        </label>
+        <p class="text-xs text-muted">Si la empresa ya tiene un plan vigente, se reemplaza por este a partir de hoy.</p>
+        <div class="sa-modal-actions">
+          <button class="btn btn-secondary" type="button" (click)="assigningCompany = null">Cancelar</button>
+          <button class="btn btn-primary" type="button" [disabled]="!assignPlanId" (click)="confirmAssign()">Asignar</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Modal plan -->
+  @if (planForm) {
+    <div class="sa-backdrop" (click)="planForm = null">
+      <div class="panel sa-modal" (click)="$event.stopPropagation()">
+        <h2 class="title-md">{{ planForm.id_plan ? 'Editar plan' : 'Nuevo plan' }}</h2>
+        <label class="form-group">
+          <span class="text-sm">Nombre</span>
+          <input class="input" type="text" [(ngModel)]="planForm.nombre" />
+        </label>
+        <label class="form-group">
+          <span class="text-sm">Descripción</span>
+          <textarea class="textarea" rows="2" [(ngModel)]="planForm.descripcion"></textarea>
+        </label>
+        <label class="form-group">
+          <span class="text-sm">Precio mensual (USD)</span>
+          <input class="input" type="number" min="0" step="0.01" [(ngModel)]="planForm.precio" />
+        </label>
+        <fieldset class="form-group module-picker">
+          <legend class="text-sm">Módulos incluidos</legend>
+          @for (m of modules; track m.id_modulo) {
+            <label class="module-option">
+              <input type="checkbox" [checked]="planForm.modulos.has(m.codigo)" (change)="toggleModule(m.codigo)" />
+              {{ m.nombre }}
+            </label>
+          }
+        </fieldset>
+        <label class="form-group">
+          <span class="text-sm">Límites (JSON opcional)</span>
+          <input class="input" type="text" placeholder='{"max_sucursales": 3, "max_usuarios": 10}' [(ngModel)]="planForm.configuracion" />
+        </label>
+        <div class="sa-modal-actions">
+          <button class="btn btn-secondary" type="button" (click)="planForm = null">Cancelar</button>
+          <button class="btn btn-primary" type="button" [disabled]="!planForm.nombre || planForm.modulos.size === 0" (click)="savePlan()">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

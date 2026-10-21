@@ -1,0 +1,223 @@
+<div class="page-container close-cash-register-page">
+  <app-navbar />
+
+  <main class="close-cash-register-layout">
+    <section class="close-cash-register-content">
+      <section class="close-cash-register-header panel">
+        <div>
+          <p class="badge badge-success">Caja {{ cashRegisterId }}</p>
+          <h1 class="title-xl">Cierre de caja</h1>
+          <p class="text-muted">Verifica el dinero al final de la jornada y realiza el cuadre de turno.</p>
+        </div>
+      </section>
+
+      <section class="close-cash-register-panel panel">
+        <!-- Resumen del Turno: Ventas en efectivo, QR, ingresos, egresos -->
+        <div class="turno-summary-section" aria-label="Resumen del turno">
+          <h2 class="title-md turno-title">Resumen del Turno</h2>
+          <div class="turno-metrics-grid">
+            <div class="metric-card metric-efectivo">
+              <span class="metric-label">Ventas en Efectivo</span>
+              <strong class="metric-value">{{ totalVentasEfectivo | money }}</strong>
+            </div>
+
+            <div class="metric-card metric-qr">
+              <span class="metric-label">Ventas por QR</span>
+              <strong class="metric-value">{{ totalVentasQr | money }}</strong>
+            </div>
+
+            <div class="metric-card metric-ingresos">
+              <span class="metric-label">Total Ingresos</span>
+              <strong class="metric-value">{{ totalIngresos | money }}</strong>
+            </div>
+
+            <div class="metric-card metric-egresos">
+              <span class="metric-label">Total Egresos</span>
+              <strong class="metric-value">{{ totalEgresos | money }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conteo y Arqueo General: Esperado, Real y Diferencia -->
+        <div class="close-summary" aria-label="Resumen de arqueo">
+          <dl>
+            <div>
+              <dt>Total esperado</dt>
+              <dd>{{ totalEsperado | money }}</dd>
+            </div>
+            <div>
+              <dt>Total real contado</dt>
+              <dd>{{ totalReal | money }}</dd>
+            </div>
+            <div>
+              <dt>Diferencia de cuadre</dt>
+              <dd>
+                @if (diferenciaTipo === 'sobrante') {
+                  <span class="badge badge-warning badge-diff">Sobrante: +{{ diferenciaAbs | money }}</span>
+                } @else if (diferenciaTipo === 'faltante') {
+                  <span class="badge badge-danger badge-diff">Faltante: -{{ diferenciaAbs | money }}</span>
+                } @else {
+                  <span class="badge badge-success badge-diff">Cuadre exacto (0.00)</span>
+                }
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        @if (resumenError) {
+          <p class="feedback feedback-error">{{ resumenError }}</p>
+        }
+
+        @if (loadingResumen) {
+          <section class="cash-register-state" aria-live="polite">
+            <p class="text-muted">Cargando resumen de cierre...</p>
+          </section>
+        } @else if (cierresMetodoPago.length === 0) {
+          <section class="cash-register-state compact" aria-live="polite">
+            <p class="text-muted">No hay metodos de pago con movimientos para mostrar.</p>
+          </section>
+        } @else {
+          <div class="close-modal-grid" aria-label="Metodos de pago usados">
+            @for (cierre of cierresMetodoPago; track trackCierreMetodoPago($index, cierre)) {
+              <section class="close-modal" aria-label="Cierre de {{ cierre.metodo_pago }}">
+                <header class="close-modal-header">
+                  <p class="label">Metodo de pago</p>
+                  <h2 class="title-md">{{ cierre.metodo_pago }}</h2>
+                </header>
+
+                <div class="close-modal-body">
+                  <div class="amount-row">
+                    <span>Monto esperado</span>
+                    <strong>{{ cierre.monto_esperado | money }}</strong>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="label" [for]="'real-amount-' + cierre.id_metodo_pago">
+                      Monto real contado ({{ '' | currencySymbol }})
+                    </label>
+                    <input
+                      class="input"
+                      [id]="'real-amount-' + cierre.id_metodo_pago"
+                      [name]="'real-amount-' + cierre.id_metodo_pago"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      [(ngModel)]="cierre.montoReal"
+                    />
+                  </div>
+
+                  <div class="amount-row difference-row">
+                    <span>Diferencia</span>
+                    <strong>
+                      @if (getDiferenciaMetodoTipo(cierre) === 'sobrante') {
+                        <span class="badge badge-warning">Sobrante: +{{ getDiferenciaMetodoAbs(cierre) | money }}</span>
+                      } @else if (getDiferenciaMetodoTipo(cierre) === 'faltante') {
+                        <span class="badge badge-danger">Faltante: -{{ getDiferenciaMetodoAbs(cierre) | money }}</span>
+                      } @else {
+                        <span class="badge badge-success">Exacto (0.00)</span>
+                      }
+                    </strong>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="label" [for]="'observation-' + cierre.id_metodo_pago">Observacion</label>
+                    <textarea
+                      class="input textarea"
+                      [id]="'observation-' + cierre.id_metodo_pago"
+                      [name]="'observation-' + cierre.id_metodo_pago"
+                      rows="3"
+                      placeholder="Detalle opcional (ej. billetes rotos, ajustes)"
+                      [(ngModel)]="cierre.observacion"
+                    ></textarea>
+                  </div>
+                </div>
+              </section>
+            }
+          </div>
+        }
+
+        <div class="form-actions">
+          <button class="btn btn-secondary" type="button" (click)="cancelar()">
+            Cancelar
+          </button>
+          <button
+            class="btn btn-primary"
+            type="button"
+            [disabled]="cerrandoCaja || loadingResumen || cierresMetodoPago.length === 0"
+            (click)="cerrarCaja()"
+          >
+            {{ cerrandoCaja ? 'Cerrando caja...' : 'Confirmar Cierre de Caja' }}
+          </button>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+
+<!-- Modal / Pantalla de Liberación de Cajero al Confirmar Cierre -->
+@if (cierreCompletado) {
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-liberacion-title">
+    <div class="modal-card panel">
+      <header class="modal-header">
+        <div>
+          <span class="badge badge-success">Cierre Confirmado</span>
+          <h2 class="title-lg" id="modal-liberacion-title">Turno Finalizado con Éxito</h2>
+          <p class="text-muted">La sesión ha sido cerrada y el cajero ha sido liberado de esta caja.</p>
+        </div>
+      </header>
+
+      <div class="modal-body liberacion-body">
+        <div class="liberacion-recap">
+          <div class="recap-row">
+            <span>Ventas en Efectivo:</span>
+            <strong>{{ totalVentasEfectivo | money }}</strong>
+          </div>
+          <div class="recap-row">
+            <span>Ventas por QR:</span>
+            <strong>{{ totalVentasQr | money }}</strong>
+          </div>
+          <div class="recap-row">
+            <span>Total Ingresos:</span>
+            <strong>{{ totalIngresos | money }}</strong>
+          </div>
+          <div class="recap-row">
+            <span>Total Egresos:</span>
+            <strong>{{ totalEgresos | money }}</strong>
+          </div>
+          <div class="recap-row divider">
+            <span>Total Esperado:</span>
+            <strong>{{ totalEsperado | money }}</strong>
+          </div>
+          <div class="recap-row">
+            <span>Total Real:</span>
+            <strong>{{ totalReal | money }}</strong>
+          </div>
+          <div class="recap-row">
+            <span>Diferencia Final:</span>
+            <strong>
+              @if (diferenciaTipo === 'sobrante') {
+                <span class="badge badge-warning">Sobrante: +{{ diferenciaAbs | money }}</span>
+              } @else if (diferenciaTipo === 'faltante') {
+                <span class="badge badge-danger">Faltante: -{{ diferenciaAbs | money }}</span>
+              } @else {
+                <span class="badge badge-success">Cuadre Exacto (0.00)</span>
+              }
+            </strong>
+          </div>
+        </div>
+
+        <p class="text-muted" style="margin-top: var(--space-md); font-size: 0.9rem;">
+          La jornada de ventas en esta caja ha sido cerrada correctamente.
+        </p>
+
+        <footer class="modal-actions">
+          <button class="btn btn-primary" type="button" (click)="volverACajas()">
+            Volver al Listado de Cajas
+          </button>
+        </footer>
+      </div>
+    </div>
+  </div>
+}
+

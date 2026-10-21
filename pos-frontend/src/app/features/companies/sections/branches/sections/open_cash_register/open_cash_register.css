@@ -1,0 +1,103 @@
+.open-cash-register-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.open-cash-register-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-lg);
+  width: min(var(--content-max-width), 100%);
+  margin: 0 auto;
+}
+
+.open-cash-register-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-lg);
+  width: min(100%, 960px);
+}
+
+.open-cash-register-header {
+  display: grid;
+  min-height: 150px;
+  align-content: center;
+  padding: var(--space-xl);
+}
+
+.open-cash-register-header > div {
+  display: grid;
+  max-width: 680px;
+  gap: var(--space-sm);
+}
+
+.open-cash-register-panel {
+  padding: var(--space-xl);
+}
+
+.open-cash-register-form {
+  display: grid;
+  gap: var(--space-lg);
+  width: min(100%, 640px);
+  margin: 0 auto;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+}
+
+.form-group {
+  margin-bottom: 0;
+}
+
+.open-cash-register-form .label {
+  color: var(--color-text-title);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.open-cash-register-form .input::placeholder {
+  color: rgba(203, 213, 225, 0.5);
+  opacity: 0.7;
+}
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+@media (max-width: 640px) {
+  .open-cash-register-page {
+    padding: var(--space-md);
+  }
+
+  .open-cash-register-layout,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .open-cash-register-header,
+  .open-cash-register-panel {
+    padding: var(--space-lg);
+  }
+
+  .open-cash-register-header {
+    min-height: auto;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+}

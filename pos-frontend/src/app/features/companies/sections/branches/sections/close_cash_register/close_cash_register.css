@@ -1,0 +1,337 @@
+.close-cash-register-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.close-cash-register-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-lg);
+  width: min(var(--content-max-width), 100%);
+  margin: 0 auto;
+}
+
+.close-cash-register-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-lg);
+  width: min(100%, 960px);
+}
+
+.close-cash-register-header {
+  display: grid;
+  min-height: 150px;
+  align-content: center;
+  padding: var(--space-xl);
+}
+
+.close-cash-register-header > div {
+  display: grid;
+  max-width: 680px;
+  gap: var(--space-sm);
+}
+
+.close-cash-register-panel {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+}
+
+.close-summary {
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-surface-2);
+  padding: var(--space-md);
+}
+
+.close-summary dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.close-summary div {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.close-summary dt,
+.amount-row span {
+  color: var(--color-text-soft);
+  font-size: var(--font-size-sm);
+}
+
+.close-summary dd,
+.amount-row strong {
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.feedback {
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 10px 12px;
+}
+
+.feedback-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+}
+
+.feedback-success {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success);
+}
+
+.close-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
+
+.close-modal {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.close-modal-header {
+  display: grid;
+  gap: var(--space-xs);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: var(--space-md);
+}
+
+.close-modal-header .label,
+.close-modal .label {
+  color: var(--color-text-title);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.close-modal-body {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.difference-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: var(--space-sm) 0;
+}
+
+.positive {
+  color: var(--color-success) !important;
+}
+
+.negative {
+  color: var(--color-danger) !important;
+}
+
+.form-group {
+  margin-bottom: 0;
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+@media (max-width: 960px) {
+  .close-modal-grid,
+  .close-summary dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .close-cash-register-page {
+    padding: var(--space-md);
+  }
+
+  .close-cash-register-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .close-cash-register-header,
+  .close-cash-register-panel {
+    padding: var(--space-lg);
+  }
+
+  .close-cash-register-header {
+    min-height: auto;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+}
+
+/* Resumen del Turno Metrics Grid */
+.turno-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.turno-title {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--color-text-title, #0f172a);
+}
+
+.turno-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+}
+
+.metric-card.metric-efectivo {
+  border-left: 3px solid #10b981;
+}
+
+.metric-card.metric-qr {
+  border-left: 3px solid #3b82f6;
+}
+
+.metric-card.metric-ingresos {
+  border-left: 3px solid #06b6d4;
+}
+
+.metric-card.metric-egresos {
+  border-left: 3px solid #f43f5e;
+}
+
+.metric-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, #64748b);
+}
+
+.metric-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-text, #0f172a);
+}
+
+.badge-diff {
+  font-size: 0.95rem;
+  padding: 6px 12px;
+  border-radius: 0;
+}
+
+/* Modal Liberación de Cajero */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  padding: var(--space-md);
+}
+
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.liberacion-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.liberacion-recap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  background: var(--color-surface-2, #f8fafc);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+}
+
+.recap-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  padding: 4px 0;
+}
+
+.recap-row.divider {
+  border-top: 1px dashed var(--color-border);
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 780px) {
+  .turno-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+

@@ -1,0 +1,23 @@
+<div *ngIf="detail" class="modal-backdrop" role="presentation">
+  <div class="modal-window" role="dialog" aria-modal="true" aria-label="Detalle de notificacion">
+    <div class="modal-header">
+      <div>
+        <span class="modal-kicker">Detalle de notificacion</span>
+        <h4>{{ detail.titulo || 'Notificacion' }}</h4>
+      </div>
+      <button class="modal-close" type="button" (click)="close()" aria-label="Cerrar">×</button>
+    </div>
+
+    <div class="modal-content">
+      <div class="modal-card">
+        <p class="modal-summary">{{ detail.mensaje }}</p>
+        <div class="modal-grid">
+          <div *ngFor="let field of detail.fields">
+            <span class="modal-label">{{ field.label }}</span>
+            <strong>{{ field.value }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

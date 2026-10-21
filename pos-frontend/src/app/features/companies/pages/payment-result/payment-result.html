@@ -1,0 +1,73 @@
+<div class="payment-result-container">
+  <div class="result-card">
+    @if (estado === 'cargando') {
+      <div class="status loading">
+        <div class="spinner large"></div>
+        <h2>Confirmando tu pago...</h2>
+        <p>Por favor espera un momento mientras procesamos la transaccion.</p>
+      </div>
+    }
+
+    @if (estado === 'exito') {
+      <div class="status success">
+        <div class="icon-circle success-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h2>Pago exitoso</h2>
+        <p>Tu suscripcion ha sido activada correctamente.</p>
+
+        @if (suscripcion) {
+          <div class="subscription-details">
+            <div class="detail-row">
+              <span class="label">Plan:</span>
+              <span class="value">{{ suscripcion.plan_nombre }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Estado:</span>
+              <span class="value badge active">{{ suscripcion.estado | titlecase }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Valido hasta:</span>
+              <span class="value">{{ suscripcion.fecha_fin | date:'mediumDate' }}</span>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    @if (estado === 'error') {
+      <div class="status error">
+        <div class="icon-circle error-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </div>
+        <h2>Error en el pago</h2>
+        <p>{{ mensajeError }}</p>
+      </div>
+    }
+
+    @if (estado === 'cancelado') {
+      <div class="status canceled">
+        <div class="icon-circle warning-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h2>Pago cancelado</h2>
+        <p>El proceso de pago ha sido cancelado. Tu empresa sigue sin una suscripcion activa.</p>
+      </div>
+    }
+
+    <div class="actions">
+      <button class="primary-btn" (click)="volverMisEmpresas()" [disabled]="estado === 'cargando'">
+        Volver a Mis Empresas
+      </button>
+    </div>
+  </div>
+</div>

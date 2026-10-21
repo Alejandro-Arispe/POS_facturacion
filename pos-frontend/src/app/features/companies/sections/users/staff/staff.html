@@ -1,0 +1,257 @@
+<div class="page-container staff-page">
+  <app-navbar />
+
+  <main class="staff-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="staff-content">
+      <header class="staff-header panel">
+        <div>
+          <p class="badge badge-success">Empresa {{ companyId }}</p>
+          <h1 class="title-xl">Personal</h1>
+          <p class="text-muted">Administra el personal de la empresa por sucursal.</p>
+        </div>
+      </header>
+
+      @if (errorSucursales) {
+        <p class="feedback feedback-error">{{ errorSucursales }}</p>
+      }
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de personal">
+          @if (hasPermission('USUARIO_CREAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'invite'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'invite'"
+              (click)="setActiveTab('invite')"
+            >
+              Invitar personal
+            </button>
+          }
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'list'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'list'"
+            (click)="setActiveTab('list')"
+          >
+            Lista de personal
+          </button>
+          @if (editingStaffId !== null && hasPermission('USUARIO_EDITAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'edit'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'edit'"
+              (click)="setActiveTab('edit')"
+            >
+              Editar personal
+            </button>
+          }
+        </div>
+
+        <div class="tab-content">
+          @if (mensajeEdicion) {
+            <p class="feedback feedback-success">{{ mensajeEdicion }}</p>
+          }
+
+          @if (activeTab === 'invite') {
+            @if (errorInvitacion) {
+              <p class="feedback feedback-error">{{ errorInvitacion }}</p>
+            }
+
+            @if (mensajeInvitacion) {
+              <p class="feedback feedback-success">{{ mensajeInvitacion }}</p>
+            }
+
+            <form
+              class="invite-form"
+              aria-label="Formulario para invitar personal"
+              (submit)="enviarInvitacion($event)"
+            >
+              <div class="form-group">
+                <label class="label" for="gmail">Gmail</label>
+                <input
+                  class="input"
+                  id="gmail"
+                  name="gmail"
+                  type="email"
+                  placeholder="persona@gmail.com"
+                  autocomplete="email"
+                  required
+                  [(ngModel)]="emailInvitacion"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="label" for="inviteRole">Rol</label>
+                <select
+                  class="input"
+                  id="inviteRole"
+                  name="inviteRole"
+                  [(ngModel)]="selectedRole"
+                >
+                  @for (role of roles; track role.value) {
+                    <option [value]="role.value">{{ role.label }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group branches-checklist-field">
+                <p class="label">Sucursal(es)</p>
+
+                <div class="branches-checklist-panel">
+                  @if (cargandoSucursales) {
+                    <p class="text-muted">Cargando sucursales...</p>
+                  } @else if (errorSucursales) {
+                    <p class="feedback feedback-error">{{ errorSucursales }}</p>
+                  } @else if (branches.length === 0) {
+                    <p class="text-muted">No hay sucursales registradas.</p>
+                  } @else {
+                    <div class="branches-checklist">
+                      @for (branch of branches; track obtenerIdSucursal(branch)) {
+                        <label class="checkbox-row">
+                          <input
+                            type="checkbox"
+                            [name]="'invite-branch-' + obtenerIdSucursal(branch)"
+                            [checked]="isInvitationBranchSelected(obtenerIdSucursal(branch))"
+                            (change)="toggleInvitationBranch(obtenerIdSucursal(branch), $any($event.target).checked)"
+                          />
+                          <span>{{ branch.nombre }}</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <button
+                class="btn btn-primary submit-button"
+                type="submit"
+                [disabled]="cargandoInvitacion || selectedInvitationBranchIds.length === 0"
+              >
+                {{ cargandoInvitacion ? 'Enviando...' : 'Enviar' }}
+              </button>
+            </form>
+          } @else if (activeTab === 'list') {
+            @if (cargandoPersonal) {
+              <section class="staff-state" aria-live="polite">
+                <p class="text-muted">Cargando personal...</p>
+              </section>
+            } @else if (errorPersonal) {
+              <section class="staff-state" aria-live="polite">
+                <p class="feedback feedback-error">{{ errorPersonal }}</p>
+              </section>
+            } @else if (staffMembers.length === 0) {
+              <section class="staff-state" aria-live="polite">
+                <p class="text-muted">Aun no hay personal registrado en esta empresa.</p>
+              </section>
+            } @else {
+              <section class="staff-list" aria-label="Personal registrado">
+                @for (member of staffMembers; track member.id_usuario) {
+                  <article class="card staff-row">
+                    <div>
+                      <h2 class="title-md">
+                        {{ member.usuario.persona?.nombre_completo || member.usuario.email }}
+                      </h2>
+                      <p class="text-muted app-text-sm">{{ member.usuario.email }}</p>
+                      <p class="text-muted app-text-sm">Rol: {{ obtenerRolPersonal(member) }}</p>
+                      <p class="text-muted app-text-sm">Sucursales: {{ obtenerSucursalesPersonal(member) }}</p>
+                      @if (member.usuario.persona?.telefono) {
+                        <p class="text-muted app-text-sm">
+                          {{ member.usuario.persona?.telefono }}
+                        </p>
+                      }
+                    </div>
+
+                    <div class="staff-actions">
+                      @if (estaPersonalActivo(member)) {
+                        <span class="badge badge-success">Activo</span>
+                      } @else {
+                        <span class="badge badge-danger">Inactivo</span>
+                      }
+                      @if (hasPermission('USUARIO_EDITAR')) {
+                        <button class="btn btn-secondary" type="button" (click)="editarPersonal(member)">
+                          Editar
+                        </button>
+                      }
+                    </div>
+                  </article>
+                }
+              </section>
+            }
+          } @else {
+            <form class="edit-staff-form" aria-label="Formulario para editar personal" (submit)="guardarEdicion($event)">
+              @if (errorEdicion) {
+                <p class="feedback feedback-error form-feedback">{{ errorEdicion }}</p>
+              }
+
+              <div class="form-group">
+                <label class="label" for="editEmail">Gmail</label>
+                <input
+                  class="input"
+                  id="editEmail"
+                  name="editEmail"
+                  type="email"
+                  readonly
+                  [value]="editEmail"
+                />
+              </div>
+
+              <div class="form-group">
+                <label class="label" for="editRole">Rol</label>
+                <select class="input" id="editRole" name="editRole" [(ngModel)]="editRole">
+                  @for (role of roles; track role.value) {
+                    <option [value]="role.value">{{ role.label }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="form-group branches-checklist-field">
+                <p class="label">Sucursal(es)</p>
+                <div class="branches-checklist">
+                  @for (branch of branches; track obtenerIdSucursal(branch)) {
+                    <label class="checkbox-row">
+                      <input
+                        type="checkbox"
+                        [name]="'edit-branch-' + obtenerIdSucursal(branch)"
+                        [checked]="isEditBranchSelected(obtenerIdSucursal(branch))"
+                        (change)="toggleEditBranch(obtenerIdSucursal(branch), $any($event.target).checked)"
+                      />
+                      <span>{{ branch.nombre }}</span>
+                    </label>
+                  }
+                </div>
+              </div>
+
+              <div class="form-group status-field">
+                <span class="label">Activo</span>
+                <label class="switch">
+                  <input type="checkbox" name="editStaffActive" [(ngModel)]="editStaffActive" />
+                  <span class="switch-track" aria-hidden="true">
+                    <span class="switch-thumb"></span>
+                  </span>
+                  <span class="switch-text">{{ editStaffActive ? 'Personal activo' : 'Personal inactivo' }}</span>
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button class="btn btn-secondary" type="button" (click)="cancelarEdicion()">
+                  Cancelar
+                </button>
+                <button class="btn btn-primary" type="submit" [disabled]="cargandoEdicion || editBranchIds.length === 0">
+                  {{ cargandoEdicion ? 'Guardando...' : 'Guardar' }}
+                </button>
+              </div>
+            </form>
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

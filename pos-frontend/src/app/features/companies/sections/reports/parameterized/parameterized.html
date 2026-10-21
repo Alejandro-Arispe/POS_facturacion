@@ -1,0 +1,582 @@
+<div class="page-container reports-page">
+  <app-navbar />
+
+  <main class="reports-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="reports-content">
+      <header class="reports-header panel">
+        <div>
+          <p class="badge badge-success">Sucursal {{ branchId }}</p>
+          <h1 class="title-xl">Reportes Parametrizados</h1>
+          <p class="text-muted">Genera reportes aplicando parametros especificos.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de reportes parametrizados">
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'sale'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'sale'"
+            (click)="setActiveTab('sale')"
+          >
+            Ventas
+          </button>
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'inventory'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'inventory'"
+            (click)="setActiveTab('inventory')"
+          >
+            Inventario
+          </button>
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'cash'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'cash'"
+            (click)="setActiveTab('cash')"
+          >
+            Cajas
+          </button>
+        </div>
+
+        <div class="tab-content">
+          @if (activeTab === 'sale') {
+            <form class="sale-filters-form" aria-label="Filtros para reportes de ventas">
+              <div class="sale-filters-grid">
+                <div class="form-group">
+                  <label class="label" for="reportStartDate">Fecha inicial</label>
+                  <input class="input" id="reportStartDate" name="startDate" type="text" [(ngModel)]="saleFilters.startDate" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="reportEndDate">Fecha final</label>
+                  <input class="input" id="reportEndDate" name="endDate" type="text" [(ngModel)]="saleFilters.endDate" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="reportBranch">Sucursal</label>
+                  <select class="select" id="reportBranch" name="branch" [(ngModel)]="saleFilters.branch">
+                    @for (branch of branchOptions; track branch) {
+                      <option [ngValue]="branch">{{ branch }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="reportSaleType">Tipo de venta</label>
+                  <select class="select" id="reportSaleType" name="saleType" [(ngModel)]="saleFilters.saleType">
+                    @for (saleType of saleTypeOptions; track saleType) {
+                      <option [ngValue]="saleType">{{ saleType }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="reportPaymentMethod">Método de pago</label>
+                  <select class="select" id="reportPaymentMethod" name="paymentMethod" [(ngModel)]="saleFilters.paymentMethod">
+                    @for (paymentMethod of paymentMethodOptions; track paymentMethod) {
+                      <option [ngValue]="paymentMethod">{{ paymentMethod }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="reportProduct">Producto</label>
+                  <select class="select" id="reportProduct" name="product" [(ngModel)]="saleFilters.product">
+                    @for (product of productOptions; track product) {
+                      <option [ngValue]="product">{{ product }}</option>
+                    }
+                  </select>
+                </div>
+
+
+                <div class="form-group">
+                  <label class="label" for="reportStaff">Personal</label>
+                  <select class="select" id="reportStaff" name="staff" [(ngModel)]="saleFilters.staff">
+                    @for (staff of staffOptions; track staff) {
+                      <option [ngValue]="staff">{{ staff }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+
+              <div class="sale-filters-actions">
+                <button class="btn btn-secondary" type="button" (click)="clearSaleFilters()">Limpiar filtros</button>
+                <button class="btn btn-primary" type="button" [disabled]="loadingSalesReport" (click)="generateSalesReport()">
+                  {{ loadingSalesReport ? 'Generando...' : 'Generar reporte' }}
+                </button>
+              </div>
+            </form>
+
+            @if (salesReport) {
+              <section class="report-section panel" aria-label="Reporte de ventas generado">
+                <div class="report-header">
+                  <h2 class="title-lg">Reporte de Ventas</h2>
+                  <p class="text-muted">Empresa: {{ salesReport.company }}</p>
+                  <p class="text-muted">Fecha de generación: {{ salesReport.generatedAt }}</p>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="filters-applied-section">
+                  <h3 class="text-semibold">Filtros aplicados</h3>
+                  <div class="filters-grid">
+                    <div class="filter-item">
+                      <span class="filter-label">Periodo:</span>
+                      <span class="filter-value">{{ salesReport.filters.startDate }} al {{ salesReport.filters.endDate }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Sucursal:</span>
+                      <span class="filter-value">{{ salesReport.filters.branch }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Tipo de venta:</span>
+                      <span class="filter-value">{{ salesReport.filters.saleType }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Método de pago:</span>
+                      <span class="filter-value">{{ salesReport.filters.paymentMethod }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Producto:</span>
+                      <span class="filter-value">{{ salesReport.filters.product }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Personal:</span>
+                      <span class="filter-value">{{ salesReport.filters.staff }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="summary-section">
+                  <h3 class="text-semibold">1. Resumen Gerencial</h3>
+                  <div class="table-responsive">
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>Indicador</th>
+                          <th>Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Total de ventas realizadas</td>
+                          <td class="text-right">{{ salesReport.summary.totalSales }}</td>
+                        </tr>
+                        <tr>
+                          <td>Monto total vendido</td>
+                          <td class="text-right">{{ salesReport.summary.totalAmount }}</td>
+                        </tr>
+                        <tr>
+                          <td>Productos vendidos</td>
+                          <td class="text-right">{{ salesReport.summary.totalProducts }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="details-section">
+                  <h3 class="text-semibold">2. Detalle Analítico de Ventas</h3>
+                  <div class="table-responsive">
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>N.º venta</th>
+                          <th>Fecha y hora</th>
+                          <th>Personal</th>
+                          <th>Tipo</th>
+                          <th>Método pago</th>
+                          <th>Productos</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (item of salesReport.details; track item.nro) {
+                          <tr>
+                            <td>{{ item.nro }}</td>
+                            <td>{{ item.datetime }}</td>
+                            <td>{{ item.staff }}</td>
+                            <td>{{ item.type }}</td>
+                            <td>{{ item.method }}</td>
+                            <td class="text-center">{{ item.products }}</td>
+                            <td class="text-right">{{ item.total }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="report-actions">
+                  <button class="btn btn-secondary" type="button" (click)="exportSalesReport('pdf')">PDF</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportSalesReport('excel')">Excel</button>
+                </div>
+              </section>
+            }
+          }
+
+          @if (activeTab === 'inventory') {
+            <form class="sale-filters-form" aria-label="Filtros para reportes de inventario">
+              <div class="sale-filters-grid">
+                <div class="form-group">
+                  <label class="label" for="inventoryStartDate">Fecha inicial</label>
+                  <input class="input" id="inventoryStartDate" name="startDate" type="text" [(ngModel)]="inventoryFilters.startDate" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="inventoryEndDate">Fecha final</label>
+                  <input class="input" id="inventoryEndDate" name="endDate" type="text" [(ngModel)]="inventoryFilters.endDate" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="inventoryBranch">Sucursal</label>
+                  <select class="select" id="inventoryBranch" name="branch" [(ngModel)]="inventoryFilters.branch">
+                    @for (branch of branchOptions; track branch) {
+                      <option [ngValue]="branch">{{ branch }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="inventoryMovementType">Tipo de movimiento</label>
+                  <select class="select" id="inventoryMovementType" name="movementType" [(ngModel)]="inventoryFilters.movementType">
+                    @for (movementType of inventoryMovementTypeOptions; track movementType) {
+                      <option [ngValue]="movementType">{{ movementType }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="inventoryProduct">Producto</label>
+                  <select class="select" id="inventoryProduct" name="product" [(ngModel)]="inventoryFilters.product">
+                    @for (product of productOptions; track product) {
+                      <option [ngValue]="product">{{ product }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="inventoryCategory">Categoría</label>
+                  <select class="select" id="inventoryCategory" name="category" [(ngModel)]="inventoryFilters.category">
+                    @for (category of categoryOptions; track category) {
+                      <option [ngValue]="category">{{ category }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+
+              <div class="sale-filters-actions">
+                <button class="btn btn-secondary" type="button" (click)="clearInventoryFilters()">Limpiar filtros</button>
+                <button class="btn btn-primary" type="button" [disabled]="loadingInventoryReport" (click)="generateInventoryReport()">
+                  {{ loadingInventoryReport ? 'Generando...' : 'Generar reporte' }}
+                </button>
+              </div>
+            </form>
+
+            @if (inventoryReport) {
+              <section class="report-section panel" aria-label="Reporte de inventario generado">
+                <div class="report-header">
+                  <h2 class="title-lg">Reporte de Inventario</h2>
+                  <p class="text-muted">Empresa: {{ inventoryReport.company }}</p>
+                  <p class="text-muted">Fecha de generación: {{ inventoryReport.generatedAt }}</p>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="filters-applied-section">
+                  <h3 class="text-semibold">Filtros aplicados</h3>
+                  <div class="filters-grid">
+                    <div class="filter-item">
+                      <span class="filter-label">Periodo:</span>
+                      <span class="filter-value">{{ inventoryReport.filters.startDate }} al {{ inventoryReport.filters.endDate }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Sucursal:</span>
+                      <span class="filter-value">{{ inventoryReport.filters.branch }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Tipo de movimiento:</span>
+                      <span class="filter-value">{{ inventoryReport.filters.movementType }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Producto:</span>
+                      <span class="filter-value">{{ inventoryReport.filters.product }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Categoría:</span>
+                      <span class="filter-value">{{ inventoryReport.filters.category }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="summary-section">
+                  <h3 class="text-semibold">1. Resumen gerencial</h3>
+                  <div class="table-responsive">
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>Indicador</th>
+                          <th>Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Movimientos registrados</td>
+                          <td class="text-right">{{ inventoryReport.summary.totalMovements }}</td>
+                        </tr>
+                        <tr>
+                          <td>Productos con stock disponible</td>
+                          <td class="text-right">{{ inventoryReport.summary.availableStock }}</td>
+                        </tr>
+                        <tr>
+                          <td>Productos con stock bajo</td>
+                          <td class="text-right">{{ inventoryReport.summary.lowStock }}</td>
+                        </tr>
+                        <tr>
+                          <td>Productos agotados</td>
+                          <td class="text-right">{{ inventoryReport.summary.outOfStock }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="details-section">
+                  <h3 class="text-semibold">2. Detalle analítico de movimientos de inventario</h3>
+                  <div class="table-responsive">
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>N.º movimiento</th>
+                          <th>Fecha y hora</th>
+                          <th>Producto</th>
+                          <th>Categoría</th>
+                          <th>Tipo</th>
+                          <th>Cantidad</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (item of inventoryReport.details; track item.nro) {
+                          <tr>
+                            <td>{{ item.nro }}</td>
+                            <td>{{ item.datetime }}</td>
+                            <td>{{ item.product }}</td>
+                            <td>{{ item.category }}</td>
+                            <td>{{ item.type }}</td>
+                            <td class="text-center">{{ item.quantity }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="report-actions">
+                  <button class="btn btn-secondary" type="button" (click)="exportInventoryReport('pdf')">PDF</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportInventoryReport('excel')">Excel</button>
+                </div>
+              </section>
+            }
+          }
+
+          @if (activeTab === 'cash') {
+            <form class="sale-filters-form" aria-label="Filtros para reportes de cajas">
+              <div class="sale-filters-grid">
+                <div class="form-group">
+                  <label class="label" for="cashStartDate">Fecha inicial</label>
+                  <input class="input" id="cashStartDate" name="startDate" type="text" [(ngModel)]="cashFilters.startDate" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="cashEndDate">Fecha final</label>
+                  <input class="input" id="cashEndDate" name="endDate" type="text" [(ngModel)]="cashFilters.endDate" />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="cashBranch">Sucursal</label>
+                  <select class="select" id="cashBranch" name="branch" [(ngModel)]="cashFilters.branch">
+                    @for (branch of branchOptions; track branch) {
+                      <option [ngValue]="branch">{{ branch }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="cashRegister">Caja</label>
+                  <select class="select" id="cashRegister" name="cash" [(ngModel)]="cashFilters.cash">
+                    @for (cash of cashOptions; track cash) {
+                      <option [ngValue]="cash">{{ cash }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="cashMovementType">Tipo de movimiento</label>
+                  <select class="select" id="cashMovementType" name="movementType" [(ngModel)]="cashFilters.movementType">
+                    @for (movementType of cashMovementTypeOptions; track movementType) {
+                      <option [ngValue]="movementType">{{ movementType }}</option>
+                    }
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="cashSessionState">Estado de sesión</label>
+                  <select class="select" id="cashSessionState" name="sessionStatus" [(ngModel)]="cashFilters.sessionStatus">
+                    <option>Todas</option>
+                    <option>Abierta</option>
+                    <option>Cerrada</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="sale-filters-actions">
+                <button class="btn btn-secondary" type="button" (click)="clearCashFilters()">Limpiar filtros</button>
+                <button class="btn btn-primary" type="button" [disabled]="loadingCashReport" (click)="generateCashReport()">
+                  {{ loadingCashReport ? 'Generando...' : 'Generar reporte' }}
+                </button>
+              </div>
+            </form>
+
+            @if (cashReport) {
+              <section class="report-section panel" aria-label="Reporte de cajas generado">
+                <div class="report-header">
+                  <h2 class="title-lg">Reporte de Cajas</h2>
+                  <p class="text-muted">Empresa: {{ cashReport.company }}</p>
+                  <p class="text-muted">Fecha de generación: {{ cashReport.generatedAt }}</p>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="filters-applied-section">
+                  <h3 class="text-semibold">Filtros aplicados</h3>
+                  <div class="filters-grid">
+                    <div class="filter-item">
+                      <span class="filter-label">Periodo:</span>
+                      <span class="filter-value">{{ cashReport.filters.startDate }} al {{ cashReport.filters.endDate }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Sucursal:</span>
+                      <span class="filter-value">{{ cashReport.filters.branch }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Caja:</span>
+                      <span class="filter-value">{{ cashReport.filters.cash }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Tipo de movimiento:</span>
+                      <span class="filter-value">{{ cashReport.filters.movementType }}</span>
+                    </div>
+                    <div class="filter-item">
+                      <span class="filter-label">Estado de sesión:</span>
+                      <span class="filter-value">{{ cashReport.filters.sessionStatus }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="summary-section">
+                  <h3 class="text-semibold">1. Resumen gerencial</h3>
+                  <div class="table-responsive">
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>Indicador</th>
+                          <th>Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Sesiones de caja registradas</td>
+                          <td class="text-right">{{ cashReport.summary.totalSessions }}</td>
+                        </tr>
+                        <tr>
+                          <td>Sesiones abiertas</td>
+                          <td class="text-right">{{ cashReport.summary.openSessions }}</td>
+                        </tr>
+                        <tr>
+                          <td>Sesiones cerradas</td>
+                          <td class="text-right">{{ cashReport.summary.closedSessions }}</td>
+                        </tr>
+                        <tr>
+                          <td>Monto total de aperturas</td>
+                          <td class="text-right">{{ cashReport.summary.totalOpeningAmount }}</td>
+                        </tr>
+                        <tr>
+                          <td>Monto total esperado al cierre</td>
+                          <td class="text-right">{{ cashReport.summary.expectedTotalAmount }}</td>
+                        </tr>
+                        <tr>
+                          <td>Monto total declarado al cierre</td>
+                          <td class="text-right">{{ cashReport.summary.declaredTotalAmount }}</td>
+                        </tr>
+                        <tr>
+                          <td>Diferencia total</td>
+                          <td class="text-right">{{ cashReport.summary.totalDifference }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="report-divider"></div>
+
+                <div class="details-section">
+                  <h3 class="text-semibold">2. Detalle analítico de movimientos de caja</h3>
+                  <div class="table-responsive">
+                    <table class="details-table">
+                      <thead>
+                        <tr>
+                          <th>N.º movimiento</th>
+                          <th>Fecha y hora</th>
+                          <th>Caja</th>
+                          <th>Tipo</th>
+                          <th>Concepto</th>
+                          <th>Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (item of cashReport.details; track item.nro) {
+                          <tr>
+                            <td>{{ item.nro }}</td>
+                            <td>{{ item.datetime }}</td>
+                            <td>{{ item.cash }}</td>
+                            <td>{{ item.type }}</td>
+                            <td>{{ item.concept }}</td>
+                            <td class="text-right">{{ item.amount }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="report-actions">
+                  <button class="btn btn-secondary" type="button" (click)="exportCashReport('pdf')">PDF</button>
+                  <button class="btn btn-secondary" type="button" (click)="exportCashReport('excel')">Excel</button>
+                </div>
+              </section>
+            }
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

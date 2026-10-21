@@ -1,0 +1,118 @@
+<div class="page-container edit-branch-page">
+  <app-navbar />
+
+  <main class="edit-branch-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="edit-branch-content">
+      <section class="edit-branch-panel panel">
+        <a class="back-link" [routerLink]="['/company', companyId, 'branches']"
+          >Volver a Sucursales</a
+        >
+
+        <header class="edit-branch-header">
+          <p class="badge badge-success">Sucursal {{ branchId }}</p>
+          <h1 class="title-xl">Editar Sucursal</h1>
+          <p class="text-muted">Actualiza los datos principales de la sucursal.</p>
+        </header>
+
+        @if (errorEdicion) {
+          <p class="feedback feedback-error">{{ errorEdicion }}</p>
+        }
+
+        @if (mensajeEdicion) {
+          <p class="feedback feedback-success">{{ mensajeEdicion }}</p>
+        }
+
+        @if (cargandoSucursal) {
+          <p class="feedback feedback-info">Cargando datos de la sucursal...</p>
+        }
+
+        <form
+          class="branch-form"
+          aria-label="Formulario de edicion de sucursal"
+          (submit)="guardarCambios($event)"
+        >
+          <div class="form-group">
+            <label class="label" for="nombre">Nombre</label>
+            <input
+              class="input"
+              id="nombre"
+              name="nombre"
+              type="text"
+              placeholder="Sucursal Central"
+              required
+              [(ngModel)]="form.nombre"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="direccion">Direccion</label>
+            <input
+              class="input"
+              id="direccion"
+              name="direccion"
+              type="text"
+              placeholder="Av. Principal 1245"
+              required
+              [(ngModel)]="form.direccion"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="telefono">Telefono</label>
+            <input
+              class="input"
+              id="telefono"
+              name="telefono"
+              type="tel"
+              placeholder="61524977"
+              required
+              [(ngModel)]="form.telefono"
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="label" for="ciudad">Ciudad</label>
+            <input
+              class="input"
+              id="ciudad"
+              name="ciudad"
+              type="text"
+              placeholder="La Paz"
+              required
+              [(ngModel)]="form.ciudad"
+            />
+          </div>
+
+          <div class="form-group status-field">
+            <span class="label">Activo</span>
+            <label class="switch">
+              <input type="checkbox" name="activo" [(ngModel)]="form.activo" />
+              <span class="switch-track" aria-hidden="true">
+                <span class="switch-thumb"></span>
+              </span>
+              <span class="switch-text">Sucursal activa</span>
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <a
+              class="btn btn-secondary"
+              [routerLink]="['/company', companyId, 'branches']"
+              >Cancelar</a
+            >
+            <button
+              class="btn btn-primary"
+              type="submit"
+              [disabled]="cargandoSucursal || cargandoEdicion"
+            >
+              {{ cargandoEdicion ? 'Guardando...' : 'Guardar cambios' }}
+            </button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+</div>
+

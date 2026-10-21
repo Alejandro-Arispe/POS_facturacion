@@ -1,0 +1,244 @@
+<div class="page-container rols-page">
+  <app-navbar />
+
+  <main class="rols-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="rols-content">
+      <header class="rols-header panel">
+        <div>
+          <p class="badge badge-success">Empresa {{ companyId }}</p>
+          <h1 class="title-xl">Roles</h1>
+          <p class="text-muted">Administra los roles disponibles para los usuarios de la empresa.</p>
+        </div>
+      </header>
+
+      <section class="tabs-panel panel">
+        <div class="tabs" role="tablist" aria-label="Secciones de roles">
+          @if (hasPermission('ROL_CREAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'create'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'create'"
+              (click)="setActiveTab('create')"
+            >
+              Crear rol
+            </button>
+          }
+          <button
+            class="tab-button"
+            [class.active]="activeTab === 'list'"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="activeTab === 'list'"
+            (click)="setActiveTab('list')"
+          >
+            Lista de roles
+          </button>
+          @if (editingRoleIndex !== null && hasPermission('ROL_EDITAR')) {
+            <button
+              class="tab-button"
+              [class.active]="activeTab === 'edit'"
+              type="button"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'edit'"
+              (click)="setActiveTab('edit')"
+            >
+              Editar rol
+            </button>
+          }
+        </div>
+
+        <div class="tab-content">
+          @if (activeTab === 'create') {
+            <form class="role-form" aria-label="Formulario para crear rol" (submit)="crearRol($event)">
+              <div class="form-group">
+                <label class="label" for="roleName">Nombre</label>
+                <input
+                  class="input"
+                  id="roleName"
+                  name="roleName"
+                  type="text"
+                  placeholder="Encargado de ventas"
+                  required
+                  [(ngModel)]="roleName"
+                />
+              </div>
+
+              <div class="form-group">
+                <p class="label">Permisos</p>
+
+                <div class="permissions-panel">
+                  @if (cargandoPermisos) {
+                    <p class="text-muted">Cargando permisos...</p>
+                  } @else if (errorPermisos) {
+                    <p class="feedback feedback-error">{{ errorPermisos }}</p>
+                  } @else {
+                    <div class="permission-modules">
+                      @for (module of permissionModules; track module.key) {
+                        <section class="permission-module">
+                          <label class="checkbox-row permission-module-toggle">
+                            <input
+                              type="checkbox"
+                              [name]="'module-' + module.key"
+                              [(ngModel)]="module.enabled"
+                              (ngModelChange)="onModuleToggle(module)"
+                            />
+                            <span>{{ module.label }}</span>
+                          </label>
+
+                          @if (module.enabled) {
+                            <div class="permission-actions">
+                              @for (action of module.actions; track action.key) {
+                                <label class="checkbox-row permission-action">
+                                  <input
+                                    type="checkbox"
+                                    [name]="'permission-' + module.key + '-' + action.key"
+                                    [(ngModel)]="action.enabled"
+                                    (ngModelChange)="onActionToggle(permissionModules, module, action, $event)"
+                                  />
+                                  <span>{{ action.label }}</span>
+                                </label>
+                              }
+                            </div>
+                          }
+                        </section>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <button
+                class="btn btn-primary submit-button"
+                type="submit"
+                [disabled]="cargandoPermisos || !!errorPermisos || creandoRol"
+              >
+                {{ creandoRol ? 'Creando...' : 'Crear' }}
+              </button>
+            </form>
+          } @else if (activeTab === 'list') {
+            @if (cargandoRoles) {
+              <section class="roles-state" aria-live="polite">
+                <p class="text-muted">Cargando roles...</p>
+              </section>
+            } @else if (errorRoles) {
+              <section class="roles-state" aria-live="polite">
+                <p class="feedback feedback-error">{{ errorRoles }}</p>
+              </section>
+            } @else if (roles.length === 0) {
+              <section class="roles-state" aria-live="polite">
+                <p class="text-muted">Aun no hay roles registrados.</p>
+              </section>
+            } @else {
+              <section class="roles-list" aria-label="Roles registrados">
+                @for (role of roles; track role.id_rol) {
+                  <article class="card role-row">
+                    <div>
+                      <h2 class="title-md">{{ role.nombre }}</h2>
+                      <p class="text-muted app-text-sm">Tipo: {{ role.tipo }}</p>
+                    </div>
+                    <div class="role-actions">
+                      @if (role.activo) {
+                        <span class="badge badge-success">Activo</span>
+                      } @else {
+                        <span class="badge badge-danger">Inactivo</span>
+                      }
+                      @if (role.tipo.toUpperCase() !== 'SISTEMA' && hasPermission('ROL_EDITAR')) {
+                        <button class="btn btn-secondary" type="button" (click)="editarRol($index)">
+                          Editar
+                        </button>
+                      }
+                    </div>
+                  </article>
+                }
+              </section>
+            }
+          } @else {
+            <form class="role-form" aria-label="Formulario para editar rol" (submit)="guardarEdicion($event)">
+              <div class="form-group">
+                <label class="label" for="editRoleName">Nombre</label>
+                <input
+                  class="input"
+                  id="editRoleName"
+                  name="editRoleName"
+                  type="text"
+                  placeholder="Encargado de ventas"
+                  required
+                  readonly
+                  [(ngModel)]="editRoleName"
+                />
+              </div>
+
+              <div class="form-group">
+                <p class="label">Permisos</p>
+
+                <div class="permissions-panel">
+                  @if (cargandoPermisos) {
+                    <p class="text-muted">Cargando permisos...</p>
+                  } @else if (errorPermisos) {
+                    <p class="feedback feedback-error">{{ errorPermisos }}</p>
+                  } @else {
+                    <div class="permission-modules">
+                      @for (module of editPermissionModules; track module.key) {
+                        <section class="permission-module">
+                          <label class="checkbox-row permission-module-toggle">
+                            <input
+                              type="checkbox"
+                              [name]="'edit-module-' + module.key"
+                              [(ngModel)]="module.enabled"
+                              (ngModelChange)="onModuleToggle(module)"
+                            />
+                            <span>{{ module.label }}</span>
+                          </label>
+
+                          @if (module.enabled) {
+                            <div class="permission-actions">
+                              @for (action of module.actions; track action.key) {
+                                <label class="checkbox-row permission-action">
+                                  <input
+                                    type="checkbox"
+                                    [name]="'edit-permission-' + module.key + '-' + action.key"
+                                    [(ngModel)]="action.enabled"
+                                    (ngModelChange)="onActionToggle(editPermissionModules, module, action, $event)"
+                                  />
+                                  <span>{{ action.label }}</span>
+                                </label>
+                              }
+                            </div>
+                          }
+                        </section>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <div class="form-group status-field">
+                <span class="label">Activo</span>
+                <label class="switch">
+                  <input type="checkbox" name="editRoleActive" [(ngModel)]="editRoleActive" />
+                  <span class="switch-track" aria-hidden="true">
+                    <span class="switch-thumb"></span>
+                  </span>
+                  <span class="switch-text">{{ editRoleActive ? 'Rol activo' : 'Rol inactivo' }}</span>
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button class="btn btn-secondary" type="button" (click)="cancelarEdicion()">
+                  Cancelar
+                </button>
+                <button class="btn btn-primary" type="submit" [disabled]="cargandoPermisos || !!errorPermisos || guardandoEdicion">
+                  {{ guardandoEdicion ? 'Guardando...' : 'Guardar' }}
+                </button>
+              </div>
+            </form>
+          }
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
