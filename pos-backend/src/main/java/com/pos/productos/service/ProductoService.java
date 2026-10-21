@@ -2,8 +2,11 @@ package com.pos.productos.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -21,6 +24,9 @@ import com.pos.productos.repo.CategoriaProductoRepository;
 import com.pos.productos.repo.ProductoRepository;
 import com.pos.productos.repo.SubcategoriaProductoRepository;
 import com.pos.usuarios.domain.Usuario;
+import com.pos.usuarios.domain.UsuarioRol;
+import com.pos.usuarios.repo.UsuarioRolRepository;
+import com.pos.usuarios.service.PrivilegioCampoService;
 
 @Service
 public class ProductoService {
@@ -30,18 +36,24 @@ public class ProductoService {
     private final SubcategoriaProductoRepository subcategoriaRepository;
     private final ProductoRepository productoRepository;
     private final InventarioService inventarioService;
+    private final UsuarioRolRepository usuarioRolRepository;
+    private final PrivilegioCampoService privilegioCampoService;
 
     public ProductoService(
             EmpresaAccess empresaAccess,
             CategoriaProductoRepository categoriaRepository,
             SubcategoriaProductoRepository subcategoriaRepository,
             ProductoRepository productoRepository,
-            InventarioService inventarioService) {
+            InventarioService inventarioService,
+            UsuarioRolRepository usuarioRolRepository,
+            PrivilegioCampoService privilegioCampoService) {
         this.empresaAccess = empresaAccess;
         this.categoriaRepository = categoriaRepository;
         this.subcategoriaRepository = subcategoriaRepository;
         this.productoRepository = productoRepository;
         this.inventarioService = inventarioService;
+        this.usuarioRolRepository = usuarioRolRepository;
+        this.privilegioCampoService = privilegioCampoService;
     }
 
     @Transactional(readOnly = true)
@@ -133,21 +145,34 @@ public class ProductoService {
     @Transactional(readOnly = true)
     public List<ProductoDtos.ProductoResponse> listarProductos(Usuario usuario) {
         empresaAccess.requireUsuarioActivo(usuario);
-        return productoRepository.findAll().stream().map(this::toProducto).toList();
+        Set<Integer> empresas = empresasDelUsuario(usuario);
+        if (empresas.isEmpty()) {
+            return List.of();
+        }
+        Map<Integer, Map<String, String>> estadosPorEmpresa = new HashMap<>();
+        List<ProductoDtos.ProductoResponse> resultado = new ArrayList<>();
+        for (Producto producto : productoRepository.findByIdEmpresaInOrderByNombreAsc(empresas)) {
+            Map<String, String> estados = estadosPorEmpresa.computeIfAbsent(
+                    producto.getIdEmpresa(),
+                    idEmpresa -> privilegioCampoService.estadosProducto(usuario, idEmpresa));
+            resultado.add(toProducto(producto, estados));
+        }
+        return resultado;
     }
 
     @Transactional(readOnly = true)
     public ProductoDtos.ProductoResponse obtenerProducto(Usuario usuario, Integer idProducto) {
-        empresaAccess.requireUsuarioActivo(usuario);
-        return toProducto(productoRepository.findById(idProducto)
-                .orElseThrow(() -> ApiException.notFound("Producto no encontrado.")));
+        Producto producto = requireProductoDeUsuario(usuario, idProducto);
+        return toProducto(producto, privilegioCampoService.estadosProducto(usuario, producto.getIdEmpresa()));
     }
 
     @Transactional
     public ProductoDtos.ProductoResponse actualizarProducto(Usuario usuario, Integer idProducto, ProductoDtos.ProductoUpdate datos) {
-        empresaAccess.requireUsuarioActivo(usuario);
-        Producto producto = productoRepository.findById(idProducto)
-                .orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
+        Producto producto = requireProductoDeUsuario(usuario, idProducto);
+        Map<String, String> estados = privilegioCampoService.estadosProducto(usuario, producto.getIdEmpresa());
+        if (!privilegioCampoService.permiteEditar(estados)) {
+            throw ApiException.forbidden("No tienes permiso para editar este producto.");
+        }
         if (datos.getIdSubcategoria() != null) {
             producto.setSubcategoria(requireSubcategoriaActiva(datos.getIdSubcategoria()));
         }
@@ -163,29 +188,36 @@ public class ProductoService {
         if (datos.getUnidadMedida() != null) {
             producto.setUnidadMedida(datos.getUnidadMedida());
         }
-        if (datos.getPrecio() != null) {
+        if (privilegioCampoService.permiteEscribir(estados, "precio") && datos.getPrecio() != null) {
             producto.setPrecio(datos.getPrecio());
+        }
+        if (privilegioCampoService.permiteEscribir(estados, "costo")) {
+            producto.setCosto(datos.getCosto());
         }
         if (datos.getActivo() != null) {
             producto.setActivo(datos.getActivo());
         }
-        return toProducto(productoRepository.save(producto));
+        return toProducto(productoRepository.save(producto), estados);
     }
 
     @Transactional
     public ProductoDtos.ProductoResponse actualizarImagen(Usuario usuario, Integer idProducto, String imagen) {
-        empresaAccess.requireUsuarioActivo(usuario);
-        Producto producto = productoRepository.findById(idProducto)
-                .orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
+        Producto producto = requireProductoDeUsuario(usuario, idProducto);
+        Map<String, String> estados = privilegioCampoService.estadosProducto(usuario, producto.getIdEmpresa());
+        if (!privilegioCampoService.permiteEditar(estados)) {
+            throw ApiException.forbidden("No tienes permiso para editar este producto.");
+        }
         producto.setImagen(imagen);
-        return toProducto(productoRepository.save(producto));
+        return toProducto(productoRepository.save(producto), estados);
     }
 
     @Transactional
     public Map<String, String> eliminarProducto(Usuario usuario, Integer idProducto) {
-        empresaAccess.requireUsuarioActivo(usuario);
-        Producto producto = productoRepository.findById(idProducto)
-                .orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
+        Producto producto = requireProductoDeUsuario(usuario, idProducto);
+        Map<String, String> estados = privilegioCampoService.estadosProducto(usuario, producto.getIdEmpresa());
+        if (!privilegioCampoService.permiteEliminar(estados)) {
+            throw ApiException.forbidden("No tienes permiso para eliminar este producto.");
+        }
         productoRepository.delete(producto);
         return Map.of("mensaje", "Producto eliminado correctamente.");
     }
@@ -193,7 +225,10 @@ public class ProductoService {
     @Transactional(readOnly = true)
     public List<ProductoDtos.ProductoResponse> listarPorEmpresa(Usuario usuario, Integer idEmpresa) {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
-        return productoRepository.findByIdEmpresaOrderByNombreAsc(idEmpresa).stream().map(this::toProducto).toList();
+        Map<String, String> estados = privilegioCampoService.estadosProducto(usuario, idEmpresa);
+        return productoRepository.findByIdEmpresaOrderByNombreAsc(idEmpresa).stream()
+                .map(producto -> toProducto(producto, estados))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -234,12 +269,20 @@ public class ProductoService {
         producto.setCodigoBarra(payload.getCodigoBarra());
         producto.setDescripcion(payload.getDescripcion());
         producto.setUnidadMedida(payload.getUnidadMedida());
-        producto.setPrecio(payload.getPrecio() == null ? BigDecimal.ZERO : payload.getPrecio());
+        Map<String, String> estados = privilegioCampoService.estadosProducto(usuario, idEmpresa);
+        if (privilegioCampoService.permiteEscribir(estados, "precio")) {
+            producto.setPrecio(payload.getPrecio() == null ? BigDecimal.ZERO : payload.getPrecio());
+        } else {
+            producto.setPrecio(BigDecimal.ZERO);
+        }
+        if (privilegioCampoService.permiteEscribir(estados, "costo")) {
+            producto.setCosto(payload.getCosto());
+        }
         producto.setImagen(imagen);
         producto.setActivo(payload.getActivo() == null || payload.getActivo());
         producto = productoRepository.save(producto);
         inventarioService.sincronizarStocksPorProducto(producto.getIdProducto(), idEmpresa);
-        return toProducto(productoRepository.findById(producto.getIdProducto()).orElse(producto));
+        return toProducto(productoRepository.findById(producto.getIdProducto()).orElse(producto), estados);
     }
 
     private CategoriaProducto requireCategoriaActiva(Integer id) {
@@ -280,7 +323,27 @@ public class ProductoService {
         return dto;
     }
 
-    private ProductoDtos.ProductoResponse toProducto(Producto producto) {
+    private Producto requireProductoDeUsuario(Usuario usuario, Integer idProducto) {
+        Producto producto = productoRepository.findById(idProducto)
+                .orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
+        if (producto.getIdEmpresa() == null) {
+            throw ApiException.notFound("Producto no encontrado.");
+        }
+        empresaAccess.requireEmpresa(usuario, producto.getIdEmpresa());
+        return producto;
+    }
+
+    private Set<Integer> empresasDelUsuario(Usuario usuario) {
+        Set<Integer> empresas = new HashSet<>();
+        for (UsuarioRol relacion : usuarioRolRepository.findByUsuario_IdUsuarioAndActivoTrue(usuario.getIdUsuario())) {
+            if (relacion.getIdEmpresa() != null) {
+                empresas.add(relacion.getIdEmpresa());
+            }
+        }
+        return empresas;
+    }
+
+    private ProductoDtos.ProductoResponse toProducto(Producto producto, Map<String, String> estados) {
         ProductoDtos.ProductoResponse dto = new ProductoDtos.ProductoResponse();
         dto.setIdProducto(producto.getIdProducto());
         dto.setIdEmpresa(producto.getIdEmpresa());
@@ -289,7 +352,16 @@ public class ProductoService {
         dto.setCodigoBarra(producto.getCodigoBarra());
         dto.setDescripcion(producto.getDescripcion());
         dto.setUnidadMedida(producto.getUnidadMedida() == null ? "" : producto.getUnidadMedida());
-        dto.setPrecio(producto.getPrecio());
+        if (privilegioCampoService.estaOculto(estados, "precio")) {
+            dto.setPrecio(null);
+        } else {
+            dto.setPrecio(producto.getPrecio());
+        }
+        if (privilegioCampoService.estaOculto(estados, "costo")) {
+            dto.setCosto(null);
+        } else {
+            dto.setCosto(producto.getCosto());
+        }
         dto.setImagen(producto.getImagen());
         dto.setActivo(producto.getActivo());
         if (producto.getSubcategoria() != null) {

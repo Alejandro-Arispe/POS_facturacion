@@ -1,0 +1,70 @@
+<div class="page-container backup-page">
+  <app-navbar />
+
+  <main class="backup-layout">
+    <app-sidebar context="company" [companyId]="companyId" />
+
+    <section class="backup-content">
+      <header class="panel backup-header">
+        <p class="badge badge-success">Empresa {{ companyId }}</p>
+        <h1 class="title-xl">Copias de seguridad</h1>
+        <p class="text-muted">
+          Cada copia guarda solo esta empresa: datos de la empresa, sucursales, catálogo, roles personalizados,
+          configuración y suscripción. Las ventas no se incluyen. Restaurar no borra datos de otras empresas.
+        </p>
+        <button class="btn btn-primary" type="button" [disabled]="creando || !companyId" (click)="crear()">
+          {{ creando ? 'Creando copia...' : 'Crear copia ahora' }}
+        </button>
+      </header>
+
+      @if (error) {
+        <p class="panel backup-error">{{ error }}</p>
+      }
+      @if (aviso) {
+        <p class="panel backup-aviso">{{ aviso }}</p>
+      }
+
+      <div class="panel backup-list">
+        <h2>Copias de esta empresa</h2>
+        @if (cargando) {
+          <p class="text-muted">Cargando copias...</p>
+        } @else if (copias.length === 0) {
+          <p class="text-muted">Todavía no hay copias. Crea la primera con el botón de arriba.</p>
+        } @else {
+          <div class="table-shell">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Archivo</th>
+                  <th>Fecha</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (copia of copias; track copia.archivo) {
+                  <tr>
+                    <td>{{ copia.archivo }}</td>
+                    <td>{{ fechaLegible(copia.fecha) }}</td>
+                    <td class="backup-actions">
+                      <button class="btn btn-secondary" type="button" (click)="descargar(copia.archivo)">
+                        Descargar
+                      </button>
+                      <button
+                        class="btn btn-danger"
+                        type="button"
+                        [disabled]="restaurando === copia.archivo"
+                        (click)="restaurar(copia.archivo)"
+                      >
+                        {{ restaurando === copia.archivo ? 'Restaurando...' : 'Restaurar' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </section>
+  </main>
+</div>

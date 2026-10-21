@@ -2,6 +2,13 @@ import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
+  CampoProducto,
+  CamposProducto,
+  CompanyPermissionsService,
+  EstadoCampoProducto,
+  camposProductoPorDefecto,
+} from '../../../../../../../core/services/company-permissions.service';
+import {
   ActualizarProductoRequest,
   ProductService,
   Producto,
@@ -21,6 +28,7 @@ export class EditProduct implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly productService = inject(ProductService);
+  private readonly companyPermissionsService = inject(CompanyPermissionsService);
   private readonly cdr = inject(ChangeDetectorRef);
 
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
@@ -33,20 +41,40 @@ export class EditProduct implements OnInit {
   protected imagenActual: string | null = null;
   protected imagenSeleccionada: File | null = null;
   protected subcategorias: SubcategoriaProducto[] = [];
+  protected camposProducto: CamposProducto = camposProductoPorDefecto();
+  protected camposCargados = false;
 
-  protected readonly form: ActualizarProductoRequest = {
+  protected readonly form: ActualizarProductoRequest & { costo: number | null } = {
     id_subcategoria: 0,
     codigo_barra: '',
     nombre: '',
     descripcion: '',
     unidad_medida: '',
     precio: 0,
+    costo: null,
     activo: true,
   };
 
   ngOnInit(): void {
+    this.cargarCamposProducto();
     this.cargarSubcategorias();
     this.cargarProducto();
+  }
+
+  protected estadoCampo(campo: CampoProducto): EstadoCampoProducto {
+    return this.camposProducto[campo];
+  }
+
+  protected mostrarCampo(campo: CampoProducto): boolean {
+    return this.camposCargados && this.estadoCampo(campo) !== 'OCULTO';
+  }
+
+  protected soloLectura(campo: CampoProducto): boolean {
+    return this.estadoCampo(campo) === 'SOLO_LECTURA';
+  }
+
+  protected get edicionBloqueada(): boolean {
+    return this.camposCargados && this.estadoCampo('editar') !== 'EDITABLE';
   }
 
   protected guardarProducto(event: SubmitEvent): void {
@@ -59,15 +87,27 @@ export class EditProduct implements OnInit {
       return;
     }
 
-    const payload: ActualizarProductoRequest = {
+    if (this.edicionBloqueada) {
+      this.errorEdicion = 'No tienes permiso para editar este producto.';
+      return;
+    }
+
+    const payload: ActualizarProductoRequest & { costo?: number | null } = {
       id_subcategoria: Number(this.form.id_subcategoria),
       codigo_barra: this.form.codigo_barra?.trim(),
       nombre: this.form.nombre?.trim(),
       descripcion: this.form.descripcion?.trim(),
       unidad_medida: this.form.unidad_medida?.trim(),
-      precio: this.form.precio,
       activo: this.form.activo,
     };
+
+    if (this.estadoCampo('precio') === 'EDITABLE') {
+      payload.precio = this.form.precio;
+    }
+
+    if (this.estadoCampo('costo') === 'EDITABLE') {
+      payload.costo = this.normalizarCosto(this.form.costo);
+    }
 
     if (!payload.id_subcategoria || !payload.nombre || !payload.unidad_medida) {
       this.errorEdicion = 'Completa subcategoria, nombre y unidad de medida del producto.';
@@ -116,15 +156,17 @@ export class EditProduct implements OnInit {
 
     this.productService.obtenerProducto(this.productId).subscribe({
       next: (producto: Producto) => {
+        const detalle = producto as Producto & { costo?: number | null };
         this.cargandoProducto = false;
-        this.imagenActual = producto.imagen ?? null;
-        this.form.codigo_barra = producto.codigo_barra ?? '';
-        this.form.nombre = producto.nombre;
-        this.form.descripcion = producto.descripcion ?? '';
-        this.form.id_subcategoria = producto.id_subcategoria ?? 0;
-        this.form.unidad_medida = producto.unidad_medida;
-        this.form.precio = producto.precio;
-        this.form.activo = producto.activo;
+        this.imagenActual = detalle.imagen ?? null;
+        this.form.codigo_barra = detalle.codigo_barra ?? '';
+        this.form.nombre = detalle.nombre;
+        this.form.descripcion = detalle.descripcion ?? '';
+        this.form.id_subcategoria = detalle.id_subcategoria ?? 0;
+        this.form.unidad_medida = detalle.unidad_medida;
+        this.form.precio = detalle.precio ?? 0;
+        this.form.costo = detalle.costo ?? null;
+        this.form.activo = detalle.activo;
         this.cdr.detectChanges();
       },
       error: () => {
@@ -159,6 +201,35 @@ export class EditProduct implements OnInit {
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private cargarCamposProducto(): void {
+    if (!this.companyId) {
+      this.camposProducto = camposProductoPorDefecto();
+      this.camposCargados = true;
+      return;
+    }
+
+    this.companyPermissionsService.obtenerMisCamposProducto(this.companyId).subscribe({
+      next: (campos) => {
+        this.camposProducto = campos;
+        this.camposCargados = true;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.camposProducto = camposProductoPorDefecto();
+        this.camposCargados = true;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private normalizarCosto(valor: number | null | undefined): number | null {
+    if (valor == null || Number.isNaN(Number(valor))) {
+      return null;
+    }
+
+    return Math.round(Number(valor) * 100) / 100;
   }
 
   private cargarSubcategorias(): void {

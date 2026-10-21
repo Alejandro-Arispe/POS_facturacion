@@ -50,6 +50,9 @@ public class Producto {
     @Column(name = "precio", nullable = false, precision = 12, scale = 2)
     private BigDecimal precio = BigDecimal.ZERO;
 
+    @Column(name = "costo", precision = 12, scale = 2)
+    private BigDecimal costo;
+
     @Column(name = "imagen", length = 255)
     private String imagen;
 

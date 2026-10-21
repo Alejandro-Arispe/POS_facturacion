@@ -264,6 +264,14 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    path: 'company/:id/settings/backup',
+    loadComponent: () =>
+      import('./features/companies/sections/settings/backup/backup').then(
+        (m) => m.CompanyBackup,
+      ),
+    canActivate: [authGuard],
+  },
+  {
     path: 'administrator/settings',
     component: Settings,
     canActivate: [authGuard],

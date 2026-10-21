@@ -325,6 +325,14 @@ public class ReportesService {
                 row.put("tipo_movimiento", mov.getTipoMovimiento() == null ? "" : mov.getTipoMovimiento().getNombre());
                 row.put("direccion", direccion);
                 row.put("producto", mov.getProducto() == null ? "" : mov.getProducto().getNombre());
+                row.put("id_producto", mov.getProducto() == null ? null : mov.getProducto().getIdProducto());
+                row.put("id_tipo_movimiento", mov.getTipoMovimiento() == null ? null : mov.getTipoMovimiento().getIdTipoMovimiento());
+                Integer idCategoria = null;
+                if (mov.getProducto() != null && mov.getProducto().getSubcategoria() != null
+                        && mov.getProducto().getSubcategoria().getCategoriaProducto() != null) {
+                    idCategoria = mov.getProducto().getSubcategoria().getCategoriaProducto().getIdCategoriaProducto();
+                }
+                row.put("id_categoria", idCategoria);
                 row.put("cantidad", mov.getCantidad());
                 rows.add(row);
             }
@@ -422,7 +430,7 @@ public class ReportesService {
     public Map<String, Object> movimientosCaja(Usuario usuario, Integer empresaId) {
         empresaAccess.requireEmpresa(usuario, empresaId);
         List<?> rows = entityManager.createQuery("""
-                select s.idSucursal, s.nombre, mc.idMovimientoCaja, mc.fecha, c.nombre, t.nombre, mc.concepto, mc.monto
+                select s.idSucursal, s.nombre, mc.idMovimientoCaja, mc.fecha, c.nombre, t.nombre, mc.concepto, mc.monto, c.idCaja, t.idTipoMovimientoCaja, cs.estado
                 from MovimientoCaja mc
                 join mc.cajaSesion cs
                 join cs.caja c
@@ -458,7 +466,10 @@ public class ReportesService {
             mov.put("id_movimiento_caja", row[2]);
             mov.put("hora", row[3] == null ? "" : row[3].toString());
             mov.put("caja", row[4]);
+            mov.put("id_caja", row[8]);
             mov.put("tipo", tipo);
+            mov.put("id_tipo_movimiento_caja", row[9]);
+            mov.put("estado_sesion", row[10]);
             mov.put("concepto", row[6]);
             mov.put("monto", round(monto));
             movimientos.add(mov);
@@ -612,22 +623,91 @@ public class ReportesService {
         empresaAccess.requireEmpresa(usuario, empresaId);
         ReporteDtos.RespuestaInterpretacion interpretacion = interpretar(empresaId, prompt);
         String id = interpretacion.getEspecificacion().getIdentificadorPlantilla();
+        if (id == null || id.isBlank()) {
+            id = "resumen_ventas";
+        }
+        Map<String, Object> filtros = interpretacion.getEspecificacion().getFiltros();
+        LocalDate[] rango = rangoPeriodo(filtros);
+        LocalDate desde = rango[0];
+        LocalDate hasta = rango[1];
         List<Map<String, Object>> filas = new ArrayList<>();
         Map<String, Object> agregados = new LinkedHashMap<>();
+        List<ReporteDtos.Columna> columnas = new ArrayList<>();
+        boolean filasObjeto = false;
         if (Boolean.TRUE.equals(interpretacion.getEspecificacion().getSolicitaAclaracion())) {
             // La IA necesita mas informacion: no se ejecuta ningun reporte, se devuelve la pregunta.
         } else if ("alertas_stock".equals(id)) {
             Map<String, Object> inventario = estadoInventario(usuario, empresaId);
             agregados.put("resumen", inventario.get("total_empresa"));
             filas.add(inventario);
+            filasObjeto = true;
         } else if ("movimientos_inventario".equals(id) || id.contains("inventario")) {
             filas.add(movimientosInventario(usuario, empresaId));
+            filasObjeto = true;
         } else if ("movimientos_caja".equals(id)) {
             filas.add(movimientosCaja(usuario, empresaId));
+            filasObjeto = true;
         } else if ("ventas_detalle".equals(id)) {
-            filas.add(detalleVentas(usuario, empresaId, LocalDate.now()));
+            filas.addAll(filasDetalleVentas(empresaId, desde, hasta));
+            columnas.add(columna("id_venta", "Venta", "entero"));
+            columnas.add(columna("fecha", "Fecha", "texto"));
+            columnas.add(columna("sucursal", "Sucursal", "texto"));
+            columnas.add(columna("cliente", "Cliente", "texto"));
+            columnas.add(columna("metodo_pago", "Metodo de pago", "texto"));
+            columnas.add(columna("total", "Total", "moneda"));
+            agregados.put("registros", filas.size());
+            agregarRango(agregados, desde, hasta);
+        } else if ("ventas_por_sucursal".equals(id)) {
+            filas.addAll(filasVentasPorSucursal(empresaId, desde, hasta));
+            columnas.add(columna("sucursal", "Sucursal", "texto"));
+            columnas.add(columna("total", "Total", "moneda"));
+            columnas.add(columna("cantidad", "Cantidad", "entero"));
+            agregados.put("total", round(sumarColumna(filas, "total")));
+            agregarRango(agregados, desde, hasta);
+        } else if ("productos_top".equals(id)) {
+            filas.addAll(filasTopProductos(empresaId, desde, hasta, topN(filtros)));
+            columnas.add(columna("producto", "Producto", "texto"));
+            columnas.add(columna("cantidad", "Cantidad", "entero"));
+            agregados.put("cantidad", aInt(sumarColumna(filas, "cantidad")));
+            agregarRango(agregados, desde, hasta);
+        } else if ("ventas_por_producto".equals(id)) {
+            filas.addAll(filasVentasPorProducto(empresaId, desde, hasta, topN(filtros)));
+            columnas.add(columna("producto", "Producto", "texto"));
+            columnas.add(columna("categoria_producto", "Categoria", "texto"));
+            columnas.add(columna("cantidad_vendida", "Cantidad vendida", "entero"));
+            columnas.add(columna("total_ventas", "Total", "moneda"));
+            columnas.add(columna("precio_promedio", "Precio promedio", "moneda"));
+            agregados.put("total_ventas", round(sumarColumna(filas, "total_ventas")));
+            agregarRango(agregados, desde, hasta);
+        } else if ("reparticion_metodos_pago".equals(id)) {
+            filas.addAll(filasMetodosPago(empresaId, desde, hasta));
+            columnas.add(columna("metodo_pago", "Metodo de pago", "texto"));
+            columnas.add(columna("cantidad_transacciones", "Transacciones", "entero"));
+            columnas.add(columna("total_ventas", "Total", "moneda"));
+            agregados.put("total_ventas", round(sumarColumna(filas, "total_ventas")));
+            agregarRango(agregados, desde, hasta);
+        } else if ("comparar_periodos".equals(id)) {
+            filas.addAll(filasCompararPeriodos(empresaId, desde, hasta));
+            columnas.add(columna("periodo", "Periodo", "texto"));
+            columnas.add(columna("cantidad_ventas", "Cantidad de ventas", "entero"));
+            columnas.add(columna("total_ventas", "Total de ventas", "moneda"));
+            columnas.add(columna("crecimiento_pct", "Crecimiento %", "decimal"));
+            if (!filas.isEmpty()) {
+                agregados.put("crecimiento_pct", filas.get(0).get("crecimiento_pct"));
+            }
+            agregarRango(agregados, desde, hasta);
         } else {
-            filas.add(resumenVentas(usuario, empresaId, LocalDate.now()));
+            filas.addAll(filasResumenVentasPeriodo(empresaId, desde, hasta));
+            columnas.add(columna("sucursal", "Sucursal", "texto"));
+            columnas.add(columna("cantidad_ventas", "Cantidad de ventas", "entero"));
+            columnas.add(columna("total_ventas", "Total de ventas", "moneda"));
+            columnas.add(columna("ticket_promedio", "Ticket promedio", "moneda"));
+            agregados.put("cantidad_ventas", aInt(sumarColumna(filas, "cantidad_ventas")));
+            agregados.put("total_ventas", round(sumarColumna(filas, "total_ventas")));
+            agregarRango(agregados, desde, hasta);
+        }
+        if (filasObjeto) {
+            columnas = new ArrayList<>(columnaResultado());
         }
         ReporteDtos.RespuestaReporte respuesta = new ReporteDtos.RespuestaReporte();
         respuesta.setIdReporte(UUID.randomUUID().toString());
@@ -639,11 +719,7 @@ public class ReportesService {
         respuesta.setAgregados(agregados);
         respuesta.setAdvertencias(interpretacion.getAdvertencias());
         respuesta.setFechaGeneracion(LocalDate.now());
-        ReporteDtos.Columna col = new ReporteDtos.Columna();
-        col.setNombre("resultado");
-        col.setEtiqueta("Resultado");
-        col.setTipo("objeto");
-        respuesta.setColumnas(List.of(col));
+        respuesta.setColumnas(columnas);
         return respuesta;
     }
 
@@ -758,6 +834,9 @@ public class ReportesService {
         if (filtros.getIdUsuario() != null) {
             jpql += " and v.idUsuario = :idUsuario";
         }
+        if (filtros.getIdMetodoPago() != null) {
+            jpql += " and exists (select vp.idVenta from VentaPago vp where vp.idVenta = v.idVenta and vp.idMetodoPago = :idMetodoPago)";
+        }
         TypedQuery<Venta> query = entityManager.createQuery(jpql, Venta.class)
                 .setParameter("idEmpresa", empresaId)
                 .setParameter("desde", desde)
@@ -771,16 +850,27 @@ public class ReportesService {
         if (filtros.getIdUsuario() != null) {
             query.setParameter("idUsuario", filtros.getIdUsuario());
         }
+        if (filtros.getIdMetodoPago() != null) {
+            query.setParameter("idMetodoPago", filtros.getIdMetodoPago());
+        }
         List<Venta> ventas = query.getResultList();
         List<Map<String, Object>> detalle = new ArrayList<>();
         double total = 0;
+        int productosVendidos = 0;
         for (Venta venta : ventas) {
+            List<DetalleVenta> lineas = detalles(venta.getIdVenta());
             if (filtros.getIdProducto() != null) {
-                boolean contiene = detalles(venta.getIdVenta()).stream()
+                boolean contiene = lineas.stream()
                         .anyMatch(d -> filtros.getIdProducto().equals(d.getIdProducto()));
                 if (!contiene) {
                     continue;
                 }
+            }
+            for (DetalleVenta linea : lineas) {
+                if (filtros.getIdProducto() != null && !filtros.getIdProducto().equals(linea.getIdProducto())) {
+                    continue;
+                }
+                productosVendidos += linea.getCantidad() == null ? 0 : linea.getCantidad();
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id_venta", venta.getIdVenta());
@@ -788,8 +878,8 @@ public class ReportesService {
             row.put("fecha_hora", venta.getFecha() == null ? "" : venta.getFecha().toString());
             row.put("personal", venta.getIdUsuario());
             row.put("tipo", venta.getTipoVenta() == null ? null : venta.getTipoVenta().getNombre());
-            row.put("metodo_pago", null);
-            row.put("productos", detalles(venta.getIdVenta()).size());
+            row.put("metodo_pago", nombresMetodoPago(venta.getIdVenta()));
+            row.put("productos", lineas.size());
             row.put("total", venta.getTotal() == null ? 0 : venta.getTotal().doubleValue());
             detalle.add(row);
             total += venta.getTotal() == null ? 0 : venta.getTotal().doubleValue();
@@ -807,7 +897,9 @@ public class ReportesService {
                 "personal", filtros.getIdUsuario() == null ? "todos" : String.valueOf(filtros.getIdUsuario())));
         response.put("resumen_gerencial", List.of(
                 Map.of("indicador", "cantidad_ventas", "valor", detalle.size()),
-                Map.of("indicador", "monto_total", "valor", round(total))));
+                Map.of("indicador", "ventas realizadas", "valor", detalle.size()),
+                Map.of("indicador", "monto_total", "valor", round(total)),
+                Map.of("indicador", "productos", "valor", productosVendidos)));
         response.put("detalle_analitico", detalle);
         return response;
     }
@@ -817,6 +909,49 @@ public class ReportesService {
         empresaAccess.requireEmpresa(usuario, empresaId);
         Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
         Map<String, Object> inventario = movimientosInventario(usuario, empresaId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sucursales = inventario.get("sucursales") instanceof List<?> lista
+                ? (List<Map<String, Object>>) lista
+                : new ArrayList<>();
+        List<Map<String, Object>> sucursalesFiltradas = new ArrayList<>();
+        int movimientosRestantes = 0;
+        for (Map<String, Object> sucursal : sucursales) {
+            if (!mismoId(sucursal.get("id_sucursal"), filtros.getIdSucursal())) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> movimientos = sucursal.get("movimientos") instanceof List<?> listaMovs
+                    ? (List<Map<String, Object>>) listaMovs
+                    : new ArrayList<>();
+            List<Map<String, Object>> filtrados = new ArrayList<>();
+            int entradas = 0;
+            int salidas = 0;
+            for (Map<String, Object> mov : movimientos) {
+                if (!fechaDentro(mov.get("fecha"), filtros.getFechaInicial(), filtros.getFechaFinal())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_producto"), filtros.getIdProducto())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_tipo_movimiento"), filtros.getIdTipoMovimiento())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_categoria"), filtros.getIdCategoriaProducto())) {
+                    continue;
+                }
+                filtrados.add(mov);
+                int cantidad = aInt(mov.get("cantidad"));
+                if ("ENTRADA".equalsIgnoreCase(String.valueOf(mov.get("direccion")))) {
+                    entradas += cantidad;
+                } else {
+                    salidas += cantidad;
+                }
+            }
+            sucursal.put("movimientos", filtrados);
+            sucursal.put("resumen_sucursal", Map.of("total_entradas", entradas, "total_salidas", salidas));
+            sucursalesFiltradas.add(sucursal);
+            movimientosRestantes += filtrados.size();
+        }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id_empresa", empresaId);
         response.put("empresa", empresa.getNombre());
@@ -827,8 +962,8 @@ public class ReportesService {
                 "tipo_movimiento", filtros.getIdTipoMovimiento() == null ? "todos" : String.valueOf(filtros.getIdTipoMovimiento()),
                 "producto", filtros.getIdProducto() == null ? "todos" : String.valueOf(filtros.getIdProducto()),
                 "categoria", filtros.getIdCategoriaProducto() == null ? "todas" : String.valueOf(filtros.getIdCategoriaProducto())));
-        response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", ((Map<?, ?>) inventario.get("total_empresa")))));
-        response.put("detalle_analitico", inventario.get("sucursales"));
+        response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", movimientosRestantes)));
+        response.put("detalle_analitico", sucursalesFiltradas);
         return response;
     }
 
@@ -837,6 +972,64 @@ public class ReportesService {
         empresaAccess.requireEmpresa(usuario, empresaId);
         Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
         Map<String, Object> data = movimientosCaja(usuario, empresaId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sucursales = data.get("sucursales") instanceof List<?> lista
+                ? (List<Map<String, Object>>) lista
+                : new ArrayList<>();
+        List<Map<String, Object>> sucursalesFiltradas = new ArrayList<>();
+        int totalMovs = 0;
+        double ingresos = 0;
+        double egresos = 0;
+        String estadoPedido = filtros.getEstadoSesion() == null ? "" : filtros.getEstadoSesion().trim();
+        for (Map<String, Object> sucursal : sucursales) {
+            if (!mismoId(sucursal.get("id_sucursal"), filtros.getIdSucursal())) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> movimientos = sucursal.get("movimientos") instanceof List<?> listaMovs
+                    ? (List<Map<String, Object>>) listaMovs
+                    : new ArrayList<>();
+            List<Map<String, Object>> filtrados = new ArrayList<>();
+            double ing = 0;
+            double egr = 0;
+            for (Map<String, Object> mov : movimientos) {
+                if (!mismoId(mov.get("id_caja"), filtros.getIdCaja())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_tipo_movimiento_caja"), filtros.getIdTipoMovimientoCaja())) {
+                    continue;
+                }
+                if (!estadoPedido.isEmpty()) {
+                    String estado = mov.get("estado_sesion") == null ? "" : String.valueOf(mov.get("estado_sesion")).trim();
+                    if (!estadoPedido.equalsIgnoreCase(estado)) {
+                        continue;
+                    }
+                }
+                if (!fechaDentro(mov.get("hora"), filtros.getFechaInicial(), filtros.getFechaFinal())) {
+                    continue;
+                }
+                filtrados.add(mov);
+                double monto = aDouble(mov.get("monto"));
+                if (String.valueOf(mov.get("tipo")).toUpperCase(Locale.ROOT).contains("INGRESO")) {
+                    ing += monto;
+                } else {
+                    egr += monto;
+                }
+            }
+            sucursal.put("movimientos", filtrados);
+            sucursal.put("resumen_sucursal", Map.of(
+                    "total_movimientos", filtrados.size(),
+                    "total_ingresos", round(ing),
+                    "total_egresos", round(egr)));
+            sucursalesFiltradas.add(sucursal);
+            totalMovs += filtrados.size();
+            ingresos += ing;
+            egresos += egr;
+        }
+        Map<String, Object> totales = new LinkedHashMap<>();
+        totales.put("total_movimientos", totalMovs);
+        totales.put("total_ingresos", round(ingresos));
+        totales.put("total_egresos", round(egresos));
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id_empresa", empresaId);
         response.put("empresa", empresa.getNombre());
@@ -847,8 +1040,8 @@ public class ReportesService {
                 "caja", filtros.getIdCaja() == null ? "todas" : String.valueOf(filtros.getIdCaja()),
                 "tipo_movimiento", filtros.getIdTipoMovimientoCaja() == null ? "todos" : String.valueOf(filtros.getIdTipoMovimientoCaja()),
                 "estado_sesion", filtros.getEstadoSesion() == null ? "todos" : filtros.getEstadoSesion()));
-        response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", data.get("total_empresa"))));
-        response.put("detalle_analitico", data.get("sucursales"));
+        response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", totales)));
+        response.put("detalle_analitico", sucursalesFiltradas);
         return response;
     }
 
@@ -890,5 +1083,359 @@ public class ReportesService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private ReporteDtos.Columna columna(String nombre, String etiqueta, String tipo) {
+        ReporteDtos.Columna col = new ReporteDtos.Columna();
+        col.setNombre(nombre);
+        col.setEtiqueta(etiqueta);
+        col.setTipo(tipo);
+        return col;
+    }
+
+    private List<ReporteDtos.Columna> columnaResultado() {
+        return List.of(columna("resultado", "Resultado", "objeto"));
+    }
+
+    private void agregarRango(Map<String, Object> agregados, LocalDate desde, LocalDate hasta) {
+        agregados.put("desde", desde.toString());
+        agregados.put("hasta", hasta.toString());
+    }
+
+    private LocalDate[] rangoPeriodo(Map<String, Object> filtros) {
+        LocalDate hoy = LocalDate.now();
+        String periodo = "";
+        if (filtros != null && filtros.get("periodo") != null) {
+            periodo = String.valueOf(filtros.get("periodo")).trim().toLowerCase(Locale.ROOT);
+            periodo = periodo.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u");
+        }
+        LocalDate desde = hoy;
+        if ("ultimos_7_dias".equals(periodo)) {
+            desde = hoy.minusDays(6);
+        } else if ("ultimos_30_dias".equals(periodo)) {
+            desde = hoy.minusDays(29);
+        } else if ("ultimos_90_dias".equals(periodo)) {
+            desde = hoy.minusDays(89);
+        } else if ("este_mes".equals(periodo)) {
+            desde = hoy.withDayOfMonth(1);
+        } else if ("este_anio".equals(periodo)) {
+            desde = hoy.withDayOfYear(1);
+        }
+        return new LocalDate[] { desde, hoy };
+    }
+
+    private int topN(Map<String, Object> filtros) {
+        if (filtros == null || filtros.get("top_n") == null) {
+            return 10;
+        }
+        int valor = aInt(filtros.get("top_n"));
+        if (valor <= 0) {
+            try {
+                valor = Integer.parseInt(String.valueOf(filtros.get("top_n")).trim());
+            } catch (NumberFormatException ex) {
+                valor = 10;
+            }
+        }
+        return valor <= 0 ? 10 : valor;
+    }
+
+    private boolean mismoId(Object valor, Integer esperado) {
+        if (esperado == null) {
+            return true;
+        }
+        if (!(valor instanceof Number numero)) {
+            return false;
+        }
+        return numero.intValue() == esperado.intValue();
+    }
+
+    private boolean fechaDentro(Object valor, LocalDate desde, LocalDate hasta) {
+        if (desde == null && hasta == null) {
+            return true;
+        }
+        if (valor == null) {
+            return false;
+        }
+        String texto = String.valueOf(valor);
+        if (texto.length() < 10) {
+            return false;
+        }
+        LocalDate dia;
+        try {
+            dia = LocalDate.parse(texto.substring(0, 10));
+        } catch (RuntimeException ex) {
+            return false;
+        }
+        if (desde != null && dia.isBefore(desde)) {
+            return false;
+        }
+        return hasta == null || !dia.isAfter(hasta);
+    }
+
+    private int aInt(Object valor) {
+        if (valor instanceof Number numero) {
+            return numero.intValue();
+        }
+        return 0;
+    }
+
+    private double aDouble(Object valor) {
+        if (valor instanceof Number numero) {
+            return numero.doubleValue();
+        }
+        return 0;
+    }
+
+    private double sumarColumna(List<Map<String, Object>> filas, String clave) {
+        double total = 0;
+        for (Map<String, Object> fila : filas) {
+            total += aDouble(fila.get(clave));
+        }
+        return total;
+    }
+
+    private String nombresMetodoPago(Integer idVenta) {
+        List<String> nombres = entityManager.createQuery("""
+                select distinct m.nombre
+                from VentaPago vp, MetodoPago m
+                where vp.idVenta = :idVenta
+                  and m.idMetodoPago = vp.idMetodoPago
+                order by m.nombre
+                """, String.class)
+                .setParameter("idVenta", idVenta)
+                .getResultList();
+        return String.join(", ", nombres);
+    }
+
+    private Map<Integer, Object[]> totalesPorSucursal(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        List<?> rows = entityManager.createQuery("""
+                select s.idSucursal, s.nombre, count(v), sum(v.total)
+                from Venta v, CajaSesion cs
+                join cs.caja c
+                join c.sucursal s
+                where v.idCajaSesion = cs.idCajaSesion
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and v.fecha between :desde and :hasta
+                  and v.estado <> 'ANULADA'
+                group by s.idSucursal, s.nombre
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .setParameter("desde", desde.atStartOfDay())
+                .setParameter("hasta", hasta.atTime(LocalTime.MAX))
+                .getResultList();
+        Map<Integer, Object[]> mapa = new LinkedHashMap<>();
+        for (Object raw : rows) {
+            Object[] row = (Object[]) raw;
+            mapa.put(aInt(row[0]), new Object[] { row[1], aInt(row[2]), aDouble(row[3]) });
+        }
+        return mapa;
+    }
+
+    private double[] totalesEmpresa(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        Object raw = entityManager.createQuery("""
+                select count(v), sum(v.total)
+                from Venta v, CajaSesion cs
+                join cs.caja c
+                join c.sucursal s
+                where v.idCajaSesion = cs.idCajaSesion
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and v.fecha between :desde and :hasta
+                  and v.estado <> 'ANULADA'
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .setParameter("desde", desde.atStartOfDay())
+                .setParameter("hasta", hasta.atTime(LocalTime.MAX))
+                .getSingleResult();
+        Object[] row = (Object[]) raw;
+        return new double[] { aInt(row[0]), aDouble(row[1]) };
+    }
+
+    private List<Map<String, Object>> filasResumenVentasPeriodo(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        Map<Integer, Object[]> porSucursal = totalesPorSucursal(empresaId, desde, hasta);
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Sucursal sucursal : sucursalRepository.findByEmpresa_IdEmpresa(empresaId)) {
+            Object[] vals = porSucursal.get(sucursal.getIdSucursal());
+            int cantidad = vals == null ? 0 : aInt(vals[1]);
+            double monto = vals == null ? 0 : aDouble(vals[2]);
+            Map<String, Object> fila = new LinkedHashMap<>();
+            fila.put("sucursal", sucursal.getNombre());
+            fila.put("cantidad_ventas", cantidad);
+            fila.put("total_ventas", round(monto));
+            fila.put("ticket_promedio", cantidad == 0 ? 0 : round(monto / cantidad));
+            filas.add(fila);
+        }
+        return filas;
+    }
+
+    private List<Map<String, Object>> filasVentasPorSucursal(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Object[] vals : totalesPorSucursal(empresaId, desde, hasta).values()) {
+            int cantidad = aInt(vals[1]);
+            if (cantidad <= 0) {
+                continue;
+            }
+            Map<String, Object> fila = new LinkedHashMap<>();
+            fila.put("sucursal", vals[0]);
+            fila.put("total", round(aDouble(vals[2])));
+            fila.put("cantidad", cantidad);
+            filas.add(fila);
+        }
+        filas.sort((a, b) -> Double.compare(aDouble(b.get("total")), aDouble(a.get("total"))));
+        return filas;
+    }
+
+    private List<Object[]> cantidadesPorProducto(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        List<?> rows = entityManager.createQuery("""
+                select p.nombre, sum(d.cantidad), sum(d.total)
+                from DetalleVenta d, Venta v, CajaSesion cs, Producto p
+                join cs.caja c
+                join c.sucursal s
+                where d.venta = v
+                  and v.idCajaSesion = cs.idCajaSesion
+                  and d.idProducto = p.idProducto
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and v.fecha between :desde and :hasta
+                  and v.estado <> 'ANULADA'
+                group by p.nombre
+                order by sum(d.cantidad) desc
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .setParameter("desde", desde.atStartOfDay())
+                .setParameter("hasta", hasta.atTime(LocalTime.MAX))
+                .getResultList();
+        List<Object[]> lista = new ArrayList<>();
+        for (Object raw : rows) {
+            lista.add((Object[]) raw);
+        }
+        return lista;
+    }
+
+    private Map<String, String> categoriaPorProducto(Integer empresaId) {
+        List<?> rows = entityManager.createQuery("""
+                select p.nombre, cat.nombre
+                from Producto p
+                join p.subcategoria sub
+                join sub.categoriaProducto cat
+                where p.idEmpresa = :idEmpresa
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .getResultList();
+        Map<String, String> mapa = new LinkedHashMap<>();
+        for (Object raw : rows) {
+            Object[] row = (Object[]) raw;
+            if (row[0] != null) {
+                mapa.put(String.valueOf(row[0]), row[1] == null ? "" : String.valueOf(row[1]));
+            }
+        }
+        return mapa;
+    }
+
+    private List<Map<String, Object>> filasTopProductos(Integer empresaId, LocalDate desde, LocalDate hasta, int limite) {
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Object[] row : cantidadesPorProducto(empresaId, desde, hasta)) {
+            if (filas.size() >= limite) {
+                break;
+            }
+            Map<String, Object> fila = new LinkedHashMap<>();
+            fila.put("producto", row[0]);
+            fila.put("cantidad", aInt(row[1]));
+            filas.add(fila);
+        }
+        return filas;
+    }
+
+    private List<Map<String, Object>> filasVentasPorProducto(Integer empresaId, LocalDate desde, LocalDate hasta, int limite) {
+        Map<String, String> categorias = categoriaPorProducto(empresaId);
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Object[] row : cantidadesPorProducto(empresaId, desde, hasta)) {
+            if (filas.size() >= limite) {
+                break;
+            }
+            int cantidad = aInt(row[1]);
+            double total = aDouble(row[2]);
+            String nombre = row[0] == null ? "" : String.valueOf(row[0]);
+            Map<String, Object> fila = new LinkedHashMap<>();
+            fila.put("producto", nombre);
+            fila.put("categoria_producto", categorias.getOrDefault(nombre, ""));
+            fila.put("cantidad_vendida", cantidad);
+            fila.put("total_ventas", round(total));
+            fila.put("precio_promedio", cantidad == 0 ? 0 : round(total / cantidad));
+            filas.add(fila);
+        }
+        return filas;
+    }
+
+    private List<Map<String, Object>> filasMetodosPago(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        List<?> rows = entityManager.createQuery("""
+                select m.nombre, count(vp), sum(vp.monto)
+                from VentaPago vp, MetodoPago m, Venta v, CajaSesion cs
+                join cs.caja c
+                join c.sucursal s
+                where vp.idMetodoPago = m.idMetodoPago
+                  and vp.idVenta = v.idVenta
+                  and v.idCajaSesion = cs.idCajaSesion
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and v.fecha between :desde and :hasta
+                  and v.estado <> 'ANULADA'
+                group by m.nombre
+                order by sum(vp.monto) desc
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .setParameter("desde", desde.atStartOfDay())
+                .setParameter("hasta", hasta.atTime(LocalTime.MAX))
+                .getResultList();
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Object raw : rows) {
+            Object[] row = (Object[]) raw;
+            Map<String, Object> fila = new LinkedHashMap<>();
+            fila.put("metodo_pago", row[0]);
+            fila.put("cantidad_transacciones", aInt(row[1]));
+            fila.put("total_ventas", round(aDouble(row[2])));
+            filas.add(fila);
+        }
+        return filas;
+    }
+
+    private List<Map<String, Object>> filasCompararPeriodos(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        long dias = Math.max(1, hasta.toEpochDay() - desde.toEpochDay() + 1);
+        LocalDate hastaAnterior = desde.minusDays(1);
+        LocalDate desdeAnterior = hastaAnterior.minusDays(dias - 1);
+        double[] actual = totalesEmpresa(empresaId, desde, hasta);
+        double[] anterior = totalesEmpresa(empresaId, desdeAnterior, hastaAnterior);
+        double crecimiento = anterior[1] == 0
+                ? (actual[1] == 0 ? 0 : 100)
+                : round((actual[1] - anterior[1]) / anterior[1] * 100.0);
+        List<Map<String, Object>> filas = new ArrayList<>();
+        filas.add(filaPeriodo("Periodo actual", desde, hasta, actual, crecimiento));
+        filas.add(filaPeriodo("Periodo anterior", desdeAnterior, hastaAnterior, anterior, 0));
+        return filas;
+    }
+
+    private Map<String, Object> filaPeriodo(String nombre, LocalDate desde, LocalDate hasta, double[] totales, double crecimiento) {
+        Map<String, Object> fila = new LinkedHashMap<>();
+        fila.put("periodo", nombre + " (" + desde + " / " + hasta + ")");
+        fila.put("cantidad_ventas", (int) totales[0]);
+        fila.put("total_ventas", round(totales[1]));
+        fila.put("crecimiento_pct", crecimiento);
+        return fila;
+    }
+
+    private List<Map<String, Object>> filasDetalleVentas(Integer empresaId, LocalDate desde, LocalDate hasta) {
+        LocalDateTime ini = desde.atStartOfDay();
+        LocalDateTime fin = hasta.atTime(LocalTime.MAX);
+        List<Map<String, Object>> filas = new ArrayList<>();
+        for (Sucursal sucursal : sucursalRepository.findByEmpresa_IdEmpresa(empresaId)) {
+            for (Venta venta : ventasDeSucursal(sucursal.getIdSucursal(), ini, fin)) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id_venta", venta.getIdVenta());
+                row.put("fecha", venta.getFecha() == null ? "" : venta.getFecha().toString());
+                row.put("sucursal", sucursal.getNombre());
+                row.put("cliente", venta.getIdCliente() == null ? "" : "Cliente " + venta.getIdCliente());
+                row.put("metodo_pago", nombresMetodoPago(venta.getIdVenta()));
+                row.put("total", venta.getTotal() == null ? 0 : round(venta.getTotal().doubleValue()));
+                filas.add(row);
+            }
+        }
+        return filas;
     }
 }

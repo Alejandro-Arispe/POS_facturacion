@@ -170,6 +170,11 @@
   align-items: center;
 }
 
+.row-actions .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (max-width: 980px) {
   .catalog-layout {
     grid-template-columns: 1fr;

@@ -114,18 +114,36 @@
                       [(ngModel)]="productoForm.unidad_medida"
                     />
                   </div>
-                  <div class="form-group">
-                    <label class="label" for="producto_precio">Precio</label>
-                    <input
-                      class="input"
-                      id="producto_precio"
-                      name="producto_precio"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      [(ngModel)]="productoForm.precio"
-                    />
-                  </div>
+                  @if (mostrarCampo('precio')) {
+                    <div class="form-group">
+                      <label class="label" for="producto_precio">Precio</label>
+                      <input
+                        class="input"
+                        id="producto_precio"
+                        name="producto_precio"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        [disabled]="soloLectura('precio')"
+                        [(ngModel)]="productoForm.precio"
+                      />
+                    </div>
+                  }
+                  @if (mostrarCampo('costo')) {
+                    <div class="form-group">
+                      <label class="label" for="producto_costo">Costo</label>
+                      <input
+                        class="input"
+                        id="producto_costo"
+                        name="producto_costo"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        [disabled]="soloLectura('costo')"
+                        [(ngModel)]="productoForm.costo"
+                      />
+                    </div>
+                  }
                 </div>
 
                 <div class="form-group">
@@ -172,7 +190,12 @@
                       <th>Codigo de barras</th>
                       <th>Subcategoria</th>
                       <th>Unidad</th>
-                      <th>Precio</th>
+                      @if (mostrarCampo('precio')) {
+                        <th>Precio</th>
+                      }
+                      @if (mostrarCampo('costo')) {
+                        <th>Costo</th>
+                      }
                       <th>Imagen</th>
                       <th>Acciones</th>
                     </tr>
@@ -184,7 +207,12 @@
                         <td>{{ product.codigo_barra || 'Sin codigo de barras' }}</td>
                         <td>{{ product.subcategoria ? product.subcategoria.nombre : 'Sin subcategoria' }}</td>
                         <td>{{ product.unidad_medida || 'Sin unidad' }}</td>
-                        <td>{{ product.precio | money }}</td>
+                        @if (mostrarCampo('precio')) {
+                          <td>{{ product.precio | money }}</td>
+                        }
+                        @if (mostrarCampo('costo')) {
+                          <td>{{ product.costo == null ? 'Sin costo' : (product.costo | money) }}</td>
+                        }
                         <td>
                           @if (product.imagen) {
                             <img class="product-image-thumb" [src]="product.imagen.startsWith('http') ? product.imagen : apiBaseUrl + product.imagen" [alt]="'Sin imagen'" loading="lazy" />
@@ -199,12 +227,26 @@
                               [routerLink]="['/company', companyId, 'product', product.id_producto, 'view-product']"
                               >Ver</a
                             >
-                            @if (hasPermission('PRODUCTO_EDITAR')) {
-                              <a
-                                class="btn btn-primary"
-                                [routerLink]="['/company', companyId, 'product', product.id_producto, 'edit-product']"
-                                >Editar</a
+                            @if (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) {
+                              @if (soloLectura('editar')) {
+                                <button class="btn btn-primary" type="button" disabled>Editar</button>
+                              } @else {
+                                <a
+                                  class="btn btn-primary"
+                                  [routerLink]="['/company', companyId, 'product', product.id_producto, 'edit-product']"
+                                  >Editar</a
+                                >
+                              }
+                            }
+                            @if (mostrarCampo('eliminar')) {
+                              <button
+                                class="btn btn-secondary"
+                                type="button"
+                                [disabled]="soloLectura('eliminar') || guardandoProducto"
+                                (click)="eliminarProducto(product)"
                               >
+                                Eliminar
+                              </button>
                             }
                           </div>
                         </td>

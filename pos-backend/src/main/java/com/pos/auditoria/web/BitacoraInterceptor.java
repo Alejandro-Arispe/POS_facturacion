@@ -81,7 +81,7 @@ public class BitacoraInterceptor implements HandlerInterceptor {
 				metodo,
 				ruta,
 				estado,
-				descripcion(accion, modulo, estado)));
+				descripcion(accion, ruta, idEmpresa(ruta), estado)));
 	}
 
 	private static Integer idEmpresa(String ruta) {
@@ -99,13 +99,26 @@ public class BitacoraInterceptor implements HandlerInterceptor {
 		return "GENERAL";
 	}
 
-	private static String descripcion(String accion, String modulo, int estado) {
+	private static String descripcion(String accion, String ruta, Integer idEmpresa, int estado) {
 		String verbo = switch (accion.replace("_FALLIDO", "")) {
-			case "CREAR" -> "Registro/creacion";
+			case "CREAR" -> "Creacion";
 			case "ELIMINAR" -> "Eliminacion";
 			default -> "Actualizacion";
 		};
-		return verbo + " en " + modulo.toLowerCase(Locale.ROOT)
-				+ (estado >= 400 ? " rechazada (HTTP " + estado + ")" : " realizada");
+		BitacoraService.RecursoRuta recurso = BitacoraService.recursoDesdeRuta(ruta);
+		String texto;
+		if (recurso.recurso() != null && recurso.idRecurso() != null) {
+			texto = verbo + " de " + recurso.recurso() + " " + recurso.idRecurso();
+			if (idEmpresa != null
+					&& !("empresa".equals(recurso.recurso()) && recurso.idRecurso().equals(String.valueOf(idEmpresa)))) {
+				texto += " en empresa " + idEmpresa;
+			}
+		} else {
+			texto = ruta;
+		}
+		if (estado >= 400) {
+			texto += " rechazada (HTTP " + estado + ")";
+		}
+		return texto;
 	}
 }

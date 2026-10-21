@@ -5,8 +5,11 @@ import { ActivatedRoute } from '@angular/router';
 import { Navbar } from '../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../shared/components/sidebar/sidebar';
 import {
+  CampoPrivilegio,
+  CampoProducto,
   CompanyPermissionCode,
   CompanyPermissionsService,
+  EstadoCampoProducto,
 } from '../../../../../core/services/company-permissions.service';
 import {
   CompanyService,
@@ -68,6 +71,12 @@ interface PermissionModule {
   actions: PermissionAction[];
 }
 
+interface CampoFormulario {
+  campo: CampoProducto;
+  etiqueta: string;
+  estado: EstadoCampoProducto;
+}
+
 interface RoleRow {
   id_rol: number;
   nombre: string;
@@ -100,6 +109,8 @@ export class Rols implements OnInit {
   protected roles: RoleRow[] = [];
   protected permissionModules: PermissionModule[] = [];
   protected editPermissionModules: PermissionModule[] = [];
+  protected camposAlta: CampoFormulario[] = this.camposIniciales();
+  protected camposEdicion: CampoFormulario[] = this.camposIniciales();
   protected cargandoPermisos = false;
   protected cargandoRoles = false;
   protected creandoRol = false;
@@ -181,13 +192,29 @@ export class Rols implements OnInit {
       })
       .subscribe({
         next: (response) => {
-          this.roles = [this.mapCreatedRoleFromApi(response, permisos), ...this.roles];
-          this.roleName = '';
-          this.roleDescription = '';
-          this.limpiarPermisos(this.permissionModules);
-          this.creandoRol = false;
-          this.activeTab = 'list';
-          this.cdr.detectChanges();
+          this.companyPermissionsService.guardarCamposRol(response.rol.id_rol, this.payloadCampos(this.camposAlta)).subscribe({
+            next: () => {
+              this.roles = [this.mapCreatedRoleFromApi(response, permisos), ...this.roles];
+              this.roleName = '';
+              this.roleDescription = '';
+              this.limpiarPermisos(this.permissionModules);
+              this.camposAlta = this.camposIniciales();
+              this.creandoRol = false;
+              this.activeTab = 'list';
+              this.cdr.detectChanges();
+            },
+            error: () => {
+              this.roles = [this.mapCreatedRoleFromApi(response, permisos), ...this.roles];
+              this.roleName = '';
+              this.roleDescription = '';
+              this.limpiarPermisos(this.permissionModules);
+              this.camposAlta = this.camposIniciales();
+              this.creandoRol = false;
+              this.activeTab = 'list';
+              this.errorRoles = 'El rol se creo, pero no se pudieron guardar los privilegios del formulario de producto.';
+              this.cdr.detectChanges();
+            },
+          });
         },
         error: () => {
           this.creandoRol = false;
@@ -210,7 +237,27 @@ export class Rols implements OnInit {
     this.editRoleDescription = role.descripcion;
     this.editRoleActive = role.activo;
     this.editPermissionModules = this.createPermissionModules();
+    this.camposEdicion = this.camposIniciales();
     this.activeTab = 'edit';
+
+    this.companyPermissionsService.obtenerCamposRol(role.id_rol).subscribe({
+      next: (campos) => {
+        if (this.editingRoleIndex !== index) {
+          return;
+        }
+
+        this.aplicarEstados(this.camposEdicion, campos);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        if (this.editingRoleIndex !== index) {
+          return;
+        }
+
+        this.errorRoles = 'No se pudieron cargar los privilegios del formulario de producto.';
+        this.cdr.detectChanges();
+      },
+    });
 
     this.companyService.getRoleById(role.id_rol).subscribe({
       next: (detail) => {
@@ -245,6 +292,7 @@ export class Rols implements OnInit {
     this.editRoleDescription = '';
     this.editRoleActive = true;
     this.editPermissionModules = this.createPermissionModules();
+    this.camposEdicion = this.camposIniciales();
     this.activeTab = 'list';
   }
 
@@ -277,24 +325,20 @@ export class Rols implements OnInit {
 
     this.companyService.actualizarRol(role.id_rol, payload).subscribe({
       next: (updatedRole) => {
-        const activePermissionIds = updatedRole.rol_permisos
-          .filter((rolPermiso) => rolPermiso.activo)
-          .map((rolPermiso) => rolPermiso.id_permiso);
-
-        this.roles = this.roles.map((currentRole) => {
-          if (currentRole.id_rol !== updatedRole.id_rol) {
-            return currentRole;
-          }
-
-          return {
-            ...this.mapRoleFromApi(updatedRole),
-            permisos: this.getPermissionLabelsByIds(activePermissionIds),
-          };
+        this.companyPermissionsService.guardarCamposRol(role.id_rol, this.payloadCampos(this.camposEdicion)).subscribe({
+          next: () => {
+            this.aplicarRolActualizado(updatedRole);
+            this.guardandoEdicion = false;
+            this.cancelarEdicion();
+            this.cdr.detectChanges();
+          },
+          error: () => {
+            this.aplicarRolActualizado(updatedRole);
+            this.guardandoEdicion = false;
+            this.errorRoles = 'El rol se actualizo, pero no se pudieron guardar los privilegios del formulario de producto.';
+            this.cdr.detectChanges();
+          },
         });
-
-        this.guardandoEdicion = false;
-        this.cancelarEdicion();
-        this.cdr.detectChanges();
       },
       error: () => {
         this.guardandoEdicion = false;
@@ -302,6 +346,47 @@ export class Rols implements OnInit {
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private aplicarRolActualizado(updatedRole: RoleDetailResponse): void {
+    const activePermissionIds = updatedRole.rol_permisos
+      .filter((rolPermiso) => rolPermiso.activo)
+      .map((rolPermiso) => rolPermiso.id_permiso);
+
+    this.roles = this.roles.map((currentRole) => {
+      if (currentRole.id_rol !== updatedRole.id_rol) {
+        return currentRole;
+      }
+
+      return {
+        ...this.mapRoleFromApi(updatedRole),
+        permisos: this.getPermissionLabelsByIds(activePermissionIds),
+      };
+    });
+  }
+
+  private camposIniciales(): CampoFormulario[] {
+    return [
+      { campo: 'costo', etiqueta: 'Costo', estado: 'EDITABLE' },
+      { campo: 'precio', etiqueta: 'Precio', estado: 'EDITABLE' },
+      { campo: 'editar', etiqueta: 'Botón editar', estado: 'EDITABLE' },
+      { campo: 'eliminar', etiqueta: 'Botón eliminar', estado: 'EDITABLE' },
+    ];
+  }
+
+  private payloadCampos(campos: CampoFormulario[]): CampoPrivilegio[] {
+    return campos.map((campo) => ({ campo: campo.campo, estado: campo.estado }));
+  }
+
+  private aplicarEstados(destino: CampoFormulario[], lista: CampoPrivilegio[]): void {
+    const porCampo = new Map(lista.map((item) => [item.campo, item.estado]));
+
+    for (const campo of destino) {
+      const estado = porCampo.get(campo.campo);
+      if (estado === 'EDITABLE' || estado === 'SOLO_LECTURA' || estado === 'OCULTO') {
+        campo.estado = estado;
+      }
+    }
   }
 
   private obtenerPermisosSeleccionados(modules = this.permissionModules): string[] {

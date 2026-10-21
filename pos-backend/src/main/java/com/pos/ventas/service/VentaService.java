@@ -244,6 +244,9 @@ public class VentaService {
         for (VentaDtos.DetalleCreate d : payload.getDetalles()) {
             Producto producto = productoRepository.findById(d.getIdProducto())
                     .orElseThrow(() -> ApiException.notFound("Producto " + d.getIdProducto() + " no encontrado."));
+            if (producto.getIdEmpresa() != null && !producto.getIdEmpresa().equals(idEmpresa)) {
+                throw ApiException.forbidden("El producto " + producto.getIdProducto() + " no pertenece a esta empresa.");
+            }
             DetalleVenta detalle = new DetalleVenta();
             detalle.setVenta(venta);
             detalle.setIdProducto(d.getIdProducto());

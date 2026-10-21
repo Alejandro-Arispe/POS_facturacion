@@ -1,4 +1,7 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { Observable, map, tap } from 'rxjs';
+
+import { ApiService } from './api.service';
 
 export const COMPANY_PERMISSION_CODES = [
   'EMPRESA_EDITAR',
@@ -47,6 +50,26 @@ export const COMPANY_PERMISSION_CODES = [
 
 export type CompanyPermissionCode = (typeof COMPANY_PERMISSION_CODES)[number];
 export type CompanyPermissionsByCode = Record<CompanyPermissionCode, boolean>;
+
+export type EstadoCampoProducto = 'EDITABLE' | 'SOLO_LECTURA' | 'OCULTO';
+export type CampoProducto = 'costo' | 'precio' | 'editar' | 'eliminar';
+export type CamposProducto = Record<CampoProducto, EstadoCampoProducto>;
+
+export interface CampoPrivilegio {
+  campo: CampoProducto;
+  estado: EstadoCampoProducto;
+}
+
+export const CAMPOS_PRODUCTO: readonly CampoProducto[] = ['costo', 'precio', 'editar', 'eliminar'];
+
+export function camposProductoPorDefecto(): CamposProducto {
+  return {
+    costo: 'EDITABLE',
+    precio: 'EDITABLE',
+    editar: 'EDITABLE',
+    eliminar: 'EDITABLE',
+  };
+}
 
 export interface CompanyPermissionModule {
   id_modulo: number;
@@ -165,9 +188,11 @@ export const EMPTY_COMPANY_PERMISSIONS: CompanyPermissionsByCode =
   providedIn: 'root',
 })
 export class CompanyPermissionsService {
+  private readonly apiService = inject(ApiService);
   private readonly permissionsSignal = signal<CompanyPermissionsByCode>(
     this.readStoredPermissions(),
   );
+  private readonly camposProductoSignal = signal<CamposProducto>(camposProductoPorDefecto());
   private readonly activeSubscriptionSignal = signal<CompanyActiveSubscription | null>(
     this.readStoredSubscription(),
   );
@@ -176,8 +201,31 @@ export class CompanyPermissionsService {
   );
 
   readonly permissions = this.permissionsSignal.asReadonly();
+  readonly camposProducto = this.camposProductoSignal.asReadonly();
   readonly activeSubscription = this.activeSubscriptionSignal.asReadonly();
   readonly planConfiguration = this.planConfigurationSignal.asReadonly();
+
+  obtenerMisCamposProducto(idEmpresa: string | number): Observable<CamposProducto> {
+    return this.apiService
+      .get<Partial<CamposProducto>>(`/api/roles/empresa/${idEmpresa}/mis-campos`)
+      .pipe(
+        map((data) => this.normalizarCamposProducto(data)),
+        tap((campos) => this.camposProductoSignal.set(campos)),
+      );
+  }
+
+  obtenerCamposRol(idRol: string | number, formulario = 'producto'): Observable<CampoPrivilegio[]> {
+    return this.apiService.get<CampoPrivilegio[]>(
+      `/api/roles/${idRol}/campos?formulario=${encodeURIComponent(formulario)}`,
+    );
+  }
+
+  guardarCamposRol(idRol: string | number, campos: CampoPrivilegio[]): Observable<CampoPrivilegio[]> {
+    return this.apiService.put<CampoPrivilegio[], { formulario: string; campos: CampoPrivilegio[] }>(
+      `/api/roles/${idRol}/campos`,
+      { formulario: 'producto', campos },
+    );
+  }
 
   hasPermission(permission: CompanyPermissionCode): boolean {
     const permissions = this.permissionsSignal();
@@ -231,9 +279,23 @@ export class CompanyPermissionsService {
     this.permissionsSignal.set(emptyPermissions);
     this.activeSubscriptionSignal.set(null);
     this.planConfigurationSignal.set({ ...EMPTY_PLAN_CONFIGURATION });
+    this.camposProductoSignal.set(camposProductoPorDefecto());
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(SUBSCRIPTION_STORAGE_KEY);
     localStorage.removeItem(PLAN_CONFIGURATION_STORAGE_KEY);
+  }
+
+  private normalizarCamposProducto(data: Partial<CamposProducto> | null | undefined): CamposProducto {
+    const campos = camposProductoPorDefecto();
+
+    for (const campo of CAMPOS_PRODUCTO) {
+      const estado = data?.[campo];
+      if (estado === 'EDITABLE' || estado === 'SOLO_LECTURA' || estado === 'OCULTO') {
+        campos[campo] = estado;
+      }
+    }
+
+    return campos;
   }
 
   private createEmptyPermissions(): CompanyPermissionsByCode {

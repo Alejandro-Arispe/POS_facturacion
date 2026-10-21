@@ -39,6 +39,14 @@ public class Bitacora {
 	@Column(name = "fecha", nullable = false)
 	private LocalDateTime fecha;
 
+	/** Reloj que envia el navegador en X-Client-Time. Nulo en filas anteriores a esta columna. */
+	@Column(name = "hora_cliente")
+	private LocalDateTime horaCliente;
+
+	/** Mismo instante que fecha. Nulo en filas anteriores a esta columna. */
+	@Column(name = "hora_servidor")
+	private LocalDateTime horaServidor;
+
 	@Column(name = "id_usuario")
 	private Integer idUsuario;
 
@@ -71,6 +79,12 @@ public class Bitacora {
 
 	@Column(name = "detalle", length = 500)
 	private String detalle;
+
+	@Column(name = "recurso", length = 80)
+	private String recurso;
+
+	@Column(name = "id_recurso", length = 40)
+	private String idRecurso;
 
 	@Column(name = "hash_anterior", nullable = false, length = 64)
 	private String hashAnterior;

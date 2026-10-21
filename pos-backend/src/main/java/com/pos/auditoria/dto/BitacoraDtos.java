@@ -25,6 +25,8 @@ public final class BitacoraDtos {
 	public record Registro(
 			Long idBitacora,
 			LocalDateTime fecha,
+			LocalDateTime horaCliente,
+			LocalDateTime horaServidor,
 			Integer idUsuario,
 			String emailUsuario,
 			Integer idEmpresa,
@@ -35,12 +37,16 @@ public final class BitacoraDtos {
 			Integer estadoHttp,
 			String ip,
 			String detalle,
+			String recurso,
+			String idRecurso,
 			String hash) {
 
 		public static Registro from(Bitacora b) {
 			return new Registro(
 					b.getIdBitacora(),
 					b.getFecha(),
+					b.getHoraCliente(),
+					b.getHoraServidor(),
 					b.getIdUsuario(),
 					b.getEmailUsuario(),
 					b.getIdEmpresa(),
@@ -51,6 +57,8 @@ public final class BitacoraDtos {
 					b.getEstadoHttp(),
 					b.getIp(),
 					b.getDetalle(),
+					b.getRecurso(),
+					b.getIdRecurso(),
 					b.getHash());
 		}
 	}

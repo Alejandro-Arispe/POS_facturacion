@@ -92,6 +92,7 @@ public final class ProductoDtos {
         private String descripcion;
         private String unidadMedida;
         private BigDecimal precio = BigDecimal.ZERO;
+        private BigDecimal costo;
         private Boolean activo = Boolean.TRUE;
     }
 
@@ -106,6 +107,7 @@ public final class ProductoDtos {
         private String descripcion;
         private String unidadMedida;
         private BigDecimal precio;
+        private BigDecimal costo;
         private Boolean activo;
     }
 
@@ -121,6 +123,7 @@ public final class ProductoDtos {
         private String descripcion;
         private String unidadMedida;
         private BigDecimal precio;
+        private BigDecimal costo;
         private String imagen;
         private Boolean activo;
         private SubcategoriaResponse subcategoria;

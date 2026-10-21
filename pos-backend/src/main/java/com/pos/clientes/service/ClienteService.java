@@ -100,11 +100,15 @@ public class ClienteService {
     @Transactional
     public ClienteDtos.ClienteResponse crearCliente(Usuario usuario, Integer idUsuario, ClienteDtos.ClienteCreate datos) {
         empresaAccess.requireUsuarioActivo(usuario);
+        requireMismaCuenta(usuario, idUsuario);
         usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> ApiException.notFound("Usuario no encontrado."));
         CategoriaCliente categoria = categoriaRepository.findById(datos.getIdCategoriaCliente())
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
         Cliente cliente = new Cliente();
+        if (categoria.getIdEmpresa() != null) {
+            empresaAccess.requireEmpresa(usuario, categoria.getIdEmpresa());
+        }
         cliente.setIdUsuario(idUsuario);
         cliente.setCategoriaCliente(categoria);
         cliente.setCodigoCliente(datos.getCodigoCliente());
@@ -117,12 +121,14 @@ public class ClienteService {
     @Transactional(readOnly = true)
     public List<ClienteDtos.ClienteResponse> listarClientes(Usuario usuario, Integer idUsuario) {
         empresaAccess.requireUsuarioActivo(usuario);
+        requireMismaCuenta(usuario, idUsuario);
         return clienteRepository.findByIdUsuario(idUsuario).stream().map(this::toCliente).toList();
     }
 
     @Transactional(readOnly = true)
     public ClienteDtos.ClienteResponse obtenerCliente(Usuario usuario, Integer idUsuario, Integer idCliente) {
         empresaAccess.requireUsuarioActivo(usuario);
+        requireMismaCuenta(usuario, idUsuario);
         return toCliente(clienteRepository.findByIdUsuarioAndIdCliente(idUsuario, idCliente)
                 .orElseThrow(() -> ApiException.notFound("Cliente no encontrado.")));
     }
@@ -131,6 +137,7 @@ public class ClienteService {
     public ClienteDtos.ClienteResponse actualizarCliente(
             Usuario usuario, Integer idUsuario, Integer idCliente, ClienteDtos.ClienteUpdate datos) {
         empresaAccess.requireUsuarioActivo(usuario);
+        requireMismaCuenta(usuario, idUsuario);
         Cliente cliente = clienteRepository.findByIdUsuarioAndIdCliente(idUsuario, idCliente)
                 .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
         applyUpdate(cliente, datos);
@@ -172,6 +179,13 @@ public class ClienteService {
             cliente.setActivo(datos.getActivo());
         }
         return toCliente(clienteRepository.save(cliente));
+    }
+
+    private void requireMismaCuenta(Usuario usuario, Integer idUsuario) {
+        if (usuario.esSuperAdmin() || usuario.getIdUsuario().equals(idUsuario)) {
+            return;
+        }
+        throw ApiException.forbidden("No puedes consultar clientes de otra cuenta.");
     }
 
     private void applyUpdate(Cliente cliente, ClienteDtos.ClienteUpdate datos) {

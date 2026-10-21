@@ -40,10 +40,18 @@
               <dt>Unidad de medida</dt>
               <dd>{{ producto.unidad_medida }}</dd>
             </div>
-            <div>
-              <dt>Precio</dt>
-              <dd>{{ producto.precio | money }}</dd>
-            </div>
+            @if (mostrarCampo('precio')) {
+              <div>
+                <dt>Precio</dt>
+                <dd>{{ producto.precio | money }}</dd>
+              </div>
+            }
+            @if (mostrarCampo('costo')) {
+              <div>
+                <dt>Costo</dt>
+                <dd>{{ producto.costo == null ? 'Sin costo' : (producto.costo | money) }}</dd>
+              </div>
+            }
             <div>
               <dt>Estado</dt>
               <dd>{{ producto.activo ? 'Activo' : 'Inactivo' }}</dd>
@@ -63,11 +71,27 @@
 
         <div class="view-actions">
           <a class="btn btn-secondary" [routerLink]="['/company', companyId, 'products']">Cerrar</a>
-          <a
-            class="btn btn-primary"
-            [routerLink]="['/company', companyId, 'product', productId, 'edit-product']"
-            >Editar</a
-          >
+          @if (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) {
+            @if (soloLectura('editar')) {
+              <button class="btn btn-primary" type="button" disabled>Editar</button>
+            } @else {
+              <a
+                class="btn btn-primary"
+                [routerLink]="['/company', companyId, 'product', productId, 'edit-product']"
+                >Editar</a
+              >
+            }
+          }
+          @if (mostrarCampo('eliminar')) {
+            <button
+              class="btn btn-secondary"
+              type="button"
+              [disabled]="soloLectura('eliminar') || eliminando"
+              (click)="eliminarProducto()"
+            >
+              {{ eliminando ? 'Eliminando...' : 'Eliminar' }}
+            </button>
+          }
         </div>
       </section>
     </section>

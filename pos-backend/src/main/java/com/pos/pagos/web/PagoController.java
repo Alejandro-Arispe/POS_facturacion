@@ -1,11 +1,14 @@
 package com.pos.pagos.web;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import com.pos.common.security.SecurityUtils;
 import com.pos.pagos.dto.PagoDtos;
@@ -32,7 +35,8 @@ public class PagoController {
     }
 
     @PostMapping("/webhook")
-    public Map<String, Object> webhook() {
-        return pagoService.webhook();
+    public Map<String, Object> webhook(HttpServletRequest request) throws java.io.IOException {
+        String body = new String(request.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        return pagoService.webhook(body, request.getHeader("Stripe-Signature"));
     }
 }

@@ -60,11 +60,33 @@ export class PreferencesService {
     });
   }
 
-  apply(config: { idioma?: string; moneda?: string; tema?: string; color_primario?: string | null }): void {
+  private readonly timeZoneSignal = signal('America/La_Paz');
+  readonly timeZone = this.timeZoneSignal.asReadonly();
+
+  apply(config: {
+    idioma?: string;
+    moneda?: string;
+    tema?: string;
+    color_primario?: string | null;
+    zona_horaria?: string | null;
+  }): void {
     if (config.idioma) this.i18n.setLanguage(config.idioma);
     if (config.tema) this.theme.setTheme(config.tema);
     if (config.moneda) this.setCurrency(config.moneda);
+    if (config.zona_horaria) this.timeZoneSignal.set(config.zona_horaria);
     this.applyAccent(config.color_primario || DEFAULT_ACCENT);
+  }
+
+  /** Fecha y hora en la zona configurada por la empresa. */
+  formatDateTime(value: Date | string | number | null | undefined): string {
+    if (value == null || value === '') return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat(this.i18n.locale(), {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: this.timeZoneSignal(),
+    }).format(date);
   }
 
   setCurrency(code: string): void {

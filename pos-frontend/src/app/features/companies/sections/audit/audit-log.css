@@ -34,6 +34,17 @@
   color: #dc2626;
 }
 
+.audit-recurso {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+  padding: var(--space-lg);
+}
+
+.audit-recurso h2 {
+  margin: 0;
+}
+
 @media (max-width: 900px) {
   .audit-layout {
     grid-template-columns: minmax(0, 1fr);

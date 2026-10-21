@@ -53,6 +53,11 @@
   margin-top: var(--space-md);
 }
 
+.view-actions .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .back-link {
   color: var(--color-primary-hover);
   font-weight: var(--font-weight-semibold);

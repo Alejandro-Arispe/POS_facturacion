@@ -111,6 +111,27 @@
                 </div>
               </div>
 
+              <div class="form-group">
+                <p class="label">Formulario de producto</p>
+                <div class="field-privileges">
+                  @for (campo of camposAlta; track campo.campo) {
+                    <div class="field-privilege">
+                      <label class="label" [for]="'campo-alta-' + campo.campo">{{ campo.etiqueta }}</label>
+                      <select
+                        class="input"
+                        [id]="'campo-alta-' + campo.campo"
+                        [name]="'campo-alta-' + campo.campo"
+                        [(ngModel)]="campo.estado"
+                      >
+                        <option value="EDITABLE">Visible y editable</option>
+                        <option value="SOLO_LECTURA">Visible solo lectura</option>
+                        <option value="OCULTO">Oculto</option>
+                      </select>
+                    </div>
+                  }
+                </div>
+              </div>
+
               <button
                 class="btn btn-primary submit-button"
                 type="submit"
@@ -211,6 +232,27 @@
                           }
                         </section>
                       }
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <div class="form-group">
+                <p class="label">Formulario de producto</p>
+                <div class="field-privileges">
+                  @for (campo of camposEdicion; track campo.campo) {
+                    <div class="field-privilege">
+                      <label class="label" [for]="'campo-edicion-' + campo.campo">{{ campo.etiqueta }}</label>
+                      <select
+                        class="input"
+                        [id]="'campo-edicion-' + campo.campo"
+                        [name]="'campo-edicion-' + campo.campo"
+                        [(ngModel)]="campo.estado"
+                      >
+                        <option value="EDITABLE">Visible y editable</option>
+                        <option value="SOLO_LECTURA">Visible solo lectura</option>
+                        <option value="OCULTO">Oculto</option>
+                      </select>
                     </div>
                   }
                 </div>

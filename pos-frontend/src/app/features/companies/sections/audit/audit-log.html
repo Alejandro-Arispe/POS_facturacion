@@ -10,7 +10,8 @@
         <h1 class="title-xl">Bitácora de auditoría</h1>
         <p class="text-muted">
           Historial inalterable de inicios de sesión y operaciones realizadas en la empresa: quién hizo qué, cuándo y
-          desde dónde.
+          desde dónde. La tabla de abajo indica el recurso tocado, su identificador y la hora del navegador junto a la
+          hora del servidor.
         </p>
       </header>
 
@@ -25,6 +26,40 @@
         [filters]="filters"
         (filtersChange)="onFiltersChange($event)"
       />
+
+      <section class="panel audit-recurso">
+        <h2 class="title-md">Recurso y relojes</h2>
+        <div class="table-shell">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Hora del cliente</th>
+                <th>Hora del servidor</th>
+                <th>Recurso</th>
+                <th>Id del recurso</th>
+              </tr>
+            </thead>
+            <tbody>
+              @if (loading) {
+                <tr><td colspan="5" class="text-muted">Cargando…</td></tr>
+              } @else if (items.length === 0) {
+                <tr><td colspan="5" class="text-muted">No hay registros para estos filtros.</td></tr>
+              } @else {
+                @for (item of items; track item.id_bitacora) {
+                  <tr>
+                    <td>{{ item.id_bitacora }}</td>
+                    <td>{{ formatHora(item.hora_cliente) }}</td>
+                    <td>{{ formatHora(item.hora_servidor) }}</td>
+                    <td>{{ item.recurso || '—' }}</td>
+                    <td>{{ item.id_recurso || '—' }}</td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
   </main>
 </div>

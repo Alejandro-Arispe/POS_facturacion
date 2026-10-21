@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.pos.common.access.EmpresaAccess;
+import com.pos.common.security.SecurityUtils;
 import com.pos.notifications.dto.NotificationDtos;
 import com.pos.notifications.service.NotificationService;
 
@@ -18,9 +20,11 @@ import com.pos.notifications.service.NotificationService;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final EmpresaAccess empresaAccess;
 
-    public NotificationController(NotificationService notificationService) {
+    public NotificationController(NotificationService notificationService, EmpresaAccess empresaAccess) {
         this.notificationService = notificationService;
+        this.empresaAccess = empresaAccess;
     }
 
     @PostMapping("/register-token")
@@ -30,6 +34,7 @@ public class NotificationController {
 
     @PostMapping("/send-alert")
     public Map<String, Object> sendAlert(@RequestBody NotificationDtos.SendAlertRequest request) {
+        empresaAccess.requireEmpresa(SecurityUtils.currentUser(), request.getIdEmpresa());
         return notificationService.enviarAlerta(
                 request.getIdEmpresa(), request.getTitulo(), request.getMensaje(), request.getPayload());
     }
@@ -38,6 +43,7 @@ public class NotificationController {
     public Map<String, Object> history(
             @PathVariable Integer idEmpresa,
             @RequestParam(name = "id_usuario", required = false) Integer idUsuario) {
+        empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
         return notificationService.history(idEmpresa, idUsuario);
     }
 

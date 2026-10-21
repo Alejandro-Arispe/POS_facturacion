@@ -6,16 +6,13 @@ import { AuthService } from '../services/auth.service';
 export const authTokenInterceptor: HttpInterceptorFn = (request, next) => {
   const authService = inject(AuthService);
   const token = authService.getAccessToken();
+  const headers: Record<string, string> = {
+    'X-Client-Time': new Date().toISOString(),
+  };
 
-  if (!token) {
-    return next(request);
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const authenticatedRequest = request.clone({
-    setHeaders: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return next(authenticatedRequest);
+  return next(request.clone({ setHeaders: headers }));
 };

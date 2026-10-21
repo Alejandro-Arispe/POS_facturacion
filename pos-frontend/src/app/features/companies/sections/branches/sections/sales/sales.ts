@@ -551,6 +551,66 @@ export class Sales implements OnInit {
     this.loadRecommendedProducts();
   }
 
+  protected scannerOpen = false;
+  private scanStream: MediaStream | null = null;
+  private scanTimer = 0;
+
+  protected async toggleScanner(): Promise<void> {
+    if (this.scannerOpen) {
+      this.stopScanner();
+      return;
+    }
+    const Detector = (window as unknown as { BarcodeDetector?: new (opts: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+    if (!Detector || !navigator.mediaDevices?.getUserMedia) {
+      this.registerError = 'Este navegador no lee códigos con la cámara. Usa Chrome o un lector USB.';
+      return;
+    }
+    this.scannerOpen = true;
+    this.registerError = '';
+    setTimeout(() => void this.startScanner(Detector), 50);
+  }
+
+  private async startScanner(Detector: new (opts: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> }): Promise<void> {
+    const video = document.getElementById('barcodeVideo') as HTMLVideoElement | null;
+    if (!video) {
+      this.stopScanner();
+      return;
+    }
+    try {
+      this.scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = this.scanStream;
+      await video.play();
+      const detector = new Detector({ formats: ['ean_13', 'ean_8', 'code_128', 'qr_code', 'upc_a'] });
+      this.scanTimer = window.setInterval(async () => {
+        try {
+          const codes = await detector.detect(video);
+          const value = codes[0]?.rawValue?.trim();
+          if (value) {
+            this.searchTerm = value;
+            this.stopScanner();
+            setTimeout(() => {
+              if (this.filteredProducts.length === 1) {
+                this.addProduct(this.filteredProducts[0]);
+              }
+            }, 50);
+          }
+        } catch {
+          // un frame ilegible no corta el escaneo
+        }
+      }, 400);
+    } catch {
+      this.registerError = 'No se pudo abrir la cámara.';
+      this.stopScanner();
+    }
+  }
+
+  private stopScanner(): void {
+    window.clearInterval(this.scanTimer);
+    this.scanStream?.getTracks().forEach((track) => track.stop());
+    this.scanStream = null;
+    this.scannerOpen = false;
+  }
+
   protected onSearchEnter(event: Event): void {
     event.preventDefault();
 

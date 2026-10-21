@@ -61,6 +61,10 @@ export class AssistantWidget {
         ),
         suggestions: this.faq,
       });
+      const hint = this.hintForRoute(this.router.url);
+      if (hint) {
+        this.messages.push({ from: 'bot', text: hint });
+      }
     }
   }
 
@@ -154,6 +158,25 @@ export class AssistantWidget {
     if (match) return match[1];
     const query = this.router.url.match(/companyId=(\d+)/);
     return query ? query[1] : '';
+  }
+
+  private hintForRoute(url: string): string {
+    if (url.includes('/sales')) {
+      return 'Estás en el punto de venta. Para cobrar, abre la caja, busca el producto y confirma la venta.';
+    }
+    if (url.includes('/product')) {
+      return 'Estás en productos. Desde aquí das de alta el catálogo, el precio y el costo.';
+    }
+    if (url.includes('/reports')) {
+      return 'Estás en reportes. Parametrizados filtran antes de generar; QBE arma las condiciones; Análisis usa el servicio de Python.';
+    }
+    if (url.includes('/audit')) {
+      return 'Estás en la bitácora. Cada alta, cambio o baja queda con la hora del servidor y la hora de tu equipo.';
+    }
+    if (url.includes('/settings')) {
+      return 'Estás en configuración. Aquí se cambia idioma, moneda, zona horaria, color y las copias de respaldo.';
+    }
+    return '';
   }
 
   private scrollToEnd(): void {

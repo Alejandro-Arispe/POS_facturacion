@@ -74,6 +74,7 @@ public class EmpresaProductoController {
             @RequestParam(value = "descripcion", required = false) String descripcion,
             @RequestParam("unidad_medida") String unidadMedida,
             @RequestParam(value = "precio", required = false) BigDecimal precio,
+            @RequestParam(value = "costo", required = false) BigDecimal costo,
             @RequestParam(value = "activo", required = false, defaultValue = "true") Boolean activo,
             @RequestParam(value = "imagen", required = false) MultipartFile imagen) {
         String path = null;
@@ -87,6 +88,7 @@ public class EmpresaProductoController {
         payload.setDescripcion(descripcion);
         payload.setUnidadMedida(unidadMedida);
         payload.setPrecio(precio == null ? BigDecimal.ZERO : precio);
+        payload.setCosto(costo);
         payload.setActivo(activo);
         return productoService.crearProducto(SecurityUtils.currentUser(), idEmpresa, payload, path);
     }
