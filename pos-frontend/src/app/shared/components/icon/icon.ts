@@ -36,6 +36,16 @@ import {
   LucideCircleUserRound,
   LucideArrowRight,
   LucideSlidersHorizontal,
+  LucidePlus,
+  LucideDownload,
+  LucideColumns3,
+  LucideArrowUpDown,
+  LucideChevronUp,
+  LucideChevronLeft,
+  LucideEllipsis,
+  LucideEye,
+  LucidePencil,
+  LucideTrash2,
 } from '@lucide/angular';
 
 const icons = {
@@ -74,6 +84,16 @@ const icons = {
   user: LucideCircleUserRound,
   arrow: LucideArrowRight,
   filters: LucideSlidersHorizontal,
+  plus: LucidePlus,
+  download: LucideDownload,
+  columns: LucideColumns3,
+  sort: LucideArrowUpDown,
+  up: LucideChevronUp,
+  left: LucideChevronLeft,
+  more: LucideEllipsis,
+  eye: LucideEye,
+  edit: LucidePencil,
+  trash: LucideTrash2,
 } as const;
 
 export type IconName = keyof typeof icons;
