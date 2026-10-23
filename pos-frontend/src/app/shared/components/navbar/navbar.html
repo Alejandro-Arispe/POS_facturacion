@@ -1,64 +1,183 @@
-<nav class="navbar glass-panel" aria-label="Navegacion principal">
-  <a class="brand" href="/" aria-label="Inicio POS">
-    <span class="brand-icon" aria-hidden="true">
-      <svg viewBox="0 0 48 48" role="img">
-        <rect x="8" y="7" width="32" height="34" rx="7" />
-        <path d="M15 17h18" />
-        <path d="M15 24h18" />
-        <path d="M16 32h6" />
-        <path d="M27 32h5" />
-        <circle cx="35" cy="13" r="5" />
-      </svg>
-    </span>
-    <span>
-      <strong>POS</strong>
-      <small>{{ 'Punto de venta' | t }}</small>
-    </span>
-  </a>
+<nav
+  class="workspace-navbar"
+  [class.has-workspace]="workspaceId !== null"
+  aria-label="Navegación principal"
+>
+  <div class="flex min-w-0 items-center gap-3">
+    @if (workspaceId !== null) {
+      <button
+        type="button"
+        data-sidebar-trigger
+        class="icon-button lg:hidden"
+        aria-label="Abrir menú de navegación"
+        aria-controls="workspace-sidebar"
+        [attr.aria-expanded]="sidebarState.mobileOpen()"
+        (click)="sidebarState.toggleMobile()"
+      >
+        <app-icon name="menu" />
+      </button>
+      <span class="truncate text-base font-bold tracking-tight text-ink sm:text-xl">{{
+        pageTitle | t
+      }}</span>
+    } @else {
+      <a routerLink="/" class="flex items-center gap-3" aria-label="Inicio POS">
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+          <circle
+            cx="20"
+            cy="20"
+            r="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="9"
+            stroke-dasharray="65 23"
+            transform="rotate(-90 20 20)"
+          />
+          <circle
+            cx="20"
+            cy="20"
+            r="14"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="9"
+            stroke-dasharray="17 71"
+            opacity=".15"
+            transform="rotate(-7 20 20)"
+          />
+        </svg>
+        <span
+          ><strong class="block text-lg font-extrabold text-ink">POS</strong
+          ><span class="hidden text-xs text-muted sm:block">{{ 'Punto de venta' | t }}</span></span
+        >
+      </a>
+    }
+  </div>
 
-  <div class="nav-actions">
-    <select
-      class="lang-select"
-      [attr.aria-label]="'Idioma' | t"
-      (change)="i18n.setLanguage($any($event.target).value)"
-    >
-      @for (language of languages; track language.code) {
-        <option [value]="language.code" [selected]="language.code === i18n.language()">{{ language.code.toUpperCase() }}</option>
-      }
-    </select>
+  <div class="flex shrink-0 items-center gap-2 sm:gap-4">
+    @if (workspaceId !== null) {
+      <div class="relative hidden md:block">
+        <label
+          class="flex h-10 w-56 items-center gap-2 rounded-lg border border-line bg-surface px-3 xl:w-64"
+        >
+          <app-icon name="search" [size]="18" class="text-muted" />
+          <input
+            type="search"
+            class="min-w-0 flex-1 border-0 bg-transparent text-xs text-ink outline-none placeholder:text-muted"
+            placeholder="Buscar en el menú…"
+            aria-label="Buscar en el menú"
+            [value]="searchTerm()"
+            (input)="searchTerm.set($any($event.target).value); searchOpen.set(true)"
+            (focus)="searchOpen.set(true)"
+          />
+        </label>
+        @if (searchOpen()) {
+          <div
+            class="navbar-popover absolute right-0 top-12 w-72 p-2"
+            aria-label="Resultados de navegación"
+          >
+            @for (result of searchResults; track result.label) {
+              <a
+                [routerLink]="result.commands"
+                class="flex min-h-10 items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-brand-soft hover:text-brand"
+                >{{ result.label | t }}<app-icon name="right" [size]="15"
+              /></a>
+            } @empty {
+              <p class="p-3 text-sm text-muted">No hay módulos que coincidan.</p>
+            }
+          </div>
+        }
+      </div>
+    }
+    <label class="flex items-center gap-1 text-xs font-semibold text-muted">
+      <app-icon name="globe" [size]="16" class="hidden sm:inline-flex" />
+      <select
+        class="h-10 max-w-16 border-0 bg-transparent px-1 text-xs text-ink"
+        [attr.aria-label]="'Idioma' | t"
+        (change)="i18n.setLanguage($any($event.target).value)"
+      >
+        @for (language of languages; track language.code) {
+          <option [value]="language.code" [selected]="language.code === i18n.language()">
+            {{ language.code.toUpperCase() }}
+          </option>
+        }
+      </select>
+    </label>
     @if (authService.isAuthenticated()) {
       @if (canViewAlerts()) {
-        <div class="notifications-wrapper">
-          <button class="btn btn-icon notifications-button" aria-label="Notificaciones" type="button" (click)="toggleNotifs()">
-            <span class="notifications-icon" aria-hidden="true">🔔</span>
+        <div class="relative">
+          <button
+            class="icon-button relative"
+            aria-label="Notificaciones"
+            [attr.aria-expanded]="notifsOpen()"
+            aria-controls="notifications-panel"
+            type="button"
+            (click)="profileOpen.set(false); toggleNotifs()"
+          >
+            <app-icon name="bell" [size]="19" />
             @if (unreadNotifications() > 0) {
-              <span class="notifications-badge">{{ unreadNotifications() }}</span>
+              <span class="notification-count">{{
+                unreadNotifications() > 99 ? '99+' : unreadNotifications()
+              }}</span>
             }
           </button>
-          <div class="notifications-dropdown" [class.open]="notifsOpen()">
+          <div id="notifications-panel" class="notifications-dropdown" [hidden]="!notifsOpen()">
             <app-notification-center
               (closeRequested)="closeNotifs()"
               (unreadCountChange)="updateUnreadNotifications($event)"
               (incomingNotification)="actualizarAlertaEmergente($event)"
               (detailRequested)="abrirDetalleAlerta($event)"
-            ></app-notification-center>
+            />
           </div>
         </div>
       }
-      <button class="btn btn-danger" type="button" (click)="cerrarSesion()">{{ 'Cerrar sesion' | t }}</button>
+      <div class="relative border-l border-line pl-2 sm:pl-4">
+        <button
+          id="account-menu-trigger"
+          class="flex min-h-10 items-center gap-2 rounded-lg text-left"
+          type="button"
+          aria-label="Opciones de mi cuenta"
+          [attr.aria-expanded]="profileOpen()"
+          aria-controls="account-menu"
+          (click)="closeNotifs(); profileOpen.set(!profileOpen())"
+        >
+          <span
+            class="flex size-9 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand"
+            >{{ accountInitials }}</span
+          >
+          <span class="hidden xl:block"
+            ><strong class="block text-xs font-semibold text-ink">Mi cuenta</strong
+            ><span class="block text-[11px] text-muted">Sesión activa</span></span
+          >
+          <app-icon name="down" [size]="14" class="hidden text-muted sm:inline-flex" />
+        </button>
+        @if (profileOpen()) {
+          <div id="account-menu" class="navbar-popover absolute right-0 top-14 w-64 p-2">
+            <p class="truncate border-b border-line px-3 pb-3 pt-2 text-xs text-muted">
+              {{ accountLabel }}
+            </p>
+            <a
+              routerLink="/my-companies"
+              class="flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-brand-soft hover:text-brand"
+              ><app-icon name="building" [size]="17" />{{ 'Mis empresas' | t }}</a
+            >
+            <button
+              type="button"
+              class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
+              (click)="cerrarSesion()"
+            >
+              <app-icon name="logout" [size]="17" />{{ 'Cerrar sesion' | t }}
+            </button>
+          </div>
+        }
+      </div>
     } @else {
-      <a class="btn btn-secondary" routerLink="/register"> {{ 'Registrar' | t }} </a>
-      <a class="btn btn-primary login-trigger" routerLink="/login">{{ 'Iniciar sesion' | t }}</a>
+      <a class="btn btn-secondary hidden sm:inline-flex" routerLink="/register">{{
+        'Registrar' | t
+      }}</a>
+      <a class="btn btn-primary" routerLink="/login">{{ 'Iniciar sesion' | t }}</a>
     }
   </div>
 </nav>
-
 @if (canViewAlerts()) {
-  <app-notification-toast (detailRequested)="abrirDetalleAlerta($event)"></app-notification-toast>
-  <app-notification-detail-modal
-    [detail]="activeDetail"
-    (closeRequested)="cerrarDetalleAlerta()"
-  ></app-notification-detail-modal>
+  <app-notification-toast (detailRequested)="abrirDetalleAlerta($event)" />
+  <app-notification-detail-modal [detail]="activeDetail" (closeRequested)="cerrarDetalleAlerta()" />
 }
-
-

@@ -1,201 +1,62 @@
-.navbar {
+.workspace-navbar {
   position: fixed;
-  top: var(--space-md);
-  left: 50%;
-  width: min(var(--content-max-width), calc(100vw - (var(--space-lg) * 2)));
-  transform: translateX(-50%);
-  z-index: 10;
+  inset: 0 0 auto;
+  z-index: 40;
   display: flex;
+  height: var(--header-height);
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-md);
-  padding: 12px var(--space-md);
-  border-radius: 0;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.brand-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  border-radius: 0;
-  background: var(--color-primary);
-  color: white;
-  box-shadow: var(--shadow-sm);
-}
-
-.brand-icon svg {
-  width: 31px;
-  height: 31px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 3;
-}
-
-.brand strong,
-.brand small {
-  display: block;
-}
-
-.brand strong {
-  font-size: var(--font-size-lg);
-  line-height: 1;
-  color: var(--color-text-title);
-}
-
-.brand small {
-  color: var(--color-text-soft);
-  font-size: var(--font-size-xs);
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.login-menu {
-  position: relative;
-}
-
-.notifications-wrapper {
-  position: relative;
-  overflow: visible;
-}
-
-.notifications-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: visible;
-  background: var(--color-surface-hover);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  border-radius: 0;
-  width: 42px;
-  height: 42px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.notifications-button:hover {
+  gap: 16px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-solid);
 }
-
-.notifications-icon {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.workspace-navbar.has-workspace {
+  left: var(--sidebar-width);
 }
-
-.notifications-badge {
-  position: absolute;
-  top: 4px;
-  right: 8px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: #d32f2f;
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  box-shadow: 0 2px 6px rgba(211, 47, 47, 0.35);
-  transform: translate(0, 0);
+.navbar-popover {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-solid);
+  box-shadow: var(--shadow-lg);
 }
-
 .notifications-dropdown {
   position: absolute;
   right: 0;
-  top: calc(100% + 8px);
-  z-index: 50;
-  width: min(620px, calc(100vw - 24px));
-  display: none;
+  top: calc(100% + 16px);
+  width: min(620px, calc(100vw - 32px));
 }
-
-.notifications-dropdown.open {
-  display: block;
-}
-
-.login-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.login-dropdown {
+.notification-count {
   position: absolute;
-  top: calc(100% + var(--space-sm));
-  right: 0;
+  right: -4px;
+  top: -5px;
   display: grid;
-  min-width: 180px;
-  padding: var(--space-sm);
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  border-radius: 8px;
+  padding: 0 4px;
+  background: #bd2f3c;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
 }
-
-.login-dropdown a {
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  font-weight: var(--font-weight-medium);
-  padding: 10px 12px;
-}
-
-.login-dropdown a:hover {
-  background: var(--color-surface-2);
-}
-
-@media (max-width: 640px) {
-  .navbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .nav-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .login-menu,
-  .login-trigger {
-    width: 100%;
-  }
-
-  .login-trigger {
-    justify-content: center;
-  }
-
-  .login-dropdown {
+@media (max-width: 1023px) {
+  .workspace-navbar.has-workspace {
     left: 0;
-    right: 0;
   }
-
-  .nav-actions .btn:only-child {
-    grid-column: 1 / -1;
+  .workspace-navbar {
+    padding: 0 24px;
   }
 }
-
-.lang-select {
-  min-height: 38px;
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-solid);
-  color: var(--color-text);
-  font-weight: 600;
-  cursor: pointer;
+@media (max-width: 639px) {
+  .workspace-navbar {
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .notifications-dropdown {
+    position: fixed;
+    top: 68px;
+    right: 12px;
+  }
 }

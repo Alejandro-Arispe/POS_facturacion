@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnInit, inject } from '@angular/core';
 import { MoneyPipe } from '../../../../../../../shared/pipes/money.pipe';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -21,6 +21,15 @@ import {
 import { Navbar } from '../../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../../shared/components/sidebar/sidebar';
 import { environments } from '../../../../../../../environments/environments';
+import { Icon } from '../../../../../../../shared/components/icon/icon';
+import {
+  CatalogColumn,
+  CatalogQuery,
+  ColumnKey,
+  catalogCsv,
+  pageNumbers,
+  queryProducts,
+} from './catalog-table';
 
 type ProductoConCosto = Producto & { costo?: number | null };
 type ProductoAlta = CrearProductoRequest & { costo: number | null };
@@ -28,7 +37,7 @@ type ProductoAlta = CrearProductoRequest & { costo: number | null };
 @Component({
   selector: 'app-productos-catalog',
   standalone: true,
-  imports: [MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar],
+  imports: [MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon],
   templateUrl: './my-catalog.html',
   styleUrl: './my-catalog.css',
 })
@@ -42,7 +51,7 @@ export class ProductosPanel implements OnInit {
 
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
   protected companyName = 'Empresa';
-  protected activeTab: 'register' | 'list' = this.hasPermission('PRODUCTO_CREAR') ? 'register' : 'list';
+  protected activeTab: 'register' | 'list' = 'list';
   protected readonly apiBaseUrl = environments.apiBaseUrl;
 
   protected readonly productoForm: ProductoAlta = {
@@ -68,6 +77,229 @@ export class ProductosPanel implements OnInit {
   protected mensajeGeneral = '';
   protected imagenProductoSeleccionada: File | null = null;
 
+  protected cargandoProductos = false;
+  protected errorCargaProductos = '';
+  protected search = '';
+  protected status: CatalogQuery['status'] = 'all';
+  protected subcategory = '';
+  protected sortKey: ColumnKey = 'nombre';
+  protected sortDirection: 'asc' | 'desc' = 'asc';
+  protected filtersOpen = false;
+  protected columnsOpen = false;
+  protected page = 1;
+  protected pageSize = 8;
+  protected readonly pageSizes = [8, 16, 24, 50];
+  protected readonly selectedIds = new Set<number>();
+  protected readonly failedImages = new Set<number>();
+  protected activeProduct: ProductoConCosto | null = null;
+  protected actionPosition = { top: 0, left: 0 };
+  protected readonly columnVisibility: Record<ColumnKey, boolean> = {
+    id_producto: true,
+    nombre: true,
+    codigo_barra: false,
+    subcategoria: true,
+    unidad_medida: true,
+    precio: true,
+    costo: true,
+    activo: true,
+  };
+
+  private readonly columns: CatalogColumn[] = [
+    { key: 'id_producto', label: 'ID' },
+    { key: 'nombre', label: 'Producto' },
+    { key: 'codigo_barra', label: 'Código de barras' },
+    { key: 'subcategoria', label: 'Subcategoría' },
+    { key: 'unidad_medida', label: 'Unidad' },
+    { key: 'precio', label: 'Precio' },
+    { key: 'costo', label: 'Costo' },
+    { key: 'activo', label: 'Estado' },
+  ];
+
+  protected get availableColumns(): CatalogColumn[] {
+    return this.columns.filter(
+      (column) =>
+        (column.key !== 'precio' && column.key !== 'costo') || this.mostrarCampo(column.key),
+    );
+  }
+
+  protected get visibleColumns(): CatalogColumn[] {
+    return this.availableColumns.filter((column) => this.columnVisibility[column.key]);
+  }
+
+  protected get filteredProducts(): ProductoConCosto[] {
+    return queryProducts(this.productos, {
+      search: this.search,
+      status: this.status,
+      subcategory: this.subcategory,
+      sort: this.sortKey,
+      direction: this.sortDirection,
+    });
+  }
+
+  protected get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredProducts.length / this.pageSize));
+  }
+  protected get currentPage(): number {
+    return Math.min(this.page, this.totalPages);
+  }
+  protected get pageProducts(): ProductoConCosto[] {
+    return this.filteredProducts.slice(
+      (this.currentPage - 1) * this.pageSize,
+      this.currentPage * this.pageSize,
+    );
+  }
+  protected get pagination(): Array<number | '…'> {
+    return pageNumbers(this.currentPage, this.totalPages);
+  }
+  protected get firstRecord(): number {
+    return this.filteredProducts.length ? (this.currentPage - 1) * this.pageSize + 1 : 0;
+  }
+  protected get lastRecord(): number {
+    return Math.min(this.currentPage * this.pageSize, this.filteredProducts.length);
+  }
+  protected get activeFilterCount(): number {
+    return Number(this.status !== 'all') + Number(Boolean(this.subcategory));
+  }
+  protected get hasFilters(): boolean {
+    return Boolean(this.search.trim() || this.activeFilterCount);
+  }
+  protected get allPageSelected(): boolean {
+    return (
+      this.pageProducts.length > 0 &&
+      this.pageProducts.every((product) => this.selectedIds.has(product.id_producto))
+    );
+  }
+  protected get somePageSelected(): boolean {
+    return (
+      !this.allPageSelected &&
+      this.pageProducts.some((product) => this.selectedIds.has(product.id_producto))
+    );
+  }
+
+  protected updateQuery(): void {
+    this.page = 1;
+    this.selectedIds.clear();
+    this.activeProduct = null;
+  }
+
+  protected clearFilters(): void {
+    this.search = '';
+    this.status = 'all';
+    this.subcategory = '';
+    this.updateQuery();
+  }
+
+  protected sortBy(key: ColumnKey): void {
+    if (this.sortKey === key) this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    else {
+      this.sortKey = key;
+      this.sortDirection = 'asc';
+    }
+    this.page = 1;
+  }
+
+  protected changePage(value: number | '…'): void {
+    if (typeof value === 'number' && value >= 1 && value <= this.totalPages) {
+      this.page = value;
+      this.activeProduct = null;
+    }
+  }
+
+  protected changePageSize(value: number): void {
+    if (this.pageSizes.includes(Number(value))) {
+      this.pageSize = Number(value);
+      this.page = 1;
+    }
+  }
+
+  protected toggleColumn(key: ColumnKey): void {
+    if (key !== 'nombre') this.columnVisibility[key] = !this.columnVisibility[key];
+  }
+
+  protected toggleProduct(id: number): void {
+    if (this.selectedIds.has(id)) this.selectedIds.delete(id);
+    else this.selectedIds.add(id);
+  }
+
+  protected togglePageSelection(): void {
+    const remove = this.allPageSelected;
+    for (const product of this.pageProducts) {
+      if (remove) this.selectedIds.delete(product.id_producto);
+      else this.selectedIds.add(product.id_producto);
+    }
+  }
+
+  protected toggleActions(product: ProductoConCosto, event: MouseEvent): void {
+    if (this.activeProduct?.id_producto === product.id_producto) {
+      this.activeProduct = null;
+      return;
+    }
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.actionPosition = {
+      left: Math.max(8, Math.min(rect.right - 184, window.innerWidth - 192)),
+      top: window.innerHeight - rect.bottom < 150 ? Math.max(8, rect.top - 144) : rect.bottom + 6,
+    };
+    this.activeProduct = product;
+    this.columnsOpen = false;
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>('#product-actions a, #product-actions button:not(:disabled)')
+        ?.focus(),
+    );
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected closeOutside(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest('[data-product-actions]')) this.activeProduct = null;
+    if (!target?.closest('[data-column-picker]')) this.columnsOpen = false;
+  }
+
+  @HostListener('document:keydown.escape')
+  protected closeMenus(): void {
+    if (this.activeProduct)
+      document.getElementById('product-action-' + this.activeProduct.id_producto)?.focus();
+    else if (this.columnsOpen) document.getElementById('column-picker-trigger')?.focus();
+    this.activeProduct = null;
+    this.columnsOpen = false;
+  }
+
+  @HostListener('window:resize')
+  @HostListener('window:scroll')
+  protected closeActions(): void {
+    this.activeProduct = null;
+  }
+
+  protected imageUrl(product: ProductoConCosto): string {
+    const path = product.imagen ?? '';
+    return /^https?:\/\//i.test(path)
+      ? path
+      : this.apiBaseUrl.replace(/\/$/, '') + '/' + path.replace(/^\//, '');
+  }
+
+  protected exportProducts(): void {
+    if (!this.camposCargados || this.cargandoProductos || this.cargandoDatos) return;
+    const rows = this.filteredProducts.filter(
+      (product) => !this.selectedIds.size || this.selectedIds.has(product.id_producto),
+    );
+    if (!rows.length) return;
+    const blob = new Blob([catalogCsv(rows, this.visibleColumns)], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'productos-empresa-' + this.companyId + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  protected reloadProducts(): void {
+    this.cargarProductos();
+  }
+
   ngOnInit(): void {
     this.cargarNombreEmpresa();
     this.cargarCamposProducto();
@@ -92,6 +324,8 @@ export class ProductosPanel implements OnInit {
     }
 
     this.activeTab = tab;
+    this.activeProduct = null;
+    this.columnsOpen = false;
     this.limpiarMensajes();
 
     if (tab === 'list') {
@@ -119,10 +353,14 @@ export class ProductosPanel implements OnInit {
       nombre: this.productoForm.nombre.trim(),
       descripcion: this.productoForm.descripcion?.trim() || '',
       unidad_medida: this.productoForm.unidad_medida.trim(),
-      precio: this.estadoCampo('precio') === 'EDITABLE'
-        ? Math.round(Number(this.productoForm.precio) * 100) / 100
-        : 0,
-      costo: this.estadoCampo('costo') === 'EDITABLE' ? this.normalizarCosto(this.productoForm.costo) : null,
+      precio:
+        this.estadoCampo('precio') === 'EDITABLE'
+          ? Math.round(Number(this.productoForm.precio) * 100) / 100
+          : 0,
+      costo:
+        this.estadoCampo('costo') === 'EDITABLE'
+          ? this.normalizarCosto(this.productoForm.costo)
+          : null,
       activo: true,
     };
 
@@ -145,6 +383,7 @@ export class ProductosPanel implements OnInit {
         this.guardandoProducto = false;
         this.mensajeGeneral = 'Producto registrado correctamente.';
         this.limpiarFormularioProducto();
+        this.clearFilters();
         this.activeTab = 'list';
         this.cargarProductos();
       },
@@ -163,13 +402,19 @@ export class ProductosPanel implements OnInit {
   }
 
   protected eliminarProducto(producto: ProductoConCosto): void {
-    if (!this.camposCargados || this.estadoCampo('eliminar') !== 'EDITABLE' || this.guardandoProducto) {
+    if (
+      !this.camposCargados ||
+      this.estadoCampo('eliminar') !== 'EDITABLE' ||
+      this.guardandoProducto
+    ) {
       return;
     }
 
     if (!confirm(`¿Eliminar el producto ${producto.nombre}?`)) {
       return;
     }
+
+    this.activeProduct = null;
 
     this.limpiarMensajes();
     this.guardandoProducto = true;
@@ -261,9 +506,12 @@ export class ProductosPanel implements OnInit {
   }
 
   private cargarProductos(onDone?: () => void): void {
+    this.cargandoProductos = true;
+    this.errorCargaProductos = '';
     if (!this.companyId) {
       this.productos = [];
-      this.errorGeneral = 'No se encontro la empresa para cargar productos.';
+      this.errorCargaProductos = 'No se encontró la empresa para cargar productos.';
+      this.cargandoProductos = false;
       onDone?.();
       this.cdr.detectChanges();
       return;
@@ -272,13 +520,20 @@ export class ProductosPanel implements OnInit {
     this.productService.getProductos(this.companyId).subscribe({
       next: (productos) => {
         this.productos = productos;
+        this.cargandoProductos = false;
+        this.failedImages.clear();
+        const ids = new Set(productos.map((product) => product.id_producto));
+        for (const id of this.selectedIds) if (!ids.has(id)) this.selectedIds.delete(id);
+        this.page = this.currentPage;
         this.errorGeneral = '';
         onDone?.();
         this.cdr.detectChanges();
       },
       error: (error) => {
         this.productos = [];
-        this.errorGeneral = error?.error?.detail ?? 'No se pudieron cargar los productos.';
+        this.cargandoProductos = false;
+        this.selectedIds.clear();
+        this.errorCargaProductos = error?.error?.detail ?? 'No se pudieron cargar los productos.';
         onDone?.();
         this.cdr.detectChanges();
       },
@@ -287,6 +542,7 @@ export class ProductosPanel implements OnInit {
 
   private limpiarFormularioProducto(): void {
     this.productoForm.id_subcategoria = 0;
+    this.productoForm.codigo_barra = '';
     this.productoForm.nombre = '';
     this.productoForm.descripcion = '';
     this.productoForm.unidad_medida = '';
@@ -308,7 +564,10 @@ export class ProductosPanel implements OnInit {
     formData.append('nombre', payload.nombre);
     formData.append('descripcion', payload.descripcion ?? '');
     formData.append('unidad_medida', payload.unidad_medida);
-    formData.append('precio', String(this.estadoCampo('precio') === 'EDITABLE' ? payload.precio : 0));
+    formData.append(
+      'precio',
+      String(this.estadoCampo('precio') === 'EDITABLE' ? payload.precio : 0),
+    );
     if (this.estadoCampo('costo') === 'EDITABLE' && payload.costo != null) {
       formData.append('costo', String(payload.costo));
     }
@@ -334,4 +593,3 @@ export class ProductosPanel implements OnInit {
     return permissions[permission] === true;
   }
 }
-

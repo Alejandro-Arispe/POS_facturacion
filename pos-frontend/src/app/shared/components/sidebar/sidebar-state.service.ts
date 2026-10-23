@@ -1,9 +1,29 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 
 type SidebarGroupState = Record<string, boolean>;
 
 @Injectable({ providedIn: 'root' })
 export class SidebarStateService {
+  readonly mobileOpen = signal(false);
+
+  toggleMobile(): void {
+    if (this.mobileOpen()) {
+      this.closeMobile(true);
+      return;
+    }
+    this.mobileOpen.set(true);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>('#workspace-sidebar a')?.focus(),
+    );
+  }
+
+  closeMobile(restoreFocus = false): void {
+    this.mobileOpen.set(false);
+    if (restoreFocus) {
+      document.querySelector<HTMLElement>('[data-sidebar-trigger]')?.focus();
+    }
+  }
+
   private readonly storagePrefix = 'pos-frontend-web.sidebar-state';
   private readonly cache = new Map<string, SidebarGroupState>();
 

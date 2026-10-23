@@ -1,10 +1,20 @@
-import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject } from '@angular/core';
+import {
+  Component,
+  HostListener,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  SimpleChanges,
+  inject,
+} from '@angular/core';
 import { NavigationEnd, Params, Router, RouterLink } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
 import { CompanyPermissionsService } from '../../../core/services/company-permissions.service';
 import { PreferencesService } from '../../../core/services/preferences.service';
 import { TranslatePipe } from '../../../core/i18n/translate.pipe';
 import { SidebarStateService } from './sidebar-state.service';
+import { Icon, IconName } from '../icon/icon';
 
 export type SidebarContext = 'company' | 'branch' | 'cash_register';
 
@@ -31,13 +41,13 @@ type SidebarResolvedContext = {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [RouterLink, TranslatePipe],
+  imports: [RouterLink, TranslatePipe, Icon],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.css',
 })
 export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
   private readonly router = inject(Router);
-  private readonly sidebarState = inject(SidebarStateService);
+  protected readonly sidebarState = inject(SidebarStateService);
   private readonly companyPermissionsService = inject(CompanyPermissionsService);
   private readonly preferencesService = inject(PreferencesService);
   private readonly navigationSubscription = new Subscription();
@@ -55,9 +65,12 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.navigationSubscription.add(
-      this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
-        this.syncOpenGroups();
-      }),
+      this.router.events
+        .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+        .subscribe(() => {
+          this.sidebarState.closeMobile();
+          this.syncOpenGroups();
+        }),
     );
 
     this.syncOpenGroups();
@@ -65,6 +78,53 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.navigationSubscription.unsubscribe();
+    this.sidebarState.closeMobile();
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  protected handleKeyboard(event: KeyboardEvent): void {
+    if (!this.sidebarState.mobileOpen()) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.sidebarState.closeMobile(true);
+    }
+    if (event.key === 'Tab') {
+      const elements = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '#workspace-sidebar a[href], #workspace-sidebar button:not(:disabled)',
+        ),
+      ).filter((element) => element.getClientRects().length > 0);
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    }
+  }
+
+  protected iconFor(label: string): IconName {
+    const normalized = this.removeDiacritics(label).toLowerCase();
+    const icons: Record<string, IconName> = {
+      panel: 'dashboard',
+      sucursales: 'building',
+      usuarios: 'staff',
+      clientes: 'users',
+      productos: 'package',
+      pedidos: 'orders',
+      reportes: 'chart',
+      configuracion: 'settings',
+      bitacora: 'clipboard',
+      cajas: 'wallet',
+      inventario: 'boxes',
+      ventas: 'receipt',
+      'cobro de creditos': 'banknote',
+      movimientos: 'chart',
+    };
+    return icons[normalized] ?? 'clipboard';
   }
 
   ngOnChanges(_changes: SimpleChanges): void {
@@ -265,7 +325,9 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
     ];
 
     return reportDefinitions.filter(
-      (report) => ['analytics', 'qbe', 'prediction', 'invoices'].includes(report.key) || enabledReports.has(report.key),
+      (report) =>
+        ['analytics', 'qbe', 'prediction', 'invoices'].includes(report.key) ||
+        enabledReports.has(report.key),
     );
   }
 
@@ -291,7 +353,11 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
         reportTypes.add('static');
       }
 
-      if (['parametrizado', 'parametrizados', 'parameterized', 'parameterised'].includes(normalizedToken)) {
+      if (
+        ['parametrizado', 'parametrizados', 'parameterized', 'parameterised'].includes(
+          normalizedToken,
+        )
+      ) {
         reportTypes.add('parameterized');
       }
 
@@ -323,7 +389,14 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private buildCashRegisterItems(context: SidebarResolvedContext): SidebarItem[] {
-    const cashRegisterPath = ['/company', context.companyId, 'branch', context.branchId, 'cash-register', context.cashRegisterId];
+    const cashRegisterPath = [
+      '/company',
+      context.companyId,
+      'branch',
+      context.branchId,
+      'cash-register',
+      context.cashRegisterId,
+    ];
 
     return [
       {
@@ -361,7 +434,10 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       .filter((item): item is SidebarItem => Boolean(item));
   }
 
-  private decorateItem(item: SidebarItem, context: SidebarResolvedContext): SidebarItem | undefined {
+  private decorateItem(
+    item: SidebarItem,
+    context: SidebarResolvedContext,
+  ): SidebarItem | undefined {
     if (!this.hasPermission(item, context.permissions)) {
       return undefined;
     }
@@ -387,18 +463,29 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       return true;
     }
 
-    if (item.link && this.isLinkActive(item.link, item.queryParams, Boolean(item.children?.length))) {
+    if (
+      item.link &&
+      this.isLinkActive(item.link, item.queryParams, Boolean(item.children?.length))
+    ) {
       return true;
     }
 
     return false;
   }
 
-  private isLinkActive(link: string | unknown[], queryParams?: Params, allowDescendants = false): boolean {
+  private isLinkActive(
+    link: string | unknown[],
+    queryParams?: Params,
+    allowDescendants = false,
+  ): boolean {
     const currentPath = this.normalizeUrl(this.router.url);
-    const linkPath = this.normalizeUrl(this.router.serializeUrl(this.router.createUrlTree(this.normalizeCommands(link))));
+    const linkPath = this.normalizeUrl(
+      this.router.serializeUrl(this.router.createUrlTree(this.normalizeCommands(link))),
+    );
 
-    const matchesPath = allowDescendants ? currentPath === linkPath || currentPath.startsWith(`${linkPath}/`) : currentPath === linkPath;
+    const matchesPath = allowDescendants
+      ? currentPath === linkPath || currentPath.startsWith(`${linkPath}/`)
+      : currentPath === linkPath;
 
     if (!matchesPath) {
       return false;
@@ -409,7 +496,9 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
     }
 
     const currentQueryParams = this.router.parseUrl(this.router.url).queryParams;
-    return Object.entries(queryParams).every(([key, value]) => currentQueryParams[key] === String(value));
+    return Object.entries(queryParams).every(
+      ([key, value]) => currentQueryParams[key] === String(value),
+    );
   }
 
   private normalizeCommands(link: string | unknown[]): unknown[] {
@@ -429,7 +518,9 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       return false;
     }
 
-    const requiredPermissions = Array.isArray(item.permission) ? item.permission : [item.permission];
+    const requiredPermissions = Array.isArray(item.permission)
+      ? item.permission
+      : [item.permission];
     return requiredPermissions.some((permission) => permissions.includes(permission));
   }
 
@@ -441,7 +532,10 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       cashRegisterId: this.cashRegisterId || this.getCashRegisterIdFromUrl(),
       cashRegisterSessionId: this.cashRegisterSessionId,
       activeItemLabel: this.activeItemLabel,
-      permissions: this.permissions.length > 0 ? this.permissions : this.companyPermissionsService.getPermissionCodes(),
+      permissions:
+        this.permissions.length > 0
+          ? this.permissions
+          : this.companyPermissionsService.getPermissionCodes(),
     };
   }
 
@@ -497,4 +591,3 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
 }
 
 export { SidebarComponent as Sidebar };
-

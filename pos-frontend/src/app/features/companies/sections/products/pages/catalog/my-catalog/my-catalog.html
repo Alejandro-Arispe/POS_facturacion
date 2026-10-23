@@ -1,265 +1,715 @@
 <div class="page-container catalog-page">
   <app-navbar />
-
   <main class="catalog-layout">
     <app-sidebar context="company" [companyId]="companyId" />
+    <section class="min-w-0" aria-label="Catálogo de productos">
+      @if (activeTab === 'list') {
+        <section class="catalog-panel rounded-2xl border border-line bg-surface">
+          <header class="flex flex-wrap items-start justify-between gap-5 px-5 pb-5 pt-6 sm:px-6">
+            <div>
+              <h1 class="text-xl font-bold tracking-tight text-ink">Lista de productos</h1>
+              <p class="mt-1 text-xs text-muted">
+                {{ companyName }}<span class="mx-2 text-line" aria-hidden="true">·</span
+                >{{ productos.length }}
+                {{ productos.length === 1 ? 'producto registrado' : 'productos registrados' }}
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="catalog-tool"
+                [class.filter-active]="filtersOpen || activeFilterCount > 0"
+                [attr.aria-expanded]="filtersOpen"
+                aria-controls="product-filters"
+                (click)="filtersOpen = !filtersOpen; columnsOpen = false"
+              >
+                <app-icon name="filters" [size]="15" />Filtros
+                @if (activeFilterCount) {
+                  <span class="rounded bg-brand-soft px-1.5 text-[10px] font-bold text-brand">{{
+                    activeFilterCount
+                  }}</span>
+                }
+              </button>
+              <div class="relative" data-column-picker>
+                <button
+                  id="column-picker-trigger"
+                  type="button"
+                  class="catalog-tool"
+                  [attr.aria-expanded]="columnsOpen"
+                  aria-controls="product-columns"
+                  (click)="columnsOpen = !columnsOpen; activeProduct = null"
+                >
+                  <app-icon name="columns" [size]="15" />Columnas
+                </button>
+                @if (columnsOpen) {
+                  <fieldset
+                    id="product-columns"
+                    class="catalog-popover absolute right-0 top-11 z-30 w-56 p-3"
+                  >
+                    <legend class="sr-only">Columnas visibles</legend>
+                    <p class="mb-2 px-2 text-xs font-bold text-ink">Columnas visibles</p>
+                    @for (column of availableColumns; track column.key) {
+                      <label
+                        class="flex min-h-9 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 text-xs text-ink hover:bg-brand-soft"
+                      >
+                        <input
+                          class="catalog-checkbox"
+                          type="checkbox"
+                          [checked]="columnVisibility[column.key]"
+                          [disabled]="column.key === 'nombre'"
+                          (change)="toggleColumn(column.key)"
+                        />
+                        {{ column.label }}
+                        @if (column.key === 'nombre') {
+                          <span class="ml-auto text-[10px] text-muted">Fija</span>
+                        }
+                      </label>
+                    }
+                  </fieldset>
+                }
+              </div>
+              <button
+                type="button"
+                class="catalog-tool"
+                [disabled]="
+                  !filteredProducts.length || !camposCargados || cargandoDatos || cargandoProductos
+                "
+                [attr.aria-label]="
+                  selectedIds.size
+                    ? 'Exportar ' + selectedIds.size + ' productos seleccionados a CSV'
+                    : 'Exportar productos filtrados a CSV'
+                "
+                (click)="exportProducts()"
+              >
+                <app-icon name="download" [size]="15" />Exportar
+              </button>
+              @if (hasPermission('PRODUCTO_CREAR')) {
+                <button
+                  type="button"
+                  class="btn btn-primary !min-h-9 !px-3 !py-2 !text-xs"
+                  (click)="setActiveTab('register')"
+                >
+                  <app-icon name="plus" [size]="16" />Nuevo producto
+                </button>
+              }
+            </div>
+          </header>
 
-    <section class="catalog-content">
-      <header class="catalog-header panel">
-        <div>
-          <p class="badge badge-success">Empresa {{ companyName }}</p>
-          <h1 class="title-xl">Catalogo de Productos</h1>
-          <p class="text-muted">Registra productos y consulta la lista principal del catalogo.</p>
-        </div>
-      </header>
-
-      <section class="tabs-panel panel">
-        <div class="tabs" role="tablist" aria-label="Secciones de productos">
-          @if (hasPermission('PRODUCTO_CREAR')) {
-            <button
-              class="tab-button"
-              [class.active]="activeTab === 'register'"
-              type="button"
-              role="tab"
-              [attr.aria-selected]="activeTab === 'register'"
-              (click)="setActiveTab('register')"
-            >
-              Registrar producto
-            </button>
-          }
-          <button
-            class="tab-button"
-            [class.active]="activeTab === 'list'"
-            type="button"
-            role="tab"
-            [attr.aria-selected]="activeTab === 'list'"
-            (click)="setActiveTab('list')"
+          <div
+            class="flex flex-wrap items-center justify-between gap-3 border-y border-line px-5 py-3 sm:px-6"
           >
-            Lista de productos
-          </button>
-        </div>
+            <label
+              class="flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 sm:max-w-xs"
+            >
+              <app-icon name="search" [size]="16" class="text-muted" />
+              <input
+                type="search"
+                class="min-w-0 flex-1 border-0 bg-transparent text-xs text-ink outline-none placeholder:text-muted"
+                aria-label="Buscar productos"
+                placeholder="Buscar por nombre, código o subcategoría…"
+                [(ngModel)]="search"
+                (ngModelChange)="updateQuery()"
+              />
+            </label>
+            <div class="flex min-h-7 items-center gap-3 text-xs text-muted" aria-live="polite">
+              @if (selectedIds.size) {
+                <span class="font-semibold text-brand"
+                  >{{ selectedIds.size }}
+                  {{ selectedIds.size === 1 ? 'seleccionado' : 'seleccionados' }}</span
+                >
+                <button
+                  type="button"
+                  class="underline underline-offset-4 hover:text-brand"
+                  (click)="selectedIds.clear()"
+                >
+                  Limpiar selección
+                </button>
+              } @else {
+                <span
+                  >{{ filteredProducts.length }}
+                  {{ filteredProducts.length === 1 ? 'producto' : 'productos' }}</span
+                >
+                @if (hasFilters) {
+                  <button
+                    type="button"
+                    class="font-semibold text-brand hover:underline"
+                    (click)="clearFilters()"
+                  >
+                    Limpiar filtros
+                  </button>
+                }
+              }
+            </div>
+          </div>
 
-        <div class="tab-content">
-          @if (errorGeneral) {
-            <p class="feedback feedback-error">{{ errorGeneral }}</p>
+          @if (filtersOpen) {
+            <div
+              id="product-filters"
+              class="grid gap-4 border-b border-line bg-canvas/60 px-5 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end sm:px-6"
+            >
+              <label class="grid gap-1.5 text-xs font-medium text-muted"
+                >Subcategoría
+                <select
+                  class="input !py-2 !text-xs"
+                  aria-label="Filtrar por subcategoría"
+                  [(ngModel)]="subcategory"
+                  (ngModelChange)="updateQuery()"
+                >
+                  <option value="">Todas las subcategorías</option>
+                  @for (item of subcategorias; track item.id_subcategoria) {
+                    <option [value]="item.id_subcategoria">{{ item.nombre }}</option>
+                  }
+                </select>
+              </label>
+              <label class="grid gap-1.5 text-xs font-medium text-muted"
+                >Estado
+                <select
+                  class="input !py-2 !text-xs"
+                  aria-label="Filtrar por estado"
+                  [(ngModel)]="status"
+                  (ngModelChange)="updateQuery()"
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="active">Activos</option>
+                  <option value="inactive">Inactivos</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                class="catalog-tool min-h-9"
+                [disabled]="!hasFilters"
+                (click)="clearFilters()"
+              >
+                <app-icon name="refresh" [size]="14" />Restablecer
+              </button>
+            </div>
           }
 
           @if (mensajeGeneral) {
-            <p class="feedback feedback-success">{{ mensajeGeneral }}</p>
+            <p
+              class="mx-5 mt-4 rounded-lg bg-emerald-50 px-4 py-3 text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+              role="status"
+            >
+              {{ mensajeGeneral }}
+            </p>
+          }
+          @if (errorGeneral) {
+            <p
+              class="mx-5 mt-4 rounded-lg bg-red-50 px-4 py-3 text-xs text-red-800 dark:bg-red-950 dark:text-red-200"
+              role="alert"
+            >
+              {{ errorGeneral }}
+            </p>
           }
 
-          @if (activeTab === 'register') {
-            <section class="product-register">
-              <h2 class="title-md">Registrar producto</h2>
-              <form class="entity-form" (submit)="registrarProducto($event)">
-                <div class="form-grid-2">
-                  <div class="form-group">
-                    <label class="label" for="producto_nombre">Nombre</label>
-                    <input
-                      class="input"
-                      id="producto_nombre"
-                      name="producto_nombre"
-                      required
-                      [(ngModel)]="productoForm.nombre"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label class="label" for="producto_subcategoria">Subcategoria</label>
-                    <select
-                      class="input"
-                      id="producto_subcategoria"
-                      name="producto_subcategoria"
-                      required
-                      [(ngModel)]="productoForm.id_subcategoria"
-                    >
-                      <option [ngValue]="0" disabled>Selecciona una subcategoria</option>
-                      @for (subcategoria of subcategorias; track subcategoria.id_subcategoria) {
-                        <option [ngValue]="subcategoria.id_subcategoria">{{ subcategoria.nombre }}</option>
-                      }
-                    </select>
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label class="label" for="producto_descripcion">Descripcion</label>
-                  <textarea
-                    class="textarea"
-                    id="producto_descripcion"
-                    name="producto_descripcion"
-                    rows="3"
-                    [(ngModel)]="productoForm.descripcion"
-                  ></textarea>
-                </div>
-
-                <div class="form-group">
-                  <label class="label" for="producto_codigo_barra">Codigo de barras</label>
-                  <input
-                    class="input"
-                    id="producto_codigo_barra"
-                    name="producto_codigo_barra"
-                    placeholder="Opcional"
-                    [(ngModel)]="productoForm.codigo_barra"
-                  />
-                </div>
-
-                <div class="form-grid-2">
-                  <div class="form-group">
-                    <label class="label" for="producto_unidad_medida">Unidad de medida</label>
-                    <input
-                      class="input"
-                      id="producto_unidad_medida"
-                      name="producto_unidad_medida"
-                      required
-                      [(ngModel)]="productoForm.unidad_medida"
-                    />
-                  </div>
-                  @if (mostrarCampo('precio')) {
-                    <div class="form-group">
-                      <label class="label" for="producto_precio">Precio</label>
-                      <input
-                        class="input"
-                        id="producto_precio"
-                        name="producto_precio"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        [disabled]="soloLectura('precio')"
-                        [(ngModel)]="productoForm.precio"
-                      />
-                    </div>
-                  }
-                  @if (mostrarCampo('costo')) {
-                    <div class="form-group">
-                      <label class="label" for="producto_costo">Costo</label>
-                      <input
-                        class="input"
-                        id="producto_costo"
-                        name="producto_costo"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        [disabled]="soloLectura('costo')"
-                        [(ngModel)]="productoForm.costo"
-                      />
-                    </div>
-                  }
-                </div>
-
-                <div class="form-group">
-                  <label class="label" for="producto_imagen">Imagen del producto</label>
-                  <input
-                    class="input"
-                    id="producto_imagen"
-                    name="producto_imagen"
-                    type="file"
-                    accept="image/*"
-                    (change)="onImagenProductoSeleccionada($event)"
-                  />
-                </div>
-
-                <div class="form-actions">
-                  <button class="btn btn-primary" type="submit" [disabled]="guardandoProducto">
-                    {{ guardandoProducto ? 'Guardando...' : 'Registrar producto' }}
-                  </button>
-                  <button class="btn btn-secondary" type="button" (click)="cancelarRegistroProducto()" [disabled]="guardandoProducto">
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </section>
+          @if (errorCargaProductos && !cargandoDatos && !cargandoProductos) {
+            <div class="catalog-state" role="alert">
+              <app-icon name="alert" [size]="30" class="text-brand" />
+              <h2 class="mt-4 text-base font-semibold">No pudimos cargar los productos</h2>
+              <p class="mt-2 max-w-md text-sm text-muted">{{ errorCargaProductos }}</p>
+              <button class="btn btn-secondary mt-5" type="button" (click)="reloadProducts()">
+                <app-icon name="refresh" [size]="16" />Volver a intentar
+              </button>
+            </div>
+          } @else if (!cargandoDatos && !cargandoProductos && productos.length === 0) {
+            <div class="catalog-state" role="status">
+              <app-icon name="package" [size]="34" class="text-brand" />
+              <h2 class="mt-4 text-base font-semibold">Tu catálogo empieza aquí</h2>
+              <p class="mt-2 max-w-sm text-sm text-muted">
+                Todavía no hay productos registrados en esta empresa.
+              </p>
+              @if (hasPermission('PRODUCTO_CREAR')) {
+                <button
+                  class="btn btn-primary mt-5"
+                  type="button"
+                  (click)="setActiveTab('register')"
+                >
+                  <app-icon name="plus" [size]="16" />Registrar primer producto
+                </button>
+              }
+            </div>
+          } @else if (!cargandoDatos && !cargandoProductos && filteredProducts.length === 0) {
+            <div class="catalog-state" role="status">
+              <app-icon name="search" [size]="30" class="text-muted" />
+              <h2 class="mt-4 text-base font-semibold">No encontramos productos</h2>
+              <p class="mt-2 max-w-sm text-sm text-muted">
+                Prueba con otro nombre, código o combinación de filtros.
+              </p>
+              <button class="btn btn-secondary mt-5" type="button" (click)="clearFilters()">
+                Limpiar búsqueda y filtros
+              </button>
+            </div>
           } @else {
-            @if (cargandoDatos) {
-              <section class="products-state" aria-live="polite">
-                <p class="text-muted">Cargando productos...</p>
-              </section>
-            } @else if (errorGeneral) {
-              <section class="products-state" aria-live="polite">
-                <p class="feedback feedback-error">{{ errorGeneral }}</p>
-              </section>
-            } @else if (productos.length === 0) {
-              <section class="products-state" aria-live="polite">
-                <p class="text-muted">Aun no tienes productos registrados para esta empresa.</p>
-              </section>
-            } @else {
-              <section class="products-table-wrap" aria-label="Productos registrados">
-                <table class="table products-table">
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Codigo de barras</th>
-                      <th>Subcategoria</th>
-                      <th>Unidad</th>
-                      @if (mostrarCampo('precio')) {
-                        <th>Precio</th>
-                      }
-                      @if (mostrarCampo('costo')) {
-                        <th>Costo</th>
-                      }
-                      <th>Imagen</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (product of productos; track product.id_producto) {
+            <div
+              class="catalog-table-scroll"
+              tabindex="0"
+              role="region"
+              aria-label="Lista de productos; desplázate horizontalmente para ver todas las columnas"
+              [attr.aria-busy]="cargandoDatos || cargandoProductos"
+              (scroll)="closeActions()"
+            >
+              <table class="catalog-table">
+                <caption class="sr-only">
+                  Catálogo de productos de
+                  {{
+                    companyName
+                  }}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col" class="!w-11 !pr-0">
+                      <input
+                        class="catalog-checkbox"
+                        type="checkbox"
+                        aria-label="Seleccionar productos de esta página"
+                        [checked]="allPageSelected"
+                        [indeterminate]="somePageSelected"
+                        [disabled]="!pageProducts.length || cargandoDatos || cargandoProductos"
+                        (change)="togglePageSelection()"
+                      />
+                    </th>
+                    @for (column of visibleColumns; track column.key) {
+                      <th
+                        scope="col"
+                        [class.numeric-column]="column.key === 'precio' || column.key === 'costo'"
+                        [attr.aria-sort]="
+                          sortKey === column.key
+                            ? sortDirection === 'asc'
+                              ? 'ascending'
+                              : 'descending'
+                            : null
+                        "
+                      >
+                        <button
+                          type="button"
+                          class="catalog-sort"
+                          [attr.aria-label]="'Ordenar por ' + column.label"
+                          (click)="sortBy(column.key)"
+                        >
+                          {{ column.label }}
+                          <app-icon
+                            [name]="sortKey === column.key ? 'up' : 'sort'"
+                            [size]="12"
+                            [class.rotate-180]="sortKey === column.key && sortDirection === 'desc'"
+                            [class.text-brand]="sortKey === column.key"
+                            class="text-muted"
+                          />
+                        </button>
+                      </th>
+                    }
+                    <th scope="col" class="!pr-6 !text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (cargandoDatos || cargandoProductos) {
+                    @for (row of [1, 2, 3, 4, 5, 6, 7, 8]; track row) {
                       <tr>
-                        <td>{{ product.nombre }}</td>
-                        <td>{{ product.codigo_barra || 'Sin codigo de barras' }}</td>
-                        <td>{{ product.subcategoria ? product.subcategoria.nombre : 'Sin subcategoria' }}</td>
-                        <td>{{ product.unidad_medida || 'Sin unidad' }}</td>
-                        @if (mostrarCampo('precio')) {
-                          <td>{{ product.precio | money }}</td>
-                        }
-                        @if (mostrarCampo('costo')) {
-                          <td>{{ product.costo == null ? 'Sin costo' : (product.costo | money) }}</td>
-                        }
-                        <td>
-                          @if (product.imagen) {
-                            <img class="product-image-thumb" [src]="product.imagen.startsWith('http') ? product.imagen : apiBaseUrl + product.imagen" [alt]="'Sin imagen'" loading="lazy" />
-                          } @else {
-                            <span class="text-muted">Sin imagen</span>
-                          }
+                        <td [attr.colspan]="visibleColumns.length + 2">
+                          <div class="flex h-11 animate-pulse items-center gap-4">
+                            <span class="size-9 rounded-md bg-canvas"></span
+                            ><span class="h-3 w-40 rounded bg-canvas"></span
+                            ><span class="ml-auto h-3 w-24 rounded bg-canvas"></span>
+                          </div>
                         </td>
-                        <td>
-                          <div class="row-actions">
-                            <a
-                              class="btn btn-secondary"
-                              [routerLink]="['/company', companyId, 'product', product.id_producto, 'view-product']"
-                              >Ver</a
-                            >
-                            @if (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) {
-                              @if (soloLectura('editar')) {
-                                <button class="btn btn-primary" type="button" disabled>Editar</button>
-                              } @else {
-                                <a
-                                  class="btn btn-primary"
-                                  [routerLink]="['/company', companyId, 'product', product.id_producto, 'edit-product']"
-                                  >Editar</a
+                      </tr>
+                    }
+                  } @else {
+                    @for (product of pageProducts; track product.id_producto) {
+                      <tr [class.row-selected]="selectedIds.has(product.id_producto)">
+                        <td class="!pr-0">
+                          <input
+                            class="catalog-checkbox"
+                            type="checkbox"
+                            [attr.aria-label]="'Seleccionar ' + product.nombre"
+                            [checked]="selectedIds.has(product.id_producto)"
+                            (change)="toggleProduct(product.id_producto)"
+                          />
+                        </td>
+                        @for (column of visibleColumns; track column.key) {
+                          <td
+                            [class.numeric-column]="
+                              column.key === 'precio' || column.key === 'costo'
+                            "
+                          >
+                            @switch (column.key) {
+                              @case ('id_producto') {
+                                <span class="whitespace-nowrap font-medium text-muted" data-numeric
+                                  >#{{ product.id_producto.toString().padStart(4, '0') }}</span
+                                >
+                              }
+                              @case ('nombre') {
+                                <div class="flex min-w-52 items-center gap-3">
+                                  <span
+                                    class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-canvas/70 text-muted"
+                                  >
+                                    @if (product.imagen && !failedImages.has(product.id_producto)) {
+                                      <img
+                                        class="size-full object-contain p-1"
+                                        [src]="imageUrl(product)"
+                                        [alt]="product.nombre"
+                                        loading="lazy"
+                                        width="40"
+                                        height="40"
+                                        (error)="failedImages.add(product.id_producto)"
+                                      />
+                                    } @else {
+                                      <app-icon name="package" [size]="20" />
+                                    }
+                                  </span>
+                                  <div class="min-w-0">
+                                    <a
+                                      class="block max-w-56 truncate font-semibold text-ink hover:text-brand"
+                                      [title]="product.nombre"
+                                      [routerLink]="[
+                                        '/company',
+                                        companyId,
+                                        'product',
+                                        product.id_producto,
+                                        'view-product',
+                                      ]"
+                                      >{{ product.nombre }}</a
+                                    >
+                                    <span
+                                      class="mt-0.5 block max-w-56 truncate text-[11px] text-muted"
+                                      [title]="product.codigo_barra || ''"
+                                      >{{ product.codigo_barra || 'Sin código de barras' }}</span
+                                    >
+                                  </div>
+                                </div>
+                              }
+                              @case ('codigo_barra') {
+                                <span class="whitespace-nowrap text-muted">{{
+                                  product.codigo_barra || '—'
+                                }}</span>
+                              }
+                              @case ('subcategoria') {
+                                <span class="text-muted">{{
+                                  product.subcategoria?.nombre || 'Sin subcategoría'
+                                }}</span>
+                              }
+                              @case ('unidad_medida') {
+                                <span class="whitespace-nowrap text-muted">{{
+                                  product.unidad_medida || '—'
+                                }}</span>
+                              }
+                              @case ('precio') {
+                                <span class="whitespace-nowrap font-medium" data-numeric>{{
+                                  product.precio | money
+                                }}</span>
+                              }
+                              @case ('costo') {
+                                <span class="whitespace-nowrap text-muted" data-numeric>{{
+                                  product.costo == null ? '—' : (product.costo | money)
+                                }}</span>
+                              }
+                              @case ('activo') {
+                                <span
+                                  class="product-status"
+                                  [class.status-active]="product.activo"
+                                  [class.status-inactive]="!product.activo"
+                                  ><span
+                                    class="size-1.5 rounded-full bg-current"
+                                    aria-hidden="true"
+                                  ></span
+                                  >{{ product.activo ? 'Activo' : 'Inactivo' }}</span
                                 >
                               }
                             }
-                            @if (mostrarCampo('eliminar')) {
+                          </td>
+                        }
+                        <td class="!pr-5">
+                          <div class="flex items-center justify-end gap-1">
+                            <a
+                              class="catalog-action"
+                              [attr.aria-label]="'Ver ' + product.nombre"
+                              [routerLink]="[
+                                '/company',
+                                companyId,
+                                'product',
+                                product.id_producto,
+                                'view-product',
+                              ]"
+                              title="Ver producto"
+                              ><app-icon name="eye" [size]="17"
+                            /></a>
+                            @if (
+                              (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) ||
+                              mostrarCampo('eliminar')
+                            ) {
                               <button
-                                class="btn btn-secondary"
+                                [id]="'product-action-' + product.id_producto"
                                 type="button"
-                                [disabled]="soloLectura('eliminar') || guardandoProducto"
-                                (click)="eliminarProducto(product)"
+                                class="catalog-action"
+                                data-product-actions
+                                [attr.aria-label]="'Más acciones de ' + product.nombre"
+                                [attr.aria-expanded]="
+                                  activeProduct?.id_producto === product.id_producto
+                                "
+                                aria-controls="product-actions"
+                                (click)="toggleActions(product, $event)"
                               >
-                                Eliminar
+                                <app-icon name="more" [size]="19" />
                               </button>
                             }
                           </div>
                         </td>
                       </tr>
                     }
-                  </tbody>
-                </table>
-              </section>
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (cargandoDatos || cargandoProductos) {
+              <p class="sr-only" role="status">Cargando productos…</p>
             }
           }
-        </div>
-      </section>
+
+          <footer
+            class="flex flex-wrap items-center justify-between gap-4 border-t border-line px-5 py-4 text-xs text-muted sm:px-6"
+          >
+            <div class="flex flex-wrap items-center gap-4">
+              <label
+                class="flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3"
+                >Mostrar
+                <select
+                  class="border-0 bg-transparent text-xs font-semibold text-ink"
+                  aria-label="Productos por página"
+                  [ngModel]="pageSize"
+                  (ngModelChange)="changePageSize($event)"
+                >
+                  @for (size of pageSizes; track size) {
+                    <option [ngValue]="size">{{ size }}</option>
+                  }
+                </select>
+              </label>
+              <span aria-live="polite"
+                >{{ firstRecord }}–{{ lastRecord }} de {{ filteredProducts.length }} productos</span
+              >
+            </div>
+            <nav class="flex items-center gap-1.5" aria-label="Paginación de productos">
+              <button
+                type="button"
+                class="page-button"
+                aria-label="Página anterior"
+                [disabled]="currentPage <= 1 || cargandoDatos || cargandoProductos"
+                (click)="changePage(currentPage - 1)"
+              >
+                <app-icon name="left" [size]="16" />
+              </button>
+              @for (number of pagination; track $index) {
+                @if (number === '…') {
+                  <span class="px-2" aria-hidden="true">…</span>
+                } @else {
+                  <button
+                    type="button"
+                    class="page-button"
+                    [class.current]="currentPage === number"
+                    [attr.aria-current]="currentPage === number ? 'page' : null"
+                    [attr.aria-label]="'Página ' + number"
+                    [disabled]="cargandoDatos || cargandoProductos"
+                    (click)="changePage(number)"
+                  >
+                    {{ number }}
+                  </button>
+                }
+              }
+              <button
+                type="button"
+                class="page-button"
+                aria-label="Página siguiente"
+                [disabled]="currentPage >= totalPages || cargandoDatos || cargandoProductos"
+                (click)="changePage(currentPage + 1)"
+              >
+                <app-icon name="right" [size]="16" />
+              </button>
+            </nav>
+          </footer>
+        </section>
+      } @else {
+        <section class="rounded-2xl border border-line bg-surface p-5 sm:p-7">
+          <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 class="text-xl font-bold tracking-tight">Nuevo producto</h1>
+              <p class="mt-1 text-xs text-muted">
+                {{ companyName }} · Completa los datos del producto.
+              </p>
+            </div>
+            <button
+              class="catalog-tool"
+              type="button"
+              [disabled]="guardandoProducto"
+              (click)="cancelarRegistroProducto()"
+            >
+              <app-icon name="back" [size]="16" />Volver a la lista
+            </button>
+          </div>
+          @if (errorGeneral) {
+            <p class="feedback feedback-error" role="alert">{{ errorGeneral }}</p>
+          }
+          <section class="product-register">
+            <h2 class="title-md">Registrar producto</h2>
+            <form class="entity-form" (submit)="registrarProducto($event)">
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label class="label" for="producto_nombre">Nombre</label>
+                  <input
+                    class="input"
+                    id="producto_nombre"
+                    name="producto_nombre"
+                    required
+                    [(ngModel)]="productoForm.nombre"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="label" for="producto_subcategoria">Subcategoria</label>
+                  <select
+                    class="input"
+                    id="producto_subcategoria"
+                    name="producto_subcategoria"
+                    required
+                    [(ngModel)]="productoForm.id_subcategoria"
+                  >
+                    <option [ngValue]="0" disabled>Selecciona una subcategoria</option>
+                    @for (subcategoria of subcategorias; track subcategoria.id_subcategoria) {
+                      <option [ngValue]="subcategoria.id_subcategoria">
+                        {{ subcategoria.nombre }}
+                      </option>
+                    }
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="label" for="producto_descripcion">Descripcion</label>
+                <textarea
+                  class="textarea"
+                  id="producto_descripcion"
+                  name="producto_descripcion"
+                  rows="3"
+                  [(ngModel)]="productoForm.descripcion"
+                ></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="label" for="producto_codigo_barra">Codigo de barras</label>
+                <input
+                  class="input"
+                  id="producto_codigo_barra"
+                  name="producto_codigo_barra"
+                  placeholder="Opcional"
+                  [(ngModel)]="productoForm.codigo_barra"
+                />
+              </div>
+
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label class="label" for="producto_unidad_medida">Unidad de medida</label>
+                  <input
+                    class="input"
+                    id="producto_unidad_medida"
+                    name="producto_unidad_medida"
+                    required
+                    [(ngModel)]="productoForm.unidad_medida"
+                  />
+                </div>
+                @if (mostrarCampo('precio')) {
+                  <div class="form-group">
+                    <label class="label" for="producto_precio">Precio</label>
+                    <input
+                      class="input"
+                      id="producto_precio"
+                      name="producto_precio"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [disabled]="soloLectura('precio')"
+                      [(ngModel)]="productoForm.precio"
+                    />
+                  </div>
+                }
+                @if (mostrarCampo('costo')) {
+                  <div class="form-group">
+                    <label class="label" for="producto_costo">Costo</label>
+                    <input
+                      class="input"
+                      id="producto_costo"
+                      name="producto_costo"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [disabled]="soloLectura('costo')"
+                      [(ngModel)]="productoForm.costo"
+                    />
+                  </div>
+                }
+              </div>
+
+              <div class="form-group">
+                <label class="label" for="producto_imagen">Imagen del producto</label>
+                <input
+                  class="input"
+                  id="producto_imagen"
+                  name="producto_imagen"
+                  type="file"
+                  accept="image/*"
+                  (change)="onImagenProductoSeleccionada($event)"
+                />
+              </div>
+
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit" [disabled]="guardandoProducto">
+                  {{ guardandoProducto ? 'Guardando...' : 'Registrar producto' }}
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  (click)="cancelarRegistroProducto()"
+                  [disabled]="guardandoProducto"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </section>
+        </section>
+      }
     </section>
   </main>
 </div>
 
+@if (activeProduct; as product) {
+  <div
+    id="product-actions"
+    class="catalog-popover fixed z-50 w-[184px] p-1.5"
+    data-product-actions
+    [style.top.px]="actionPosition.top"
+    [style.left.px]="actionPosition.left"
+    role="group"
+    [attr.aria-label]="'Acciones de ' + product.nombre"
+  >
+    @if (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) {
+      @if (soloLectura('editar')) {
+        <button class="action-menu-item" type="button" disabled>
+          <app-icon name="edit" [size]="16" />Editar producto
+        </button>
+      } @else {
+        <a
+          class="action-menu-item"
+          [routerLink]="['/company', companyId, 'product', product.id_producto, 'edit-product']"
+          ><app-icon name="edit" [size]="16" />Editar producto</a
+        >
+      }
+    }
+    @if (mostrarCampo('eliminar')) {
+      <button
+        class="action-menu-item text-red-700 dark:text-red-300"
+        type="button"
+        [disabled]="soloLectura('eliminar') || guardandoProducto"
+        (click)="eliminarProducto(product)"
+      >
+        <app-icon name="trash" [size]="16" />Eliminar producto
+      </button>
+    }
+  </div>
+}

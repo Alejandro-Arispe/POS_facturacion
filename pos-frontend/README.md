@@ -1,6 +1,33 @@
 
 Aplicacion frontend desarrollada con Angular para gestionar autenticacion, landing page y funcionalidades relacionadas con workshops.
 
+## Interfaz del área operativa
+
+El sidebar, la barra superior y el dashboard siguen la referencia visual acordada,
+registrada en `DESIGN.md`. La composición utiliza Tailwind CSS 4, iconos de
+`@lucide/angular` y Manrope servida localmente con `@fontsource-variable/manrope`.
+
+```powershell
+npm install
+npm start
+```
+
+El dashboard de `/company/:id/dashboard` recibe los indicadores y la serie de
+ventas mediante el WebSocket existente. Permite consultar periodos de 7, 14 y
+30 días y los importes diarios en una tabla accesible. Incluye estados de carga,
+datos vacíos y desconexión con reintento. Los accesos respetan los permisos de la
+empresa y el menú lateral se convierte en un panel desplegable en móvil.
+
+Verificación:
+
+```powershell
+npm run build
+npm test -- --watch=false
+```
+
+Los datos simulados usados para la revisión visual viven únicamente en la caché
+local `.angular/`; no forman parte de los datos que muestra la aplicación.
+
 ## Estructura del proyecto
 
 ```text

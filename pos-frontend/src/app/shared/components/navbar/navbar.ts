@@ -1,7 +1,19 @@
-import { Component, OnDestroy, OnInit, ViewChild, signal, inject } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  HostListener,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  signal,
+  inject,
+} from '@angular/core';
 import { TranslatePipe } from '../../../core/i18n/translate.pipe';
 import { I18nService, SUPPORTED_LANGUAGES } from '../../../core/i18n/i18n.service';
-import { Router, RouterLink } from '@angular/router';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { Icon } from '../icon/icon';
+import { SidebarStateService } from '../sidebar/sidebar-state.service';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { CompanyPermissionsService } from '../../../core/services/company-permissions.service';
@@ -14,11 +26,114 @@ import { NotificationDetailModel } from '../notification-center/stock-alerts/sto
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [TranslatePipe, RouterLink, NotificationCenterComponent, NotificationToastComponent, NotificationDetailModalComponent],
+  imports: [
+    TranslatePipe,
+    RouterLink,
+    Icon,
+    NotificationCenterComponent,
+    NotificationToastComponent,
+    NotificationDetailModalComponent,
+  ],
   templateUrl: './navbar.html',
   styleUrls: ['./navbar.css'],
 })
 export class Navbar implements OnInit, OnDestroy {
+  protected readonly sidebarState = inject(SidebarStateService);
+  private readonly element = inject(ElementRef<HTMLElement>);
+  protected readonly profileOpen = signal(false);
+  protected readonly searchOpen = signal(false);
+  protected readonly searchTerm = signal('');
+  private navigationSubscription?: Subscription;
+
+  protected get workspaceId(): number | null {
+    return this.getCompanyIdFromUrl();
+  }
+
+  protected get pageTitle(): string {
+    const url = this.router.url;
+    const titles: Array<[string, string]> = [
+      ['dashboard', 'Panel general'],
+      ['reports', 'Reportes'],
+      ['audit-log', 'Bitácora'],
+      ['settings', 'Configuración'],
+      ['credit-collections', 'Cobro de créditos'],
+      ['sales', 'Punto de venta'],
+      ['inventario', 'Inventario'],
+      ['cash-register', 'Cajas'],
+      ['staff', 'Personal'],
+      ['rols', 'Roles'],
+      ['clients', 'Clientes'],
+      ['products', 'Productos'],
+      ['orders', 'Pedidos'],
+      ['branches', 'Sucursales'],
+      ['my-companies', 'Mis empresas'],
+      ['superadmin', 'Administración'],
+    ];
+    return titles.find(([path]) => url.includes(path))?.[1] ?? 'Punto de venta';
+  }
+
+  protected get accountLabel(): string {
+    try {
+      const token = this.authService.getAccessToken();
+      if (!token) return 'Mi cuenta';
+      const raw = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(raw));
+      return payload.email ?? payload.sub ?? 'Mi cuenta';
+    } catch {
+      return 'Mi cuenta';
+    }
+  }
+
+  protected get accountInitials(): string {
+    return this.accountLabel.substring(0, 2).toUpperCase();
+  }
+
+  protected get searchResults(): Array<{ label: string; commands: string[] }> {
+    const id = this.workspaceId;
+    if (!id) return [];
+    const query = this.searchTerm()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    const destinations = [
+      { label: 'Panel general', path: ['dashboard'], permission: 'DASHBOARD_VER' },
+      { label: 'Sucursales y cajas', path: ['branches'], permission: 'SUCURSAL_VER' },
+      { label: 'Productos', path: ['products'], permission: 'PRODUCTO_VER' },
+      { label: 'Clientes', path: ['clients'], permission: 'CLIENTE_VER' },
+      { label: 'Personal', path: ['users', 'staff'], permission: 'USUARIO_VER' },
+      { label: 'Reportes', path: ['reports', 'static'], permission: 'REPORTE_GENERAR' },
+      { label: 'Pedidos', path: ['orders'], permission: 'PEDIDO_VER' },
+      { label: 'Bitácora', path: ['audit-log'], permission: 'BITACORA_VER' },
+    ];
+    return destinations
+      .filter(
+        (item) =>
+          this.companyPermissionsService.getPermissionCodes().includes(item.permission) &&
+          item.label
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .includes(query),
+      )
+      .map((item) => ({ label: item.label, commands: ['/company', String(id), ...item.path] }));
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected closeOutside(event: MouseEvent): void {
+    if (!this.element.nativeElement.contains(event.target as Node)) {
+      this.profileOpen.set(false);
+      this.searchOpen.set(false);
+      this.closeNotifs();
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  protected escapeMenus(): void {
+    if (this.profileOpen()) document.getElementById('account-menu-trigger')?.focus();
+    this.profileOpen.set(false);
+    this.searchOpen.set(false);
+    this.closeNotifs();
+  }
   protected readonly i18n = inject(I18nService);
   protected readonly languages = SUPPORTED_LANGUAGES;
   protected readonly notifsOpen = signal(false);
@@ -49,6 +164,13 @@ export class Navbar implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.navigationSubscription = this.router.events.subscribe((event) => {
+      if (event instanceof NavigationEnd) {
+        this.profileOpen.set(false);
+        this.searchOpen.set(false);
+        this.searchTerm.set('');
+      }
+    });
     const companyId = this.getCompanyIdFromUrl();
 
     this.notificationsEnabled = this.authService.isAuthenticated() && companyId !== null;
@@ -65,6 +187,7 @@ export class Navbar implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.navigationSubscription?.unsubscribe();
     if (this.notificationsEnabled) {
       window.removeEventListener('stock-notification', this.stockNotificationListener);
     }
@@ -81,7 +204,7 @@ export class Navbar implements OnInit, OnDestroy {
       return;
     }
 
-    this.notifsOpen.update(v => !v);
+    this.notifsOpen.update((v) => !v);
   }
 
   protected closeNotifs(): void {
@@ -131,7 +254,10 @@ export class Navbar implements OnInit, OnDestroy {
   }
 
   protected canViewAlerts(): boolean {
-    return this.getCompanyIdFromUrl() !== null && this.companyPermissionsService.permissions().ALERTA_VER === true;
+    return (
+      this.getCompanyIdFromUrl() !== null &&
+      this.companyPermissionsService.permissions().ALERTA_VER === true
+    );
   }
 
   private async loadUnreadNotifications(): Promise<void> {
@@ -165,8 +291,10 @@ export class Navbar implements OnInit, OnDestroy {
 
   private getCompanyIdFromUrl(): number | null {
     const match = this.router.url.match(/\/company\/([^/?#]+)/);
-    const companyId = Number(match?.[1]);
+    const companyId = Number(
+      match?.[1] ?? this.router.parseUrl(this.router.url).queryParams['companyId'],
+    );
 
-    return Number.isFinite(companyId) ? companyId : null;
+    return Number.isFinite(companyId) && companyId > 0 ? companyId : null;
   }
 }

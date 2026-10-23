@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
-import { Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { environments } from '../../environments/environments';
 
 @Injectable({
@@ -11,7 +11,12 @@ export class CompanyWebSocketService {
   private readonly router = inject(Router);
   private socket: WebSocket | null = null;
   private currentCompanyId: string | null = null;
-  readonly messages$ = new Subject<any>();
+  readonly messages$ = new BehaviorSubject<any>(null);
+  readonly connection$ = new BehaviorSubject<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+
+  reconnect(): void {
+    if (this.currentCompanyId) this.connect(this.currentCompanyId);
+  }
 
   constructor() {
     this.router.events
@@ -27,6 +32,7 @@ export class CompanyWebSocketService {
     const companyId = match ? match[1] : null;
 
     if (companyId !== this.currentCompanyId) {
+      this.messages$.next(null);
       this.currentCompanyId = companyId;
       if (companyId) {
         this.connect(companyId);
@@ -38,6 +44,7 @@ export class CompanyWebSocketService {
 
   private connect(companyId: string): void {
     this.disconnect();
+    this.connection$.next('connecting');
 
     const baseUrl = environments.apiBaseUrl;
     const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
@@ -49,6 +56,7 @@ export class CompanyWebSocketService {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
+        this.connection$.next('connected');
         console.log(`WebSocket connected to company ${companyId}`);
       };
 
@@ -63,24 +71,32 @@ export class CompanyWebSocketService {
       };
 
       this.socket.onerror = (error) => {
+        this.connection$.next('error');
         console.error(`WebSocket error for company ${companyId}:`, error);
       };
 
       this.socket.onclose = (event) => {
+        this.connection$.next('error');
         console.log(
-          `WebSocket closed for company ${companyId}. Code: ${event.code}, Reason: ${event.reason}`
+          `WebSocket closed for company ${companyId}. Code: ${event.code}, Reason: ${event.reason}`,
         );
       };
     } catch (err) {
+      this.connection$.next('error');
       console.error(`Failed to initiate WebSocket connection for company ${companyId}:`, err);
     }
   }
 
   private disconnect(): void {
     if (this.socket) {
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onerror = null;
+      this.socket.onclose = null;
       console.log(`Disconnecting WebSocket from company.`);
       this.socket.close();
       this.socket = null;
     }
+    this.connection$.next('idle');
   }
 }
