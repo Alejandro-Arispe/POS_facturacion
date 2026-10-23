@@ -7,6 +7,7 @@
         <p class="badge badge-success">Nuevo acceso</p>
         <h1 class="title-xl">Crear cuenta</h1>
         <p class="text-muted">Registra tus datos para acceder al sistema.</p>
+        <p class="text-muted">Plan elegido. <a routerLink="/planes">Cambiar plan</a></p>
       </header>
 
       @if (error) {
@@ -144,7 +145,7 @@
 
       <p class="login-link text-muted">
         Ya tienes cuenta?
-        <a routerLink="/login">Inicia sesion</a>
+        <a routerLink="/login" [queryParams]="{ plan: idPlan }">Inicia sesion</a>
       </p>
 
       <p class="home-link text-muted">

@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService, RegisterRequest } from '../../../core/services/auth.service';
 
@@ -23,6 +23,7 @@ export class Register {
     confirmarContrasena: '',
   };
 
+  protected readonly idPlan: string | null;
   protected codigo = '';
   protected emailParaVerificar = '';
   protected mostrarModalVerificacion = false;
@@ -38,7 +39,14 @@ export class Register {
     private readonly authService: AuthService,
     private readonly cdr: ChangeDetectorRef,
     private readonly router: Router,
-  ) {}
+    route: ActivatedRoute,
+  ) {
+    this.idPlan = route.snapshot.queryParamMap.get('plan');
+
+    if (!this.idPlan) {
+      void this.router.navigate(['/planes']);
+    }
+  }
 
   protected registrar(event: SubmitEvent): void {
     event.preventDefault();
@@ -126,7 +134,7 @@ export class Register {
 
         setTimeout(() => {
           this.mostrarModalVerificacion = false;
-          void this.router.navigate(['/']);
+          void this.router.navigate(['/login'], { queryParams: { plan: this.idPlan } });
         }, 5000);
       },
       error: () => {

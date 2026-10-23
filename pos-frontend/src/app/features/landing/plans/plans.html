@@ -1,0 +1,52 @@
+<div class="page-container plans-page">
+  <app-navbar />
+
+  <main class="plans-shell">
+    <header class="plans-header">
+      <p class="badge badge-success">Planes</p>
+      <h1 class="title-xl">Elige el plan para tu negocio</h1>
+      <p class="text-muted">
+        Selecciona un plan para crear tu cuenta. El pago se realiza al registrar tu empresa.
+      </p>
+    </header>
+
+    @if (cargando) {
+      <p class="text-muted plans-state" aria-live="polite">Cargando planes...</p>
+    } @else if (error) {
+      <div class="plans-state" aria-live="polite">
+        <p class="feedback feedback-error">{{ error }}</p>
+        <button class="btn btn-secondary" type="button" (click)="cargarPlanes()">Reintentar</button>
+      </div>
+    } @else {
+      <section class="plans-grid" aria-label="Planes disponibles">
+        @for (plan of planes; track plan.id_plan) {
+          <article class="card card-hover plan-card">
+            <h2 class="title-md">{{ plan.nombre }}</h2>
+            <p class="plan-price">
+              <span class="plan-amount">$ {{ plan.precio }}</span>
+              <span class="text-muted">/mes</span>
+            </p>
+            <p class="text-muted plan-description">{{ plan.descripcion }}</p>
+            <a
+              class="btn btn-primary"
+              routerLink="/register"
+              [queryParams]="{ plan: plan.id_plan }"
+              >Registrarme con este plan</a
+            >
+            <a
+              class="btn btn-secondary"
+              routerLink="/login"
+              [queryParams]="{ plan: plan.id_plan }"
+              >Ya tengo cuenta, ingresar</a
+            >
+          </article>
+        }
+      </section>
+    }
+
+    <p class="text-muted plans-login">
+      Ya tienes una empresa activa?
+      <a routerLink="/login">Inicia sesion</a>
+    </p>
+  </main>
+</div>

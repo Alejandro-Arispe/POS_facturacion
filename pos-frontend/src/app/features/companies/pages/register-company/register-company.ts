@@ -1,8 +1,9 @@
 import { ChangeDetectorRef, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { CompanyService, CreateCompanyRequest } from '../../../../core/services/company.service';
+import { PagoService } from '../../../../core/services/pago.service';
 import { Navbar } from '../../../../shared/components/navbar/navbar';
 
 @Component({
@@ -19,6 +20,7 @@ export class RegisterCompany {
     correo: '',
   };
 
+  protected readonly idPlan: number | null;
   protected cargandoRegistro = false;
   protected errorRegistro = '';
   protected mensajeRegistro = '';
@@ -27,7 +29,12 @@ export class RegisterCompany {
     private readonly companyService: CompanyService,
     private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
-  ) {}
+    private readonly pagoService: PagoService,
+    route: ActivatedRoute,
+  ) {
+    const plan = Number(route.snapshot.queryParamMap.get('plan'));
+    this.idPlan = Number.isInteger(plan) && plan > 0 ? plan : null;
+  }
 
   protected registrarEmpresa(event: SubmitEvent): void {
     event.preventDefault();
@@ -49,7 +56,14 @@ export class RegisterCompany {
     this.cargandoRegistro = true;
 
     this.companyService.crearEmpresa(payload).subscribe({
-      next: () => {
+      next: (response) => {
+        const idEmpresa = this.obtenerIdEmpresa(response);
+
+        if (this.idPlan !== null && idEmpresa !== null) {
+          this.iniciarPago(idEmpresa, this.idPlan);
+          return;
+        }
+
         this.cargandoRegistro = false;
         this.mensajeRegistro = 'Empresa registrada correctamente.';
         this.cdr.detectChanges();
@@ -63,5 +77,31 @@ export class RegisterCompany {
       },
     });
   }
-}
 
+  private iniciarPago(idEmpresa: number, idPlan: number): void {
+    this.mensajeRegistro = 'Empresa registrada. Redirigiendo al pago del plan...';
+    this.cdr.detectChanges();
+
+    this.pagoService.crearCheckout({ id_empresa: idEmpresa, id_plan: idPlan }).subscribe({
+      next: (checkout) => {
+        this.pagoService.guardarSesionStripe(checkout.session_id);
+        window.location.href = checkout.checkout_url;
+      },
+      error: () => {
+        this.cargandoRegistro = false;
+        this.mensajeRegistro = '';
+        this.errorRegistro =
+          'La empresa se registro, pero no se pudo iniciar el pago. Puedes pagar el plan desde Mis empresas.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  private obtenerIdEmpresa(response: unknown): number | null {
+    const raw = response as { empresa?: Record<string, unknown> } & Record<string, unknown>;
+    const empresa = raw?.empresa ?? raw;
+    const id = Number(empresa?.['idEmpresa'] ?? empresa?.['id_empresa'] ?? empresa?.['id']);
+
+    return Number.isInteger(id) && id > 0 ? id : null;
+  }
+}
