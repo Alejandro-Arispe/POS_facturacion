@@ -1,141 +1,78 @@
 :host {
-  display: block;
-  width: 240px;
+  display: contents;
 }
-
-.sidebar {
+.workspace-sidebar {
   position: fixed;
-  top: calc(var(--header-height) + (var(--space-lg) * 2));
-  left: max(var(--space-lg), calc(50vw - (var(--content-max-width) / 2)));
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: var(--space-md);
-  width: 240px;
-  max-height: calc(100vh - var(--header-height) - (var(--space-lg) * 3));
-  min-height: calc(100vh - var(--header-height) - (var(--space-lg) * 3));
-  overflow: hidden;
-  padding: var(--space-sm);
-  border-radius: 0;
+  inset: 0 auto 0 0;
+  z-index: 60;
+  display: flex;
+  width: var(--sidebar-width);
+  height: 100dvh;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
 }
-
-.sidebar-back-link {
-  width: 100%;
-  min-height: 44px;
-  border-radius: 0;
-}
-
-.sidebar-nav {
-  display: grid;
-  align-content: start;
-  gap: var(--space-sm);
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: var(--space-xs);
-}
-
-.sidebar-group {
-  display: grid;
-  gap: var(--space-xs);
-}
-
 .sidebar-link {
   display: flex;
   width: 100%;
+  min-height: 46px;
   align-items: center;
-  justify-content: flex-start;
-  border: none;
-  border-radius: 0;
+  gap: 12px;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
-  color: var(--color-text-title);
-  cursor: pointer;
-  font-weight: var(--font-weight-bold);
-  padding: 12px 14px;
+  padding: 11px 13px;
   text-align: left;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--color-text-soft);
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out;
 }
-
 .sidebar-link:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-accent-green);
+  background: var(--pos-brand-soft);
+  color: var(--pos-brand);
 }
-
 .sidebar-link.active {
-  background: rgba(4, 120, 87, 0.12);
-  border: 1px solid var(--color-border-glow);
-  color: var(--color-accent-green);
-  font-weight: 700;
+  background: var(--pos-brand);
+  color: var(--color-surface-solid);
+  font-weight: 650;
 }
-
-.sidebar-link:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 4px var(--color-border-glow);
-}
-
-.sidebar-caret {
-  margin-left: auto;
-  transition: transform 0.2s ease;
-}
-
-.sidebar-caret.open {
-  transform: rotate(180deg);
-}
-
-.sidebar-submenu {
-  display: grid;
-  gap: var(--space-xs);
-  padding-left: var(--space-sm);
-}
-
 .sidebar-sublink {
   display: flex;
-  width: 100%;
+  min-height: 39px;
   align-items: center;
-  justify-content: flex-start;
-  border: none;
-  border-radius: 0;
-  background: transparent;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
   color: var(--color-text-soft);
-  cursor: pointer;
-  font-weight: 600;
-  padding: 10px 14px;
-  text-align: left;
-  transition: background-color 0.2s ease, color 0.2s ease;
 }
-
-.sidebar-sublink:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-title);
-}
-
+.sidebar-sublink:hover,
 .sidebar-sublink.active {
-  background: rgba(4, 120, 87, 0.12);
-  border: 1px solid var(--color-border-glow);
-  color: var(--color-accent-green);
+  color: var(--pos-brand);
+  background: var(--pos-brand-soft);
+}
+.sidebar-sublink.active {
   font-weight: 700;
 }
-
-.sidebar-actions {
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-md);
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  border: 0;
+  background: rgb(15 23 42 / 40%);
 }
-
-@media (max-width: 780px) {
-  :host {
-    width: auto;
+@media (max-width: 1023px) {
+  .workspace-sidebar {
+    display: none;
+    width: 280px;
+    max-width: calc(100vw - 40px);
   }
-
-  .sidebar {
-    position: static;
-    left: auto;
-    width: auto;
-    max-height: none;
-    min-height: auto;
-    overflow: visible;
-  }
-
-  .sidebar-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow-y: visible;
-    padding-right: 0;
+  .workspace-sidebar.mobile-open {
+    display: flex;
   }
 }

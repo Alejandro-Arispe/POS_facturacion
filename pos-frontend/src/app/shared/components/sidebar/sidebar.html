@@ -1,21 +1,69 @@
-<aside class="sidebar panel" aria-label="Menu lateral">
-  <nav class="sidebar-nav">
-    @for (item of displayedItems; track item.label) {
-      @if (item.children?.length) {
-        <section class="sidebar-group">
-          @if (item.link) {
-            <a
-              class="sidebar-link"
-              [class.active]="item.active"
-              [routerLink]="item.link"
-              [queryParams]="item.queryParams"
-              [attr.aria-expanded]="isGroupOpen(item)"
-              (click)="toggleGroup(item.label)"
-            >
-              <span>{{ item.label | t }}</span>
-              <span class="sidebar-caret" [class.open]="isGroupOpen(item)">&#9662;</span>
-            </a>
-          } @else {
+@if (sidebarState.mobileOpen()) {
+  <button
+    class="sidebar-backdrop"
+    type="button"
+    aria-label="Cerrar menú de navegación"
+    (click)="sidebarState.closeMobile(true)"
+  ></button>
+}
+<aside
+  id="workspace-sidebar"
+  class="workspace-sidebar"
+  [class.mobile-open]="sidebarState.mobileOpen()"
+  aria-label="Menú lateral"
+>
+  <div class="flex h-[88px] shrink-0 items-center gap-3 border-b border-line px-7">
+    <a
+      routerLink="/my-companies"
+      class="flex min-w-0 flex-1 items-center gap-3"
+      aria-label="POS — Mis empresas"
+    >
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+        <circle
+          cx="20"
+          cy="20"
+          r="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="9"
+          stroke-dasharray="65 23"
+          transform="rotate(-90 20 20)"
+        />
+        <circle
+          cx="20"
+          cy="20"
+          r="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="9"
+          stroke-dasharray="17 71"
+          opacity=".15"
+          transform="rotate(-7 20 20)"
+        />
+      </svg>
+      <span class="min-w-0"
+        ><strong class="block text-lg font-extrabold tracking-tight text-ink">POS</strong
+        ><span class="block text-xs text-muted">{{ 'Punto de venta' | t }}</span></span
+      >
+    </a>
+    <button
+      type="button"
+      class="icon-button ml-auto lg:hidden"
+      aria-label="Cerrar menú"
+      (click)="sidebarState.closeMobile(true)"
+    >
+      <app-icon name="close" [size]="18" />
+    </button>
+  </div>
+
+  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-5 pt-7">
+    <p class="mb-3 px-3 text-[11px] font-bold uppercase tracking-[.12em] text-muted">
+      {{ 'Espacio de trabajo' | t }}
+    </p>
+    <nav class="grid content-start gap-1.5" aria-label="Módulos de la empresa">
+      @for (item of displayedItems; track item.label) {
+        @if (item.children?.length) {
+          <section>
             <button
               class="sidebar-link"
               [class.active]="item.active"
@@ -23,54 +71,59 @@
               type="button"
               (click)="toggleGroup(item.label)"
             >
-              <span>{{ item.label | t }}</span>
-              <span class="sidebar-caret" [class.open]="isGroupOpen(item)">&#9662;</span>
+              <app-icon [name]="iconFor(item.label)" />
+              <span class="flex-1">{{ item.label | t }}</span>
+              <app-icon
+                name="down"
+                [size]="16"
+                class="transition-transform duration-150"
+                [class.rotate-180]="isGroupOpen(item)"
+              />
             </button>
-          }
-
-          @if (isGroupOpen(item)) {
-            <div class="sidebar-submenu">
-              @for (child of item.children; track child.label) {
-                @if (child.link) {
-                  <a
-                    class="sidebar-sublink"
-                    [class.active]="child.active"
-                    [routerLink]="child.link"
-                    [queryParams]="child.queryParams"
-                  >
-                    {{ child.label | t }}
-                  </a>
-                } @else {
-                  <button class="sidebar-sublink" [class.active]="child.active" type="button">
-                    {{ child.label | t }}
-                  </button>
+            @if (isGroupOpen(item)) {
+              <div class="my-2 ml-[22px] grid gap-1 border-l border-line pl-4">
+                @for (child of item.children; track child.label) {
+                  @if (child.link) {
+                    <a
+                      class="sidebar-sublink"
+                      [class.active]="child.active"
+                      [attr.aria-current]="child.active ? 'page' : null"
+                      [routerLink]="child.link"
+                      [queryParams]="child.queryParams"
+                    >
+                      <span>{{ child.label | t }}</span>
+                      @if (child.active) {
+                        <app-icon name="check" [size]="15" />
+                      }
+                    </a>
+                  }
                 }
-              }
-            </div>
-          }
-        </section>
-      } @else {
-        @if (item.link) {
+              </div>
+            }
+          </section>
+        } @else if (item.link) {
           <a
             class="sidebar-link"
             [class.active]="item.active"
+            [attr.aria-current]="item.active ? 'page' : null"
             [routerLink]="item.link"
             [queryParams]="item.queryParams"
           >
-            {{ item.label | t }}
+            <app-icon [name]="iconFor(item.label)" /><span>{{ item.label | t }}</span>
           </a>
-        } @else {
-          <button class="sidebar-link" [class.active]="item.active" type="button">
-            {{ item.label | t }}
-          </button>
         }
       }
-    }
-  </nav>
-
-  <div class="sidebar-actions">
-    <a class="btn btn-primary sidebar-back-link" [routerLink]="backButtonLink">
-      {{ backButtonLabel | t }}
-    </a>
+    </nav>
+    <div class="mt-auto pt-8">
+      <a
+        class="flex min-h-11 items-center gap-3 rounded-lg border border-line px-3 py-3 text-xs font-semibold text-muted transition-colors hover:bg-brand-soft hover:text-brand"
+        [routerLink]="backButtonLink"
+      >
+        <app-icon name="back" [size]="18" /><span>{{ backButtonLabel | t }}</span>
+      </a>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 border-t border-line px-7 py-5 text-xs text-muted">
+    <span class="size-1.5 rounded-full bg-brand" aria-hidden="true"></span>Gestión comercial
   </div>
 </aside>

@@ -1,123 +1,533 @@
 <div class="page-container company-dashboard-page">
   <app-navbar />
-
-  <main class="company-dashboard-layout">
+  <main>
     <app-sidebar context="company" [companyId]="companyId" />
-
-    <section class="company-dashboard-content">
-      <header class="dashboard-header panel">
-        <div class="dashboard-header-main">
-          <h1 class="title-xl">{{ companyName }}</h1>
-          <p class="text-muted">Resumen ejecutivo de rendimiento comercial por sucursal.</p>
+    <section class="grid min-w-0 gap-7" aria-label="Dashboard de la empresa">
+      <header class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1
+            class="text-[26px] font-bold leading-tight tracking-[-.025em] text-ink sm:text-[28px]"
+          >
+            {{ 'Resumen del negocio' | t }}
+          </h1>
+          <p class="mt-2 text-sm text-muted">
+            {{ companyName }}<span class="mx-2 text-line" aria-hidden="true">/</span
+            >{{ 'Tu operación, de un vistazo.' | t }}
+          </p>
         </div>
-
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="flex items-center gap-2 text-xs text-muted"
+            ><app-icon name="calendar" [size]="16" />{{ todayLabel }}</span
+          >
+          @if (reportLink) {
+            <a class="btn btn-secondary" [routerLink]="reportLink"
+              ><app-icon name="chart" [size]="17" />{{ 'Ver reportes' | t }}</a
+            >
+          }
+        </div>
       </header>
 
-      @if (shouldShowLoadingState) {
-        <section class="dashboard-loading panel" aria-live="polite">
-          <p class="text-muted">Esperando informacion del dashboard...</p>
-          <div class="kpi-grid">
-            @for (_ of [1,2,3,4,5,6,7,8,9]; track $index) {
-              <article class="kpi-card kpi-skeleton"></article>
+      @if (uiState === 'loading') {
+        <div role="status" aria-live="polite" aria-label="Cargando indicadores del negocio">
+          <p class="mb-4 flex items-center gap-2 text-sm text-muted">
+            <app-icon name="refresh" [size]="16" />{{ 'Cargando el resumen de tu empresa…' | t }}
+          </p>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            @for (item of [1, 2, 3, 4]; track item) {
+              <div class="h-44 animate-pulse rounded-2xl border border-line bg-surface p-6">
+                <div class="h-3 w-28 rounded bg-canvas"></div>
+                <div class="mt-5 h-8 w-32 rounded bg-canvas"></div>
+                <div class="mt-5 h-3 w-40 rounded bg-canvas"></div>
+              </div>
             }
           </div>
+          <div class="mt-6 h-80 animate-pulse rounded-2xl border border-line bg-surface"></div>
+        </div>
+      }
+
+      @if (uiState === 'error' || uiState === 'empty') {
+        <section
+          class="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-line bg-surface px-6 py-12 text-center"
+          [attr.role]="uiState === 'error' ? 'alert' : 'status'"
+        >
+          <app-icon
+            [name]="uiState === 'error' ? 'alert' : 'chart'"
+            [size]="36"
+            class="mb-4 text-brand"
+          />
+          <h2 class="text-xl font-bold text-ink">
+            {{
+              (uiState === 'error'
+                ? 'No pudimos cargar el resumen'
+                : 'Todavía no hay información disponible'
+              ) | t
+            }}
+          </h2>
+          <p class="mt-2 max-w-md text-sm text-muted">
+            {{
+              (uiState === 'error'
+                ? 'Comprueba que el servidor esté disponible y vuelve a intentarlo.'
+                : 'Los indicadores aparecerán cuando la empresa tenga actividad registrada.'
+              ) | t
+            }}
+          </p>
+          <button type="button" class="btn btn-primary mt-6" (click)="retry()">
+            <app-icon name="refresh" [size]="17" />{{ 'Volver a intentar' | t }}
+          </button>
         </section>
       }
 
-      @if (shouldShowErrorState) {
-        <section class="dashboard-state panel" aria-live="assertive">
-          <h2 class="title-md">No pudimos cargar el dashboard</h2>
-          <p class="text-muted">Intenta nuevamente o recarga la pagina.</p>
-        </section>
-      }
+      @if (uiState === 'ready') {
+        @if (connection === 'error') {
+          <div
+            class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+            role="status"
+          >
+            <span class="flex items-center gap-2"
+              ><app-icon name="alert" [size]="18" />Se perdió la conexión. Se muestran los últimos
+              datos recibidos.</span
+            >
+            <button type="button" class="font-bold underline underline-offset-4" (click)="retry()">
+              Reconectar
+            </button>
+          </div>
+        }
 
-      @if (shouldShowEmptyState) {
-        <section class="dashboard-state panel" aria-live="polite">
-          <h2 class="title-md">Sin datos para mostrar</h2>
-          <p class="text-muted">Aun no hay informacion consolidada disponible.</p>
-        </section>
-      }
-
-      @if (shouldShowDashboard) {
-        <section class="kpi-grid" aria-label="Indicadores principales del dashboard">
-          @for (kpi of kpiCards; track kpi.title) {
-            <article class="kpi-card panel">
-              <div class="kpi-icon">{{ kpi.icon }}</div>
-              <p class="kpi-title">{{ kpi.title }}</p>
-              <p class="kpi-value">{{ kpi.value }}</p>
+        <section
+          class="grid grid-cols-1 gap-4 min-[380px]:grid-cols-2 xl:grid-cols-4"
+          aria-label="Indicadores de hoy"
+        >
+          @for (metric of metrics; track metric.title) {
+            <article
+              class="metric-card flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface"
+            >
+              <div class="flex-1 p-4 sm:p-5">
+                <div class="flex items-center justify-between gap-2">
+                  <h2 class="text-xs font-medium text-muted sm:text-sm">{{ metric.title | t }}</h2>
+                  <span class="metric-icon" [attr.data-tone]="metric.tone"
+                    ><app-icon [name]="metric.icon" [size]="19"
+                  /></span>
+                </div>
+                <p
+                  class="mt-3 break-words text-[24px] font-bold leading-tight tracking-[-.025em] text-ink sm:text-[27px]"
+                  data-numeric
+                >
+                  {{ metric.value }}
+                </p>
+                <p class="mt-3 text-[11px] text-muted">{{ metric.note | t }}</p>
+              </div>
+              @if (metric.link) {
+                <a
+                  [routerLink]="metric.link"
+                  class="flex min-h-11 items-center justify-between gap-2 border-t border-line px-5 py-3 text-xs font-semibold text-brand transition-colors hover:bg-brand-soft"
+                  [attr.aria-label]="'Ver detalle: ' + metric.title"
+                  >{{ 'Ver detalle' | t }}<app-icon name="right" [size]="16"
+                /></a>
+              } @else {
+                <div class="min-h-11 border-t border-line px-5 py-3 text-xs text-muted">
+                  {{ 'Resumen de hoy' | t }}
+                </div>
+              }
             </article>
           }
         </section>
 
-        <div class="dashboard-extended-grid">
-          <!-- Ranking de clientes -->
-          <section class="dashboard-section panel">
-            <h2 class="title-md">Ranking de clientes</h2>
-            @if (rankingClientes.length > 0) {
-              <div class="table-responsive">
-                <table class="table ranking-table">
-                  <thead>
+        <div
+          class="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,1fr)]"
+        >
+          <section
+            class="min-w-0 rounded-2xl border border-line bg-surface p-5 sm:p-6"
+            aria-label="Evolución de ventas"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-[15px] font-bold text-ink">{{ 'Evolución de ventas' | t }}</h2>
+              <label
+                class="flex h-9 items-center gap-2 rounded-lg border border-line px-2.5 text-xs text-muted"
+                ><app-icon name="calendar" [size]="14" /><select
+                  class="max-w-full border-0 bg-transparent text-xs text-ink"
+                  aria-label="Periodo del gráfico de ventas"
+                  [value]="period"
+                  (change)="setPeriod($event)"
+                >
+                  <option value="7">Últimos 7 días</option>
+                  <option value="14">Últimos 14 días</option>
+                  <option value="30">Últimos 30 días</option>
+                </select></label
+              >
+            </div>
+            <div class="mb-5 mt-5 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p class="text-[28px] font-bold leading-tight tracking-tight text-ink" data-numeric>
+                  {{ periodTotal | money }}
+                </p>
+                <p class="mt-1 text-xs text-muted">Total del periodo</p>
+              </div>
+              <span class="flex items-center gap-2 text-xs text-muted"
+                ><span class="size-2 rounded-full bg-brand" aria-hidden="true"></span>Ventas
+                diarias</span
+              >
+            </div>
+            @if (hasSales) {
+              <div class="relative">
+                <div class="flex h-[220px] gap-3" aria-label="Gráfico de importes vendidos por día">
+                  <div
+                    class="flex w-9 shrink-0 flex-col justify-between pb-3 pt-3 text-right text-[10px] text-muted"
+                    aria-hidden="true"
+                  >
+                    <span>{{ axisLabel(1) }}</span
+                    ><span>{{ axisLabel(0.75) }}</span
+                    ><span>{{ axisLabel(0.5) }}</span
+                    ><span>{{ axisLabel(0.25) }}</span
+                    ><span>{{ axisLabel(0) }}</span>
+                  </div>
+                  <svg
+                    class="min-w-0 flex-1 overflow-visible"
+                    viewBox="0 0 640 220"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-labelledby="sales-chart-title sales-chart-description"
+                  >
+                    <title id="sales-chart-title">Ventas de los últimos {{ period }} días</title>
+                    <desc id="sales-chart-description">
+                      Total {{ periodTotal | money }}. Los datos diarios también están disponibles
+                      en la tabla bajo el gráfico.
+                    </desc>
+                    @for (y of [20, 65, 110, 155, 200]; track y) {
+                      <line
+                        x1="0"
+                        x2="640"
+                        [attr.y1]="y"
+                        [attr.y2]="y"
+                        stroke="var(--color-border)"
+                        stroke-dasharray="4 5"
+                      />
+                    }
+                    <path [attr.d]="areaPath" fill="var(--pos-brand)" opacity=".065" />
+                    <path
+                      [attr.d]="linePath"
+                      fill="none"
+                      stroke="var(--pos-brand)"
+                      stroke-width="2.5"
+                      stroke-linejoin="round"
+                      stroke-linecap="round"
+                      vector-effect="non-scaling-stroke"
+                    />
+                    @for (point of chartPoints; track point.fecha) {
+                      <circle
+                        [attr.cx]="point.x"
+                        [attr.cy]="point.y"
+                        r="4"
+                        fill="var(--color-surface-solid)"
+                        stroke="var(--pos-brand)"
+                        stroke-width="2"
+                        vector-effect="non-scaling-stroke"
+                        tabindex="0"
+                        role="button"
+                        [attr.aria-label]="dateLabel(point.fecha) + ': ' + (point.total | money)"
+                        (focus)="selectedDate = point.fecha"
+                        (mouseenter)="selectedDate = point.fecha"
+                        (click)="selectedDate = point.fecha"
+                        (keydown.enter)="selectedDate = point.fecha"
+                        (keydown.space)="$event.preventDefault(); selectedDate = point.fecha"
+                      >
+                        <title>{{ dateLabel(point.fecha) }} · {{ point.total | money }}</title>
+                      </circle>
+                    }
+                  </svg>
+                </div>
+                <div class="ml-12 mt-3 flex justify-between text-[10px] text-muted">
+                  <span>{{ dateLabel(series[0].fecha) }}</span
+                  ><span>{{ dateLabel(series[Math.floor(period / 2)].fecha) }}</span
+                  ><span>{{ dateLabel(series[period - 1].fecha) }}</span>
+                </div>
+              </div>
+              <div
+                class="mt-4 flex min-h-6 items-center justify-between gap-2 text-xs text-muted"
+                aria-live="polite"
+              >
+                @if (selectedPoint; as point) {
+                  <span
+                    >{{ dateLabel(point.fecha) }}:
+                    <strong class="font-semibold text-ink">{{ point.total | money }}</strong></span
+                  >
+                } @else {
+                  <span>Selecciona un punto para ver su importe.</span>
+                }
+                <span class="hidden sm:inline"
+                  >Pico diario:
+                  <strong class="font-semibold text-ink">{{ periodPeak | money }}</strong></span
+                >
+              </div>
+              <details class="mt-3 border-t border-line pt-3 text-xs text-muted">
+                <summary class="w-fit cursor-pointer font-semibold hover:text-brand">
+                  Ver datos diarios
+                </summary>
+                <div class="mt-3 max-h-48 overflow-auto">
+                  <table class="w-full text-left">
+                    <caption class="sr-only">
+                      Importes diarios del periodo seleccionado
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" class="py-2 font-semibold">Fecha</th>
+                        <th scope="col" class="py-2 text-right font-semibold">Ventas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (point of series; track point.fecha) {
+                        <tr class="border-t border-line">
+                          <td class="py-2">{{ dateLabel(point.fecha) }}</td>
+                          <td class="py-2 text-right text-ink">{{ point.total | money }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            } @else {
+              <div class="flex min-h-[255px] flex-col items-center justify-center text-center">
+                <app-icon name="chart" [size]="34" class="text-brand" />
+                <h3 class="mt-4 text-sm font-semibold">Sin ventas en este periodo</h3>
+                <p class="mt-1 max-w-xs text-xs text-muted">
+                  Prueba con otro periodo o registra una venta para comenzar.
+                </p>
+              </div>
+            }
+          </section>
+
+          <section class="flex flex-col rounded-2xl border border-line bg-surface p-5 sm:p-6">
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-[15px] font-bold text-ink">{{ 'Estado del inventario' | t }}</h2>
+              <app-icon name="boxes" [size]="19" class="text-muted" />
+            </div>
+            <p class="mt-1 text-xs text-muted">Productos que requieren atención</p>
+            <div class="relative mx-auto my-5 size-[180px]">
+              <svg
+                viewBox="0 0 180 180"
+                class="size-full -rotate-90"
+                role="img"
+                [attr.aria-label]="
+                  lowStock + ' registros con stock bajo y ' + outOfStock + ' agotados'
+                "
+              >
+                <circle
+                  cx="90"
+                  cy="90"
+                  r="69"
+                  fill="none"
+                  stroke="var(--color-bg-soft)"
+                  stroke-width="22"
+                />
+                @if (stockAlerts > 0) {
+                  <circle
+                    cx="90"
+                    cy="90"
+                    r="69"
+                    fill="none"
+                    stroke="var(--pos-brand)"
+                    stroke-width="22"
+                    pathLength="100"
+                    [attr.stroke-dasharray]="lowStockShare + ' ' + (100 - lowStockShare)"
+                  />
+                  <circle
+                    cx="90"
+                    cy="90"
+                    r="69"
+                    fill="none"
+                    stroke="#edab5a"
+                    stroke-width="22"
+                    pathLength="100"
+                    [attr.stroke-dasharray]="100 - lowStockShare + ' ' + lowStockShare"
+                    [attr.stroke-dashoffset]="-lowStockShare"
+                  />
+                }
+              </svg>
+              <div
+                class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
+              >
+                <strong
+                  class="text-[32px] font-bold leading-none tracking-tight text-ink"
+                  data-numeric
+                  >{{ stockAlerts }}</strong
+                ><span class="mt-2 text-xs text-muted">{{
+                  stockAlerts ? 'alertas de stock' : 'sin alertas'
+                }}</span>
+              </div>
+            </div>
+            <dl class="grid gap-3 text-xs">
+              <div class="flex items-center justify-between gap-3">
+                <dt class="flex items-center gap-2 text-muted">
+                  <span class="size-2.5 rounded-full bg-brand" aria-hidden="true"></span>Stock bajo
+                </dt>
+                <dd class="font-bold text-ink" data-numeric>{{ lowStock }}</dd>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <dt class="flex items-center gap-2 text-muted">
+                  <span class="size-2.5 rounded-full bg-[#edab5a]" aria-hidden="true"></span
+                  >Agotados
+                </dt>
+                <dd class="font-bold text-ink" data-numeric>{{ outOfStock }}</dd>
+              </div>
+            </dl>
+            <p class="mt-4 text-[11px] leading-relaxed text-muted">
+              Conteo por sucursal. Un producto puede aparecer en más de una.
+            </p>
+            @if (branchLink) {
+              <a
+                [routerLink]="branchLink"
+                class="mt-auto flex min-h-11 items-center justify-between gap-2 border-t border-line pt-4 text-xs font-semibold text-brand hover:underline"
+                >Revisar sucursales<app-icon name="right" [size]="16"
+              /></a>
+            }
+          </section>
+        </div>
+
+        <section
+          class="grid grid-cols-1 rounded-2xl border border-line bg-surface sm:grid-cols-2 xl:grid-cols-4"
+          aria-label="Flujo de caja y producto destacado"
+        >
+          @for (metric of cashMetrics; track metric.title) {
+            <div class="cash-summary min-w-0 p-5">
+              <div class="mb-3 flex items-center justify-between gap-2 text-xs text-muted">
+                <h2>{{ metric.title | t }}</h2>
+                <app-icon [name]="metric.icon" [size]="18" />
+              </div>
+              <p class="break-words text-xl font-bold tracking-tight text-ink" data-numeric>
+                {{ metric.value | money }}
+              </p>
+              <p class="mt-2 text-[11px] text-muted">Actividad de hoy</p>
+            </div>
+          }
+          <div class="cash-summary min-w-0 p-5">
+            <div class="mb-3 flex items-center justify-between gap-2 text-xs text-muted">
+              <h2>Producto estrella</h2>
+              <app-icon name="star" [size]="18" />
+            </div>
+            <p class="text-sm font-bold text-ink">{{ topProduct?.nombre ?? 'Sin ventas hoy' }}</p>
+            <p class="mt-2 text-[11px] text-muted">
+              {{
+                topProduct
+                  ? topProduct.unidades + ' unidades vendidas hoy'
+                  : 'Aparecerá con la primera venta.'
+              }}
+            </p>
+          </div>
+        </section>
+
+        <div class="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <section class="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface">
+            <header class="flex items-center justify-between gap-3 px-6 py-5">
+              <h2 class="text-[15px] font-bold">Ranking de clientes</h2>
+              <app-icon name="users" [size]="18" class="text-muted" />
+            </header>
+            @if (rankingClientes.length) {
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="border-y border-line bg-canvas text-muted">
                     <tr>
-                      <th>Pos</th>
-                      <th>Cliente</th>
-                      <th>Categoría</th>
-                      <th class="text-right">Total Comprado</th>
-                      <th>Última Compra</th>
+                      <th scope="col" class="px-5 py-3 font-medium">Cliente</th>
+                      <th scope="col" class="px-3 py-3 font-medium">Categoría</th>
+                      <th scope="col" class="px-5 py-3 text-right font-medium">Total comprado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    @for (cliente of rankingClientes; track cliente.id_cliente) {
-                      <tr>
-                        <td><strong>#{{ cliente.posicion }}</strong></td>
-                        <td>
-                          <div class="client-name">{{ cliente.nombre }}</div>
-                          <div class="text-muted text-sm">{{ cliente.cantidad_compras }} compras (TP: {{ cliente.ticket_promedio | money }})</div>
+                    @for (client of rankingClientes; track client.id_cliente) {
+                      <tr class="border-b border-line last:border-0">
+                        <td class="px-5 py-4">
+                          <strong class="block font-semibold">{{ client.nombre }}</strong
+                          ><span class="mt-1 block text-[11px] text-muted"
+                            >#{{ client.posicion }} · {{ client.cantidad_compras }} compras · Ticket
+                            {{ client.ticket_promedio | money }}</span
+                          ><span class="text-[11px] text-muted"
+                            >Última:
+                            {{
+                              client.ultima_compra
+                                ? (client.ultima_compra | date: 'dd/MM/yyyy')
+                                : 'Sin fecha'
+                            }}</span
+                          >
                         </td>
-                        <td>
-                          <span class="badge" [ngClass]="'badge-' + cliente.categoria.toLowerCase()">{{ cliente.categoria }}</span>
+                        <td class="px-3 py-4">
+                          <span class="rounded-md bg-brand-soft px-2 py-1 font-medium text-brand">{{
+                            client.categoria
+                          }}</span>
                         </td>
-                        <td class="text-right"><strong>{{ cliente.total_comprado | money }}</strong></td>
-                        <td>{{ cliente.ultima_compra ? (cliente.ultima_compra | date:'dd/MM/yyyy') : '-' }}</td>
+                        <td class="px-5 py-4 text-right font-semibold" data-numeric>
+                          {{ client.total_comprado | money }}
+                        </td>
                       </tr>
                     }
                   </tbody>
                 </table>
               </div>
             } @else {
-              <div class="empty-state-section">
-                <p class="text-muted">No hay ventas suficientes para generar un ranking.</p>
+              <div
+                class="flex min-h-44 flex-col items-center justify-center border-t border-line px-6 pb-8 pt-7 text-center"
+              >
+                <app-icon name="users" [size]="25" class="text-muted" />
+                <p class="mt-3 text-sm font-semibold">Aún no hay un ranking disponible</p>
+                <p class="mt-1 max-w-xs text-xs text-muted">
+                  Se mostrará aquí cuando el sistema disponga de información de compras por cliente.
+                </p>
               </div>
             }
           </section>
-
-          <!-- Recomendaciones -->
-          <section class="dashboard-section panel">
-            <h2 class="title-md">Recomendaciones Inteligentes</h2>
-            @if (recomendaciones.length > 0) {
-              <div class="recommendations-list">
+          <section class="min-w-0 rounded-2xl border border-line bg-surface">
+            <header class="flex items-center justify-between gap-3 px-6 py-5">
+              <h2 class="text-[15px] font-bold">Recomendaciones</h2>
+              <app-icon name="clipboard" [size]="18" class="text-muted" />
+            </header>
+            @if (recomendaciones.length) {
+              <div class="divide-y divide-line border-t border-line">
                 @for (rec of recomendaciones; track rec.titulo) {
-                  <div class="recommendation-card" [ngClass]="'rec-card-' + rec.prioridad">
-                    <div class="rec-header">
-                      <h3 class="rec-title">{{ rec.titulo }}</h3>
-                      <span class="badge" [ngClass]="'badge-priority-' + rec.prioridad">{{ rec.prioridad | uppercase }}</span>
+                  <article class="px-6 py-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <h3 class="text-sm font-semibold">{{ rec.titulo }}</h3>
+                      <span
+                        class="badge"
+                        [class.badge-danger]="rec.prioridad === 'alta'"
+                        [class.badge-warning]="rec.prioridad === 'media'"
+                        [class.badge-success]="rec.prioridad === 'baja'"
+                        >{{ rec.prioridad }}</span
+                      >
                     </div>
-                    <p class="rec-message">{{ rec.mensaje }}</p>
+                    <p class="mt-2 text-xs leading-relaxed text-muted">{{ rec.mensaje }}</p>
                     @if (rec.valor !== undefined) {
-                      <div class="rec-meta">
-                        <span class="text-muted text-sm">Registro detectado: <strong>{{ rec.valor }}</strong></span>
-                      </div>
+                      <p class="mt-2 text-xs text-muted">Registro detectado: {{ rec.valor }}</p>
                     }
-                  </div>
+                  </article>
                 }
               </div>
             } @else {
-              <div class="empty-state-section">
-                <p class="text-muted">No hay recomendaciones importantes en este momento.</p>
+              <div
+                class="flex min-h-44 flex-col items-center justify-center border-t border-line px-6 pb-8 pt-7 text-center"
+              >
+                <app-icon name="success" [size]="25" class="text-brand" />
+                <p class="mt-3 text-sm font-semibold">Sin recomendaciones por ahora</p>
+                <p class="mt-1 max-w-xs text-xs text-muted">
+                  Cuando el sistema genere una recomendación, podrás consultarla aquí.
+                </p>
               </div>
             }
           </section>
         </div>
-
+        <footer
+          class="flex flex-wrap items-center justify-between gap-2 pb-2 text-[11px] text-muted"
+        >
+          <span>{{ companyName }} · Resumen de todas las sucursales</span
+          ><span class="flex items-center gap-2"
+            ><span
+              class="size-1.5 rounded-full"
+              [class.bg-emerald-600]="connection === 'connected'"
+              [class.bg-amber-600]="connection !== 'connected'"
+              aria-hidden="true"
+            ></span
+            >{{ connection === 'connected' ? 'Actualización en vivo' : 'Sin conexión en vivo' }}
+            @if (data?.generado_en) {
+              <span>· {{ preferences.formatDateTime(data?.generado_en) }}</span>
+            }
+          </span>
+        </footer>
       }
     </section>
   </main>
