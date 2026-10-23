@@ -34,6 +34,7 @@ import { ClientesCatalogo } from './features/companies/sections/clients/pages/ca
 import { Login } from './features/auth/login/login';
 import { Register } from './features/auth/register/register';
 import { HomePage } from './features/landing/home_page/home_page';
+import { Plans } from './features/landing/plans/plans';
 import { authGuard } from './core/guards/auth.guard';
 import { permissionGuard } from './core/guards/permission.guard';
 import { superAdminGuard } from './core/guards/superadmin.guard';
@@ -47,6 +48,10 @@ export const routes: Routes = [
   {
     path: '',
     component: HomePage,
+  },
+  {
+    path: 'planes',
+    component: Plans,
   },
   {
     path: 'register',
@@ -63,6 +68,16 @@ export const routes: Routes = [
   },
   {
     path: 'payment/success',
+    component: PaymentResultComponent,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'administrator/payment/success',
+    component: PaymentResultComponent,
+    canActivate: [authGuard],
+  },
+  {
+    path: 'administrator/payment/cancel',
     component: PaymentResultComponent,
     canActivate: [authGuard],
   },

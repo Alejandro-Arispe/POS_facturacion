@@ -1,0 +1,47 @@
+.plans-shell {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 40px 16px 64px;
+  display: grid;
+  gap: 32px;
+}
+
+.plans-header {
+  display: grid;
+  gap: 8px;
+  text-align: center;
+  justify-items: center;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.plan-amount {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.plan-description {
+  flex: 1;
+}
+
+.plans-state,
+.plans-login {
+  text-align: center;
+}

@@ -54,6 +54,13 @@ export class Login {
           return;
         }
 
+        const plan = this.route.snapshot.queryParamMap.get('plan');
+
+        if (plan) {
+          void this.router.navigate(['/register-company'], { queryParams: { plan } });
+          return;
+        }
+
         void this.router.navigate(['/my-companies']);
       },
       error: () => {
