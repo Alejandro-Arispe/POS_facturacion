@@ -1,100 +1,80 @@
-.register-company-page {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
-
 .register-company-shell {
   display: grid;
-  width: min(720px, 100%);
+  gap: 28px;
+  width: min(760px, 100%);
   margin: 0 auto;
-  place-items: start stretch;
+  padding: 24px 16px 48px;
 }
-
 .register-company-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-  padding: var(--space-xl);
+  display: grid;
+  gap: 24px;
+  padding: 32px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-solid);
+  border-radius: 16px;
 }
-
-.back-link {
-  width: fit-content;
-  color: var(--color-primary-hover);
-  font-weight: var(--font-weight-semibold);
-}
-
 .register-company-header {
   display: grid;
-  justify-items: start;
-  gap: var(--space-sm);
+  gap: 10px;
 }
-
 .company-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--space-md);
-  row-gap: var(--space-sm);
+  gap: 20px 16px;
 }
-
-.company-form .label {
-  color: var(--color-text-title);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.company-form .input::placeholder {
-  color: rgba(203, 213, 225, 0.5);
-  opacity: 0.7;
-}
-
 .company-form-actions {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-sm);
-  margin-top: var(--space-sm);
+  grid-column: 1/-1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
 }
-
 .company-form-actions .btn {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
-
-.company-form-actions .btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
+.setup-summary {
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  padding: 20px 0;
+  display: grid;
+  gap: 16px;
 }
-
-.feedback {
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  padding: 10px 12px;
+.setup-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
 }
-
-.feedback-error {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
+.setup-summary span {
+  color: var(--color-text-muted);
 }
-
-.feedback-success {
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--color-success);
+.setup-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border-radius: 10px;
+  padding: 18px;
+  background: var(--color-bg);
+  font-size: 13px;
+  line-height: 1.8;
 }
-
-@media (max-width: 640px) {
-  .register-company-page {
-    padding: var(--space-md);
-  }
-
+.setup-note app-icon {
+  margin-top: 3px;
+  color: var(--pos-brand);
+}
+@media (max-width: 600px) {
   .register-company-panel {
-    padding: var(--space-lg);
+    padding: 24px 18px;
   }
-
-  .company-form,
-  .company-form-actions {
+  .company-form {
     grid-template-columns: 1fr;
+  }
+  .company-form-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
   }
 }

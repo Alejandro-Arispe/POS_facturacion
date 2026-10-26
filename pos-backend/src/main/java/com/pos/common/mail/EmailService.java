@@ -13,12 +13,15 @@ public class EmailService {
 
     private final JavaMailSender mailSender;
     private final String mailFrom;
+    private final String frontendBaseUrl;
 
     public EmailService(
             @Autowired(required = false) JavaMailSender mailSender,
-            @Value("${app.mail-from:}") String mailFrom) {
+            @Value("${app.mail-from:}") String mailFrom,
+            @Value("${app.frontend-base-url:http://localhost:4200}") String frontendBaseUrl) {
         this.mailSender = mailSender;
         this.mailFrom = mailFrom;
+        this.frontendBaseUrl = frontendBaseUrl;
     }
 
     public boolean sendVerificationEmail(String email, String nombre, String codigo) {
@@ -55,6 +58,22 @@ public class EmailService {
 
     public boolean sendHtml(String email, String subject, String html) {
         return send(email, subject, html);
+    }
+
+    public boolean sendWelcomeEmail(String email, String nombre) {
+        String safeName = org.springframework.web.util.HtmlUtils.htmlEscape(nombre == null ? "" : nombre);
+        String safeEmail = org.springframework.web.util.HtmlUtils.htmlEscape(email);
+        String login = org.springframework.web.util.HtmlUtils.htmlEscape(frontendBaseUrl.replaceAll("/+$", "") + "/login");
+        return send(email, "Tu cuenta POS está lista", """
+                <html><body style="font-family:Arial,sans-serif;color:#283342;padding:24px">
+                <h2>Bienvenido, %s</h2><p>Tu correo ha sido verificado.</p>
+                <p><strong>Tu usuario:</strong> %s</p>
+                <p>Ingresa con la contraseña que elegiste durante el registro.</p>
+                <p><a href="%s">Ingresar a mi cuenta POS</a></p>
+                <p>Puedes administrar tu cuenta y tus empresas desde el sistema.
+                El plan gratuito no requiere tarjeta; los demás usan Stripe de prueba.</p>
+                </body></html>
+                """.formatted(safeName, safeEmail, login));
     }
 
     private boolean send(String to, String subject, String html) {

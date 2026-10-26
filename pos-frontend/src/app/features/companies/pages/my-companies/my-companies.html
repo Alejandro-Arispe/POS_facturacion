@@ -2,6 +2,9 @@
   <app-navbar />
 
   <main class="companies-shell">
+    @if (avisoPlan) {
+      <p class="feedback feedback-error" role="status">{{ avisoPlan }}</p>
+    }
     <section class="companies-header panel">
       <div>
         <p class="badge badge-success">{{ 'Administrador' | t }}</p>
@@ -18,6 +21,23 @@
         </a>
       </div>
     </section>
+
+    @for (compra of planesDisponibles; track compra.id_compra_plan) {
+      <section class="panel flex flex-wrap items-center justify-between gap-4 p-5">
+        <div>
+          <p class="font-semibold">Plan {{ compra.plan_nombre }} disponible</p>
+          <p class="mt-1 text-sm text-muted">
+            Ya está en tu cuenta y puedes usarlo al registrar tu empresa.
+          </p>
+        </div>
+        <a
+          class="btn btn-primary"
+          routerLink="/register-company"
+          [queryParams]="{ compra: compra.id_compra_plan }"
+          >Crear empresa</a
+        >
+      </section>
+    }
 
     @if (cargandoEmpresas) {
       <section class="companies-state panel" aria-live="polite">
@@ -47,7 +67,14 @@
                 <span class="badge badge-danger">{{ 'Inactivo' | t }}</span>
               }
               @if (company.suscripcion_activa) {
-                <span class="badge" [class.badge-success]="company.suscripcion_activa.estado === 'activa' || company.suscripcion_activa.estado === 'activo'">{{ 'Plan' | t }}: {{ company.suscripcion_activa.plan_nombre }}</span>
+                <span
+                  class="badge"
+                  [class.badge-success]="
+                    company.suscripcion_activa.estado === 'activa' ||
+                    company.suscripcion_activa.estado === 'activo'
+                  "
+                  >{{ 'Plan' | t }}: {{ company.suscripcion_activa.plan_nombre }}</span
+                >
               } @else {
                 <span class="badge badge-warning">{{ 'Sin plan' | t }}</span>
               }
@@ -76,20 +103,33 @@
                   [disabled]="empresaEntrandoId === obtenerIdEmpresa(company)"
                   (click)="entrarEmpresa(company)"
                 >
-                  {{ (empresaEntrandoId === obtenerIdEmpresa(company) ? 'Entrando...' : 'Entrar') | t }}
+                  {{
+                    (empresaEntrandoId === obtenerIdEmpresa(company) ? 'Entrando...' : 'Entrar') | t
+                  }}
                 </button>
               } @else {
                 <button
                   class="btn btn-primary"
                   type="button"
                   (click)="abrirModalPago(obtenerIdEmpresa(company))"
-                >{{ 'Pagar Plan' | t }}</button>
+                >
+                  Activar plan
+                </button>
               }
               <a
                 class="btn btn-secondary"
                 [routerLink]="['/edit-company', obtenerIdEmpresa(company)]"
                 >{{ 'Editar' | t }}</a
               >
+              @if (tienePlanActivo(company)) {
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  (click)="abrirModalPago(obtenerIdEmpresa(company))"
+                >
+                  Cambiar plan
+                </button>
+              }
             </div>
           </article>
         }
@@ -104,4 +144,3 @@
     ></app-plan-selector-modal>
   }
 </div>
-

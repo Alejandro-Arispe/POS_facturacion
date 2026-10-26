@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,10 +20,15 @@ import com.pos.pagos.service.PagoService;
 public class PagoController {
 
     private final PagoService pagoService;
+    private final com.pos.pagos.service.CompraPlanService compras;
 
-    public PagoController(PagoService pagoService) {
+    public PagoController(PagoService pagoService, com.pos.pagos.service.CompraPlanService compras) {
         this.pagoService = pagoService;
+        this.compras = compras;
     }
+
+    @GetMapping("/planes-disponibles")
+    public java.util.List<PagoDtos.CompraResponse> disponibles() { return compras.disponibles(SecurityUtils.currentUser()); }
 
     @PostMapping("/checkout")
     public PagoDtos.CheckoutResponse checkout(@RequestBody PagoDtos.CheckoutRequest request) {

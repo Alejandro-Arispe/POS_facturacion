@@ -281,10 +281,12 @@ public class CatalogSeedRunner implements ApplicationRunner {
     }
 
     private void seedPlanes() {
-        seedPlan("Básico", "Plan ideal para emprendedores y pequeños negocios.", new BigDecimal("29.99"),
-                List.of("USUARIOS", "INVENTARIO", "VENTAS", "CAJAS"));
-        seedPlan("Pro", "Plan diseñado para medianas empresas con mayores necesidades.", new BigDecimal("59.99"),
-                List.of("USUARIOS", "EMPRESAS", "INVENTARIO", "VENTAS", "CLIENTES", "CAJAS"));
+        seedPlan("Gratuito", "Empieza con tu equipo y las herramientas esenciales, sin tarjeta.", BigDecimal.ZERO,
+                List.of("USUARIOS", "EMPRESAS", "INVENTARIO", "VENTAS", "CLIENTES", "CAJAS", "REPORTES"));
+        seedPlan("Básico", "Organiza tu negocio con hasta 5 usuarios y reportes estándar.", new BigDecimal("99.00"),
+                List.of("USUARIOS", "EMPRESAS", "INVENTARIO", "VENTAS", "CLIENTES", "CAJAS", "REPORTES"));
+        seedPlan("Pro", "Administra hasta 3 sucursales y 15 usuarios desde un solo lugar.", new BigDecimal("199.00"),
+                List.of("USUARIOS", "EMPRESAS", "INVENTARIO", "VENTAS", "CLIENTES", "CAJAS", "REPORTES", "PEDIDOS"));
         seedPlan("Premium", "Plan completo con todas las características del sistema.", new BigDecimal("99.99"),
                 List.of("USUARIOS", "EMPRESAS", "INVENTARIO", "VENTAS", "CLIENTES", "CAJAS", "REPORTES", "PEDIDOS"));
     }
@@ -297,6 +299,13 @@ public class CatalogSeedRunner implements ApplicationRunner {
             nuevo.setPrecio(precio);
             return planRepository.save(nuevo);
         });
+        // Migra solamente los precios originales; respeta precios editados por el superadministrador.
+        if ((nombre.equals("Básico") && plan.getPrecio().compareTo(new BigDecimal("29.99")) == 0)
+                || (nombre.equals("Pro") && plan.getPrecio().compareTo(new BigDecimal("59.99")) == 0)) {
+            plan.setPrecio(precio);
+            plan.setDescripcion(descripcion);
+            planRepository.save(plan);
+        }
         for (String codigo : modulos) {
             moduloRepository.findByCodigoIgnoreCase(codigo).ifPresent(modulo -> {
                 boolean exists = planModuloRepository.findByPlan_IdPlanAndIdModulo(plan.getIdPlan(), modulo.getIdModulo()).isPresent();

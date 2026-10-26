@@ -58,8 +58,9 @@ app:
     origins: ${CORS_ORIGINS:http://localhost:4200,http://127.0.0.1:4200,https://pos-frontend-si2.duckdns.org}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:4200}
   stripe:
-    secret-key: ${STRIPE_SECRET_KEY:}
-    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    test-only: true
+    secret-key: ${STRIPE_SECRET_KEY:sk_test_51RHAiCRNi192JSyP3HGQ8Q5ON6Jj5MKvSGrIor3UzUQCQif4XGPBgcNhtMxFk9JnIg0mtlgCwAEaD0F9P1bZ3Gyv00ONbU1W0f}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_eGOACJujvVzSJI1RGbhhGqbgeDTH0XFr}
   mail-from: ${MAIL_FROM:cinthiacarrasco321@gmail.com}
   ai:
     gemini:

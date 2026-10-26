@@ -44,4 +44,9 @@ public class AuthController {
     public MensajeResponse forgotPassword(@RequestBody UsuarioForgotPassword datos) {
         return usuarioService.forgotPassword(datos);
     }
+
+    @PostMapping("/resend-code")
+    public MensajeResponse resendCode(@RequestBody UsuarioForgotPassword datos) {
+        return usuarioService.reenviarCodigo(datos);
+    }
 }

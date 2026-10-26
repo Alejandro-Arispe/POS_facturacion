@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { OnboardingService } from '../../../../../core/services/onboarding.service';
 
 import { CheckoutResponse, PagoService, Plan } from '../../../../../core/services/pago.service';
 
@@ -19,7 +20,11 @@ export class PlanSelectorModalComponent implements OnInit {
   errorPlanes: string | null = null;
   procesandoPagoId: number | null = null;
 
-  constructor(private readonly pagoService: PagoService) {}
+  constructor(
+    private readonly pagoService: PagoService,
+    private readonly onboarding: OnboardingService,
+    private readonly cdr: ChangeDetectorRef,
+  ) {}
 
   ngOnInit(): void {
     this.cargarPlanes();
@@ -33,11 +38,16 @@ export class PlanSelectorModalComponent implements OnInit {
       next: (planes: Plan[]) => {
         this.planes = planes;
         this.cargandoPlanes = false;
+        this.cdr.markForCheck();
       },
       error: (err: any) => {
-        this.errorPlanes = 'No se pudieron cargar los planes. Intente de nuevo mas tarde.';
+        this.errorPlanes =
+          typeof err.error?.detail === 'string'
+            ? err.error.detail
+            : 'No se pudieron cargar los planes. Intente de nuevo mas tarde.';
         this.cargandoPlanes = false;
         console.error('Error al cargar planes', err);
+        this.cdr.markForCheck();
       },
     });
   }
@@ -48,21 +58,29 @@ export class PlanSelectorModalComponent implements OnInit {
     }
 
     this.procesandoPagoId = plan.id_plan;
+    this.onboarding.selectPlan(plan.id_plan);
+    this.onboarding.saveCompany(this.idEmpresa, '', plan.id_plan);
 
-    this.pagoService.crearCheckout({
-      id_empresa: this.idEmpresa,
-      id_plan: plan.id_plan,
-    }).subscribe({
-      next: (response: CheckoutResponse) => {
-        this.pagoService.guardarSesionStripe(response.session_id);
-        window.location.href = response.checkout_url;
-      },
-      error: (err: any) => {
-        this.errorPlanes = 'No se pudo iniciar el proceso de pago.';
-        this.procesandoPagoId = null;
-        console.error('Error al crear checkout', err);
-      },
-    });
+    this.pagoService
+      .crearCheckout({
+        id_empresa: this.idEmpresa,
+        id_plan: plan.id_plan,
+      })
+      .subscribe({
+        next: (response: CheckoutResponse) => {
+          this.pagoService.guardarSesionStripe(response.session_id);
+          window.location.href = response.checkout_url;
+        },
+        error: (err: any) => {
+          this.errorPlanes =
+            typeof err.error?.detail === 'string'
+              ? err.error.detail
+              : 'No se pudo iniciar el proceso de pago.';
+          this.procesandoPagoId = null;
+          console.error('Error al crear checkout', err);
+          this.cdr.markForCheck();
+        },
+      });
   }
 
   cerrarModal(): void {

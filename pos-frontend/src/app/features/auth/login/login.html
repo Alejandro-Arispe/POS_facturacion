@@ -4,10 +4,20 @@
       <section class="login-panel">
         <a class="login-brand" href="/" aria-label="Volver al inicio">POS</a>
 
+        @if (idPlan) {
+          <app-onboarding-steps [step]="2" />
+        }
+
         <header class="login-header">
           <p class="badge badge-success">{{ 'Acceso al sistema' | t }}</p>
           <h1 class="title-xl">{{ 'Iniciar sesion' | t }}</h1>
-          <p class="text-muted">{{ 'Ingresa tus credenciales para continuar.' | t }}</p>
+          <p class="text-muted">
+            {{
+              idPlan
+                ? 'Inicia sesión para continuar directamente al plan elegido.'
+                : ('Ingresa tus credenciales para continuar.' | t)
+            }}
+          </p>
         </header>
 
         <form
@@ -52,7 +62,9 @@
               <input type="checkbox" name="recordarme" />
               <span>{{ 'Recordarme' | t }}</span>
             </label>
-            <a href="/" (click)="abrirModalRecuperacion($event)">{{ 'Olvide mi contrasena' | t }}</a>
+            <a href="/" (click)="abrirModalRecuperacion($event)">{{
+              'Olvide mi contrasena' | t
+            }}</a>
           </div>
 
           <button class="btn btn-primary submit-button" type="submit" [disabled]="cargandoLogin">

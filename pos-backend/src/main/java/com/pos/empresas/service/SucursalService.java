@@ -414,6 +414,9 @@ public class SucursalService {
 
 		List<UsuarioRol> usuariosRol = usuarioRolRepository.findByUsuario_IdUsuarioAndIdEmpresa(
 				usuario.getIdUsuario(), idEmpresa);
+        if (Boolean.TRUE.equals(datos.activo()) && !"CLIENTE".equals(rol.getNombre())) {
+            validarLimiteUsuarios(idEmpresa, usuario.getIdUsuario());
+        }
 		if (usuariosRol.isEmpty() && !Boolean.TRUE.equals(datos.activo())) {
 			throw ApiException.notFound("No existe relacion del usuario con esta empresa.");
 		}
@@ -590,7 +593,8 @@ public class SucursalService {
 				}
 			}
 		}
-		return null;
+		PlanPolicy.Benefits defaults = PlanPolicy.defaults(activas.get(0).getPlan());
+		return "max_usuarios".equals(clave) ? defaults.maxUsuarios() : defaults.maxSucursales();
 	}
 
 	private Integer obtenerLimiteDesdeConfiguracion(String configuracion, String clave) {

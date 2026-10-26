@@ -62,6 +62,11 @@ export const routes: Routes = [
     component: Login,
   },
   {
+    path: 'onboarding/checkout',
+    loadComponent: () => import('./features/auth/checkout/checkout').then((m) => m.Checkout),
+    canActivate: [authGuard],
+  },
+  {
     path: 'my-companies',
     component: MyCompanies,
     canActivate: [authGuard],
@@ -274,16 +279,14 @@ export const routes: Routes = [
     path: 'company/:id/orders',
     loadComponent: () =>
       import('./features/companies/sections/orders/orders-inbox/orders-inbox').then(
-        (m) => m.OrdersInbox
+        (m) => m.OrdersInbox,
       ),
     canActivate: [authGuard],
   },
   {
     path: 'company/:id/settings/backup',
     loadComponent: () =>
-      import('./features/companies/sections/settings/backup/backup').then(
-        (m) => m.CompanyBackup,
-      ),
+      import('./features/companies/sections/settings/backup/backup').then((m) => m.CompanyBackup),
     canActivate: [authGuard],
   },
   {

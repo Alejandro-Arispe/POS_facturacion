@@ -1,73 +1,104 @@
-<div class="payment-result-container">
-  <div class="result-card">
-    @if (estado === 'cargando') {
-      <div class="status loading">
-        <div class="spinner large"></div>
-        <h2>Confirmando tu pago...</h2>
-        <p>Por favor espera un momento mientras procesamos la transaccion.</p>
-      </div>
-    }
-
-    @if (estado === 'exito') {
-      <div class="status success">
-        <div class="icon-circle success-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-        </div>
-        <h2>Pago exitoso</h2>
-        <p>Tu suscripcion ha sido activada correctamente.</p>
-
-        @if (suscripcion) {
-          <div class="subscription-details">
-            <div class="detail-row">
-              <span class="label">Plan:</span>
-              <span class="value">{{ suscripcion.plan_nombre }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Estado:</span>
-              <span class="value badge active">{{ suscripcion.estado | titlecase }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="label">Valido hasta:</span>
-              <span class="value">{{ suscripcion.fecha_fin | date:'mediumDate' }}</span>
-            </div>
+<div class="page-container">
+  <app-navbar />
+  <main class="result-shell">
+    <app-onboarding-steps [step]="estado === 'exito' ? 4 : 3" />
+    <section class="result-card" aria-live="polite">
+      @if (estado === 'cargando') {
+        <app-icon name="refresh" [size]="32" />
+        <h1 class="text-2xl font-bold">Confirmando tu plan…</h1>
+        <p class="text-sm text-muted">Espera mientras comprobamos el estado del pago.</p>
+      } @else if (estado === 'exito') {
+        <span class="status-icon success"><app-icon name="success" [size]="30" /></span>
+        <p class="text-sm font-semibold text-brand">Paso 4 de 4 · Acceso</p>
+        <h1 class="text-2xl font-bold">
+          {{
+            compra
+              ? compra.gratuito
+                ? 'Tu plan gratuito está listo'
+                : 'Pago de prueba confirmado'
+              : suscripcion?.fecha_fin
+                ? 'Pago de prueba confirmado'
+                : 'Tu plan gratuito está activo'
+          }}
+        </h1>
+        <p class="text-sm leading-6 text-muted">
+          {{
+            compra && !compra.id_empresa
+              ? 'El plan quedó guardado en tu cuenta. Puedes continuar desde Mis empresas.'
+              : 'Tu plan está activo. Ya puedes ingresar al POS.'
+          }}
+        </p>
+        <dl class="subscription-details">
+          <div>
+            <dt>Plan</dt>
+            <dd>{{ compra?.plan_nombre ?? suscripcion?.plan_nombre }}</dd>
           </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>{{ compra && !compra.id_empresa ? 'Disponible para tu empresa' : 'Activo' }}</dd>
+          </div>
+          @if (suscripcion) {
+            <div>
+              <dt>Vigencia</dt>
+              <dd>
+                {{
+                  suscripcion.fecha_fin
+                    ? (suscripcion.fecha_fin | date: 'dd/MM/yyyy')
+                    : 'Sin vencimiento'
+                }}
+              </dd>
+            </div>
+          }
+        </dl>
+        @if (idEmpresa) {
+          <button class="btn btn-primary" type="button" [disabled]="entrando" (click)="entrar()">
+            {{ entrando ? 'Entrando…' : 'Entrar a mi empresa'
+            }}<app-icon name="arrow" [size]="17" />
+          </button>
+        } @else {
+          <a class="btn btn-primary" routerLink="/my-companies"
+            >Ir a Mis empresas<app-icon name="arrow" [size]="17"
+          /></a>
         }
-      </div>
-    }
-
-    @if (estado === 'error') {
-      <div class="status error">
-        <div class="icon-circle error-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </div>
-        <h2>Error en el pago</h2>
-        <p>{{ mensajeError }}</p>
-      </div>
-    }
-
-    @if (estado === 'cancelado') {
-      <div class="status canceled">
-        <div class="icon-circle warning-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-        </div>
-        <h2>Pago cancelado</h2>
-        <p>El proceso de pago ha sido cancelado. Tu empresa sigue sin una suscripcion activa.</p>
-      </div>
-    }
-
-    <div class="actions">
-      <button class="primary-btn" (click)="volverMisEmpresas()" [disabled]="estado === 'cargando'">
-        Volver a Mis Empresas
-      </button>
-    </div>
-  </div>
+      } @else {
+        <span class="status-icon"><app-icon name="alert" [size]="30" /></span>
+        <h1 class="text-2xl font-bold">
+          {{
+            estado === 'cancelado'
+              ? 'Puedes continuar cuando quieras'
+              : estado === 'pendiente'
+                ? 'El pago sigue pendiente'
+                : 'No pudimos confirmar el pago'
+          }}
+        </h1>
+        <p class="text-sm leading-6 text-muted">
+          {{
+            estado === 'cancelado'
+              ? 'Cancelaste el pago de prueba. Tu cuenta está guardada y puedes volver a intentarlo.'
+              : mensajeError
+          }}
+        </p>
+        @if (estado !== 'cancelado') {
+          <button class="btn btn-primary" type="button" (click)="confirmarPago()">
+            Volver a comprobar el pago
+          </button>
+        } @else if (idPlan && !idEmpresa) {
+          <a
+            class="btn btn-primary"
+            routerLink="/onboarding/checkout"
+            [queryParams]="{ plan: idPlan }"
+            >Volver a Stripe</a
+          >
+        } @else {
+          <a class="btn btn-primary" routerLink="/my-companies">Ir a Mis empresas</a>
+        }
+      }
+      @if (estado === 'exito' && mensajeError) {
+        <p class="feedback feedback-error" role="alert">{{ mensajeError }}</p>
+      }
+      @if (idEmpresa || estado === 'pendiente' || estado === 'error') {
+        <a class="text-sm text-brand" routerLink="/my-companies">Ir a Mis empresas</a>
+      }
+    </section>
+  </main>
 </div>

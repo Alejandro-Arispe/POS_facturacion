@@ -169,6 +169,9 @@ public class ProductoService {
     @Transactional
     public ProductoDtos.ProductoResponse actualizarProducto(Usuario usuario, Integer idProducto, ProductoDtos.ProductoUpdate datos) {
         Producto producto = requireProductoDeUsuario(usuario, idProducto);
+        if (!Boolean.TRUE.equals(producto.getActivo()) && Boolean.TRUE.equals(datos.getActivo())) {
+            empresaAccess.requireProductCapacity(producto.getIdEmpresa());
+        }
         Map<String, String> estados = privilegioCampoService.estadosProducto(usuario, producto.getIdEmpresa());
         if (!privilegioCampoService.permiteEditar(estados)) {
             throw ApiException.forbidden("No tienes permiso para editar este producto.");
@@ -258,6 +261,7 @@ public class ProductoService {
     public ProductoDtos.ProductoResponse crearProducto(
             Usuario usuario, Integer idEmpresa, ProductoDtos.ProductoCreate payload, String imagen) {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
+        if (!Boolean.FALSE.equals(payload.getActivo())) empresaAccess.requireProductCapacity(idEmpresa);
         SubcategoriaProducto sub = requireSubcategoriaActiva(payload.getIdSubcategoria());
         if (sub.getCategoriaProducto() == null || !idEmpresa.equals(sub.getCategoriaProducto().getIdEmpresa())) {
             throw ApiException.badRequest("La subcategoria no pertenece a la empresa indicada.");

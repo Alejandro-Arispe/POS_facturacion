@@ -61,6 +61,7 @@ public class EmpresaService {
 	private final ModuloRepository moduloRepository;
 	private final PermisoRepository permisoRepository;
 	private final RolPermisoRepository rolPermisoRepository;
+    private final com.pos.pagos.service.CompraPlanService compras;
 
 	public EmpresaService(
 			EmpresaAccess empresaAccess,
@@ -71,7 +72,7 @@ public class EmpresaService {
 			PlanModuloRepository planModuloRepository,
 			ModuloRepository moduloRepository,
 			PermisoRepository permisoRepository,
-			RolPermisoRepository rolPermisoRepository) {
+			RolPermisoRepository rolPermisoRepository, com.pos.pagos.service.CompraPlanService compras) {
 		this.empresaAccess = empresaAccess;
 		this.empresaRepository = empresaRepository;
 		this.usuarioRolRepository = usuarioRolRepository;
@@ -81,6 +82,7 @@ public class EmpresaService {
 		this.moduloRepository = moduloRepository;
 		this.permisoRepository = permisoRepository;
 		this.rolPermisoRepository = rolPermisoRepository;
+        this.compras = compras;
 	}
 
 	@Transactional
@@ -113,6 +115,8 @@ public class EmpresaService {
 			usuarioRol.setFecha(LocalDate.now());
 			usuarioRol.setActivo(Boolean.TRUE);
 			usuarioRol = usuarioRolRepository.saveAndFlush(usuarioRol);
+
+            if (datos.idCompraPlan() != null) compras.asignar(usuario, datos.idCompraPlan(), empresa);
 
 			return new EmpresaCreadaResponse(toResponse(empresa), toUsuarioRolResumen(usuarioRol));
 		} catch (DataIntegrityViolationException ex) {
@@ -148,12 +152,12 @@ public class EmpresaService {
 
 	@Transactional(readOnly = true)
 	public EmpresaResponse obtener(Integer idEmpresa) {
-		return toResponse(empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa));
+        return toResponse(empresaAccess.requireEmpresaSinPlan(SecurityUtils.currentUser(), idEmpresa));
 	}
 
 	@Transactional
 	public EmpresaResponse actualizar(Integer idEmpresa, EmpresaUpdate datos) {
-		Empresa empresa = empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		Empresa empresa = empresaAccess.requireEmpresaSinPlan(SecurityUtils.currentUser(), idEmpresa);
 		empresa.setNombre(datos.nombre());
 		empresa.setRazonSocial(datos.razonSocial());
 		empresa.setNit(datos.nit());
@@ -165,7 +169,7 @@ public class EmpresaService {
 	@Transactional(readOnly = true)
 	public MisPermisosEmpresaResponse misPermisos(Integer idEmpresa) {
 		Usuario usuario = SecurityUtils.currentUser();
-		empresaAccess.requireEmpresa(usuario, idEmpresa);
+		empresaAccess.requireEmpresaSinPlan(usuario, idEmpresa);
 
 		List<UsuarioRol> roles = usuarioRolRepository.findActivosDistintoCliente(usuario.getIdUsuario(), idEmpresa);
 		if (roles.isEmpty()) {
@@ -298,7 +302,7 @@ public class EmpresaService {
 						plan.getNombre(),
 						plan.getDescripcion(),
 						plan.getPrecio(),
-						planModuloResponses));
+						planModuloResponses, empresaAccess.benefits(idEmpresa)));
 	}
 
 	private ModuloResponse toModulo(Modulo modulo) {

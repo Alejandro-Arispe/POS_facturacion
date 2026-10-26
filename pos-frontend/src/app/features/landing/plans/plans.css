@@ -1,47 +1,93 @@
 .plans-shell {
   width: min(1080px, 100%);
   margin: 0 auto;
-  padding: 40px 16px 64px;
+  padding: 28px 16px 48px;
   display: grid;
-  gap: 32px;
+  gap: 30px;
 }
-
+.plans-shell > app-onboarding-steps {
+  max-width: 720px;
+  justify-self: center;
+}
 .plans-header {
   display: grid;
-  gap: 8px;
-  text-align: center;
   justify-items: center;
+  gap: 10px;
+  text-align: center;
 }
-
 .plans-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
 }
-
 .plan-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface-solid);
 }
-
+.plan-card.featured {
+  border-color: var(--pos-brand);
+}
 .plan-price {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 6px;
 }
-
-.plan-amount {
-  font-size: 2rem;
-  font-weight: 700;
+.plan-price strong {
+  font-size: 38px;
+  font-weight: 750;
+  letter-spacing: -1px;
 }
-
 .plan-description {
-  flex: 1;
+  min-height: 72px;
 }
-
+.plan-card .btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+.plan-benefits {
+  list-style: none;
+  padding: 18px 0 0;
+  margin: 0;
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+}
+.plan-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.plan-benefits app-icon {
+  color: var(--color-text-muted);
+}
+.plan-login {
+  margin-top: auto;
+  padding-top: 10px;
+  text-align: center;
+  color: var(--pos-brand);
+  font-size: 13px;
+  font-weight: 600;
+}
 .plans-state,
 .plans-login {
   text-align: center;
+}
+@media (max-width: 760px) {
+  .plans-grid {
+    grid-template-columns: 1fr;
+  }
+  .plan-description {
+    min-height: 0;
+  }
+  .plans-header h1 {
+    font-size: 26px;
+  }
 }

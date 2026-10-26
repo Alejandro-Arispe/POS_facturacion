@@ -1,52 +1,113 @@
 <div class="page-container plans-page">
   <app-navbar />
-
   <main class="plans-shell">
+    <app-onboarding-steps [step]="1" />
     <header class="plans-header">
-      <p class="badge badge-success">Planes</p>
-      <h1 class="title-xl">Elige el plan para tu negocio</h1>
-      <p class="text-muted">
-        Selecciona un plan para crear tu cuenta. El pago se realiza al registrar tu empresa.
+      <p class="text-sm font-semibold text-brand">Un plan para cada etapa</p>
+      <h1 class="text-3xl font-bold tracking-tight text-ink">Empieza pequeño. Crece a tu ritmo.</h1>
+      <p class="max-w-xl text-sm leading-6 text-muted">
+        Elige tu plan y verifica tu cuenta para continuar directamente a Stripe. El gratuito no
+        necesita tarjeta. Podrás crear tu empresa después.
       </p>
     </header>
-
     @if (cargando) {
-      <p class="text-muted plans-state" aria-live="polite">Cargando planes...</p>
+      <p class="plans-state text-muted" role="status">Cargando planes…</p>
     } @else if (error) {
-      <div class="plans-state" aria-live="polite">
-        <p class="feedback feedback-error">{{ error }}</p>
+      <div class="plans-state" role="alert">
+        <p>{{ error }}</p>
         <button class="btn btn-secondary" type="button" (click)="cargarPlanes()">Reintentar</button>
       </div>
     } @else {
       <section class="plans-grid" aria-label="Planes disponibles">
         @for (plan of planes; track plan.id_plan) {
-          <article class="card card-hover plan-card">
-            <h2 class="title-md">{{ plan.nombre }}</h2>
+          <article class="plan-card" [class.featured]="plan.limites.codigo === 'basico'">
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-xl font-bold">{{ plan.nombre }}</h2>
+              @if (plan.limites.codigo === 'basico') {
+                <span class="rounded-md bg-brand-soft px-2 py-1 text-xs font-semibold text-brand"
+                  >Para tu negocio</span
+                >
+              }
+            </div>
             <p class="plan-price">
-              <span class="plan-amount">$ {{ plan.precio }}</span>
-              <span class="text-muted">/mes</span>
+              <span class="text-lg font-medium">Bs</span>
+              <strong>{{ plan.precio | number: '1.0-2' }}</strong
+              ><span class="text-sm text-muted">{{
+                +plan.precio === 0 ? '/ sin costo' : '/ mes'
+              }}</span>
             </p>
-            <p class="text-muted plan-description">{{ plan.descripcion }}</p>
+            <p class="plan-description text-sm leading-6 text-muted">{{ plan.descripcion }}</p>
             <a
-              class="btn btn-primary"
-              routerLink="/register"
+              class="btn"
+              [class.btn-primary]="plan.limites.codigo === 'basico'"
+              [class.btn-secondary]="plan.limites.codigo !== 'basico'"
+              [routerLink]="auth.isAuthenticated() ? '/onboarding/checkout' : '/register'"
               [queryParams]="{ plan: plan.id_plan }"
-              >Registrarme con este plan</a
-            >
+              (click)="onboarding.selectPlan(plan.id_plan)"
+              >{{ +plan.precio === 0 ? 'Empezar gratis' : 'Elegir ' + plan.nombre
+              }}<app-icon name="arrow" [size]="16"
+            /></a>
+            <ul class="plan-benefits">
+              <li>
+                <app-icon name="users" [size]="17" /><span
+                  ><strong>{{ plan.limites.max_usuarios }} usuarios</strong>, incluido el
+                  dueño</span
+                >
+              </li>
+              <li>
+                <app-icon name="store" [size]="17" /><span
+                  >{{ plan.limites.max_sucursales }}
+                  {{ plan.limites.max_sucursales === 1 ? 'sucursal' : 'sucursales' }}</span
+                >
+              </li>
+              <li>
+                <app-icon name="wallet" [size]="17" /><span
+                  >{{ plan.limites.max_cajas }}
+                  {{ plan.limites.max_cajas === 1 ? 'caja' : 'cajas' }} por sucursal</span
+                >
+              </li>
+              <li>
+                <app-icon name="package" [size]="17" /><span
+                  >{{ plan.limites.max_productos | number }} productos activos</span
+                >
+              </li>
+              <li><app-icon name="check" [size]="17" /><span>Ventas sin límite</span></li>
+              <li>
+                <app-icon name="chart" [size]="17" /><span>{{
+                  plan.limites.reportes === 'diario'
+                    ? 'Resumen de ventas del día'
+                    : plan.limites.reportes === 'estandar'
+                      ? 'Reportes estándar'
+                      : 'Reportes avanzados y consolidados'
+                }}</span>
+              </li>
+              @if (plan.limites.pedidos) {
+                <li>
+                  <app-icon name="orders" [size]="17" /><span
+                    >Pedidos y predicciones de ventas</span
+                  >
+                </li>
+              }
+            </ul>
             <a
-              class="btn btn-secondary"
+              class="plan-login"
               routerLink="/login"
               [queryParams]="{ plan: plan.id_plan }"
-              >Ya tengo cuenta, ingresar</a
+              (click)="onboarding.selectPlan(plan.id_plan)"
+              >Ya tengo cuenta</a
             >
           </article>
         }
       </section>
+      <p class="plans-state text-xs leading-6 text-muted">
+        Precios en bolivianos por empresa. Los planes de pago habilitan 30 días y se renuevan
+        manualmente.<br />Demostración académica: los pagos se realizan en Stripe de prueba, sin
+        cobros reales.
+      </p>
     }
-
-    <p class="text-muted plans-login">
-      Ya tienes una empresa activa?
-      <a routerLink="/login">Inicia sesion</a>
+    <p class="plans-login text-sm text-muted">
+      ¿Ya tienes una empresa?
+      <a class="font-semibold text-brand" routerLink="/login">Inicia sesión</a>
     </p>
   </main>
 </div>
