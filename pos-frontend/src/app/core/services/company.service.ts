@@ -27,6 +27,7 @@ export interface Company {
 }
 
 export interface CreateCompanyRequest {
+  id_compra_plan?: number;
   nombre: string;
   razon_social: string;
   nit: string;

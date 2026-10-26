@@ -1,229 +1,191 @@
 <div class="register-page">
   <main class="register-shell">
-    <section class="register-panel panel">
-      <a class="register-brand" href="/" aria-label="Volver al inicio">POS</a>
-
+    <a class="register-brand" routerLink="/"
+      ><app-icon name="store" [size]="24" /> POS
+      <span class="text-sm font-normal text-muted">Configura tu negocio</span></a
+    >
+    <app-onboarding-steps [step]="2" />
+    <section class="register-panel">
       <header class="register-header">
-        <p class="badge badge-success">Nuevo acceso</p>
-        <h1 class="title-xl">Crear cuenta</h1>
-        <p class="text-muted">Registra tus datos para acceder al sistema.</p>
-        <p class="text-muted">Plan elegido. <a routerLink="/planes">Cambiar plan</a></p>
+        <p class="text-sm font-semibold text-brand">Paso 2 de 4 · Tu cuenta</p>
+        <h1 class="text-2xl font-bold">
+          {{
+            etapa === 'datos'
+              ? 'Crea tu cuenta de acceso'
+              : verificado
+                ? 'Tu correo está verificado'
+                : 'Verifica tu correo'
+          }}
+        </h1>
+        <p class="text-sm leading-6 text-muted">
+          {{
+            etapa === 'datos'
+              ? 'Verifica tu cuenta para continuar directamente con el plan elegido.'
+              : 'El correo será tu usuario para ingresar al POS.'
+          }}
+        </p>
+        @if (plan) {
+          <p class="chosen-plan">Plan {{ plan.nombre }} <a routerLink="/planes">Cambiar plan</a></p>
+        }
       </header>
-
       @if (error) {
-        <p class="feedback feedback-error">{{ error }}</p>
+        <p class="feedback feedback-error" role="alert">{{ error }}</p>
       }
-
       @if (mensaje) {
-        <p class="feedback feedback-success">{{ mensaje }}</p>
+        <p class="feedback feedback-success" role="status">{{ mensaje }}</p>
       }
-
-      <form class="register-form" aria-label="Formulario de registro" (submit)="registrar($event)">
-        <div class="form-group span-2">
-          <label class="label" for="nombreCompleto">Nombre completo</label>
-          <input
-            class="input"
-            id="nombreCompleto"
-            name="nombreCompleto"
-            type="text"
-            placeholder="Ayrton Daza Miranda"
-            autocomplete="name"
-            required
-            [(ngModel)]="form.nombreCompleto"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="correo">Correo electronico</label>
-          <input
-            class="input"
-            id="correo"
-            name="correo"
-            type="email"
-            placeholder="ayrton.daza.1230@gmail.com"
-            autocomplete="email"
-            required
-            [(ngModel)]="form.email"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="fechaNacimiento">Fecha de nacimiento</label>
-          <input
-            class="input"
-            id="fechaNacimiento"
-            name="fechaNacimiento"
-            type="date"
-            required
-            [(ngModel)]="form.fechaNacimiento"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="documento">Documento</label>
-          <input
-            class="input"
-            id="documento"
-            name="documento"
-            type="text"
-            placeholder="1234567890"
-            inputmode="numeric"
-            required
-            [(ngModel)]="form.documento"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="genero">Genero</label>
-          <select class="select" id="genero" name="genero" required [(ngModel)]="form.genero">
-            <option value="">Selecciona una opcion</option>
-            <option value="F">Femenino</option>
-            <option value="M">Masculino</option>
-          </select>
-        </div>
-
-        <div class="form-group span-2">
-          <label class="label" for="telefono">Telefono</label>
-          <input
-            class="input"
-            id="telefono"
-            name="telefono"
-            type="tel"
-            placeholder="61524977"
-            autocomplete="tel"
-            required
-            [(ngModel)]="form.telefono"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="contrasena">Contrasena</label>
-          <input
-            class="input"
-            id="contrasena"
-            name="contrasena"
-            type="password"
-            placeholder="Minimo 6 caracteres"
-            autocomplete="new-password"
-            required
-            minlength="6"
-            [(ngModel)]="form.contrasena"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="label" for="confirmarContrasena">Confirmar contrasena</label>
-          <input
-            class="input"
-            id="confirmarContrasena"
-            name="confirmarContrasena"
-            type="password"
-            placeholder="Repite tu contrasena"
-            autocomplete="new-password"
-            required
-            minlength="6"
-            [(ngModel)]="form.confirmarContrasena"
-          />
-        </div>
-
-        <button
-          class="btn btn-primary submit-button span-2"
-          type="submit"
-          [disabled]="cargandoRegistro"
+      @if (etapa === 'datos') {
+        <form
+          class="register-form"
+          aria-label="Formulario de registro"
+          (submit)="registrar($event)"
         >
-          {{ cargandoRegistro ? 'Registrando...' : 'Registrarme' }}
-        </button>
-      </form>
-
-      <button
-        class="btn btn-secondary verification-entry-button"
-        type="button"
-        (click)="abrirIngresoCodigoVerificacion()"
-      >
-        Ingresar codigo de verificacion
-      </button>
-
-      <p class="login-link text-muted">
-        Ya tienes cuenta?
-        <a routerLink="/login" [queryParams]="{ plan: idPlan }">Inicia sesion</a>
-      </p>
-
-      <p class="home-link text-muted">
-        Volver a la pagina principal?
-        <a routerLink="/">Ir al inicio</a>
-      </p>
-    </section>
-  </main>
-
-  @if (mostrarModalVerificacion) {
-    <div class="modal-backdrop" role="presentation">
-      <section
-        class="verification-modal panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="verificationTitle"
-      >
-        <button
-          class="modal-close"
-          type="button"
-          aria-label="Cerrar modal"
-          (click)="cerrarModalVerificacion()"
-        >
-          x
-        </button>
-
-        <header class="verification-header">
-          <p class="badge badge-success">Verificacion</p>
-          <h2 class="title-lg" id="verificationTitle">Ingresa tu codigo</h2>
-          <p class="text-muted">Ingresa el correo de tu cuenta y el codigo recibido.</p>
-        </header>
-
-        <form class="verification-form" (submit)="verificarCodigo($event)">
-          <div class="form-group">
-            <label class="label" for="emailVerificacion">Correo electronico</label>
-            <input
+          <div class="form-group span-2">
+            <label class="label" for="nombreCompleto">Nombre completo</label
+            ><input
               class="input"
-              id="emailVerificacion"
-              name="emailVerificacion"
-              type="email"
-              placeholder="usuario@email.com"
-              autocomplete="email"
+              id="nombreCompleto"
+              name="nombreCompleto"
+              type="text"
+              autocomplete="name"
               required
-              [(ngModel)]="emailParaVerificar"
+              maxlength="150"
+              [(ngModel)]="form.nombreCompleto"
             />
           </div>
-
           <div class="form-group">
-            <label class="label" for="codigo">Codigo</label>
+            <label class="label" for="correo">Correo electrónico</label
+            ><input
+              class="input"
+              id="correo"
+              name="correo"
+              type="email"
+              autocomplete="email"
+              required
+              [(ngModel)]="form.email"
+            />
+          </div>
+          <div class="form-group">
+            <label class="label" for="fechaNacimiento">Fecha de nacimiento</label
+            ><input
+              class="input"
+              id="fechaNacimiento"
+              name="fechaNacimiento"
+              type="date"
+              required
+              [(ngModel)]="form.fechaNacimiento"
+            />
+          </div>
+          <div class="form-group">
+            <label class="label" for="documento">Documento</label
+            ><input
+              class="input"
+              id="documento"
+              name="documento"
+              type="text"
+              required
+              [(ngModel)]="form.documento"
+            />
+          </div>
+          <div class="form-group">
+            <label class="label" for="genero">Género</label
+            ><select class="select" id="genero" name="genero" required [(ngModel)]="form.genero">
+              <option value="">Selecciona una opción</option>
+              <option value="F">Femenino</option>
+              <option value="M">Masculino</option>
+            </select>
+          </div>
+          <div class="form-group span-2">
+            <label class="label" for="telefono">Teléfono</label
+            ><input
+              class="input"
+              id="telefono"
+              name="telefono"
+              type="tel"
+              autocomplete="tel"
+              required
+              [(ngModel)]="form.telefono"
+            />
+          </div>
+          <div class="form-group">
+            <label class="label" for="contrasena">Contraseña</label
+            ><input
+              class="input"
+              id="contrasena"
+              name="contrasena"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="6"
+              [(ngModel)]="form.contrasena"
+            /><span class="text-xs text-muted">Al menos 6 caracteres.</span>
+          </div>
+          <div class="form-group">
+            <label class="label" for="confirmarContrasena">Confirmar contraseña</label
+            ><input
+              class="input"
+              id="confirmarContrasena"
+              name="confirmarContrasena"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="6"
+              [(ngModel)]="form.confirmarContrasena"
+            />
+          </div>
+          <div class="span-2 form-actions">
+            <a routerLink="/planes" class="btn btn-secondary">Volver a planes</a
+            ><button class="btn btn-primary" type="submit" [disabled]="cargando || !plan">
+              {{ cargando ? 'Creando cuenta…' : 'Crear cuenta y verificar correo' }}
+            </button>
+          </div>
+        </form>
+        <p class="text-center text-sm text-muted">
+          ¿Ya tienes cuenta?
+          <a class="text-brand" routerLink="/login" [queryParams]="{ plan: idPlan }"
+            >Inicia sesión y continúa</a
+          >
+        </p>
+      } @else {
+        <div class="verification-address">
+          <app-icon name="user" [size]="20" /><strong>{{ emailParaVerificar }}</strong>
+        </div>
+        @if (!verificado) {
+          <form class="verification-form" (submit)="verificar($event)">
+            <label class="label" for="codigo">Código de verificación</label>
             <input
               class="input verification-code"
               id="codigo"
               name="codigo"
-              type="text"
-              placeholder="aB3xF9"
               autocomplete="one-time-code"
               required
+              minlength="6"
+              maxlength="6"
               [(ngModel)]="codigo"
             />
-          </div>
-
-          @if (errorVerificacion) {
-            <p class="feedback feedback-error">{{ errorVerificacion }}</p>
-          }
-
-          @if (mensajeVerificacion) {
-            <p class="feedback feedback-success">{{ mensajeVerificacion }}</p>
-          }
-
-          <button
-            class="btn btn-primary submit-button"
-            type="submit"
-            [disabled]="cargandoVerificacion"
-          >
-            {{ cargandoVerificacion ? 'Verificando...' : 'Verificar' }}
+            <button class="btn btn-primary" type="submit" [disabled]="cargando">
+              {{ cargando ? 'Verificando…' : 'Verificar correo' }}
+            </button>
+          </form>
+          <button type="button" class="resend" [disabled]="cargando" (click)="reenviar()">
+            No recibí el código, reenviar
           </button>
-        </form>
-      </section>
-    </div>
-  }
+          <a
+            class="text-center text-sm text-brand"
+            routerLink="/login"
+            [queryParams]="{ plan: idPlan }"
+            >Mi cuenta ya está verificada, iniciar sesión</a
+          >
+        } @else {
+          <p class="text-sm leading-6 text-muted">
+            El correo de bienvenida incluye tu usuario y el enlace de acceso. Ingresa con la
+            contraseña que elegiste.
+          </p>
+          <button class="btn btn-primary" type="button" [disabled]="cargando" (click)="continuar()">
+            {{ cargando ? 'Continuando…' : 'Continuar con mi plan' }}
+          </button>
+        }
+      }
+    </section>
+  </main>
 </div>

@@ -20,6 +20,7 @@ public final class PagoDtos {
     public static class CheckoutRequest {
         private Integer idEmpresa;
         private Integer idPlan;
+        private String frontendOrigin;
     }
 
     @Getter
@@ -45,6 +46,7 @@ public final class PagoDtos {
     @Setter
     @NoArgsConstructor
     public static class SuscripcionResponse {
+        private String planNombre;
         private Integer idHistorialSuscripcion;
         private Integer idEmpresa;
         private Integer idPlan;
@@ -62,5 +64,16 @@ public final class PagoDtos {
     public static class ConfirmarResponse {
         private String mensaje;
         private SuscripcionResponse suscripcion;
+        private CompraResponse compra;
+    }
+
+    @Getter @Setter @NoArgsConstructor
+    public static class CompraResponse {
+        private Integer idCompraPlan;
+        private Integer idPlan;
+        private String planNombre;
+        private String estado;
+        private boolean gratuito;
+        private Integer idEmpresa;
     }
 }

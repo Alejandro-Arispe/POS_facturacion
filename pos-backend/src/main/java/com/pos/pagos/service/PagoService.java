@@ -42,9 +42,12 @@ public class PagoService {
     private final HistorialSuscripcionRepository historialRepository;
     private final String stripeSecret;
     private final String webhookSecret;
-    private final String frontendBaseUrl;
+    private final boolean testOnly;
     private final ObjectMapper objectMapper;
-    private final RestClient stripeClient = RestClient.builder().baseUrl("https://api.stripe.com").build();
+    private final RestClient stripeClient;
+    private final com.pos.pagos.repo.CompraPlanRepository compras;
+    private final CompraPlanService compraService;
+    private final CheckoutReturnUrls returnUrls;
 
     public PagoService(
             EmpresaAccess empresaAccess,
@@ -53,36 +56,48 @@ public class PagoService {
             ObjectMapper objectMapper,
             @Value("${app.stripe.secret-key:}") String stripeSecret,
             @Value("${app.stripe.webhook-secret:}") String webhookSecret,
-            @Value("${app.frontend-base-url}") String frontendBaseUrl) {
+            @Value("${app.stripe.test-only:true}") boolean testOnly,
+            @Value("${app.stripe.api-base-url:https://api.stripe.com}") String stripeApiBaseUrl,
+            com.pos.pagos.repo.CompraPlanRepository compras, CompraPlanService compraService, CheckoutReturnUrls returnUrls) {
         this.empresaAccess = empresaAccess;
         this.planRepository = planRepository;
         this.historialRepository = historialRepository;
         this.objectMapper = objectMapper;
         this.stripeSecret = stripeSecret == null ? "" : stripeSecret;
         this.webhookSecret = webhookSecret == null ? "" : webhookSecret;
-        this.frontendBaseUrl = frontendBaseUrl;
+        this.testOnly = testOnly;
+        this.stripeClient = RestClient.builder().baseUrl(stripeApiBaseUrl).build();
+        this.compras = compras; this.compraService = compraService; this.returnUrls = returnUrls;
     }
 
     @Transactional
     public PagoDtos.CheckoutResponse checkout(Usuario usuario, PagoDtos.CheckoutRequest request) {
-        Empresa empresa = empresaAccess.requireEmpresa(usuario, request.getIdEmpresa());
+        empresaAccess.requireUsuarioActivo(usuario);
+        String origin = returnUrls.origin(request.getFrontendOrigin());
+        if (request.getIdEmpresa() == null) return checkoutCuenta(usuario, request.getIdPlan(), origin);
+        Empresa empresa = empresaAccess.requireEmpresaSinPlan(usuario, request.getIdEmpresa());
+        entityManager.lock(empresa, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        requireAdministrator(usuario, empresa.getIdEmpresa());
         Plan plan = planRepository.findById(request.getIdPlan())
                 .orElseThrow(() -> ApiException.notFound("Plan no encontrado."));
-        if (plan.getPrecio() == null || plan.getPrecio().compareTo(BigDecimal.ZERO) <= 0) {
+        if (plan.getPrecio() == null || plan.getPrecio().compareTo(BigDecimal.ZERO) < 0) {
             throw ApiException.badRequest("El plan no tiene precio configurado.");
         }
         PagoDtos.CheckoutResponse response = new PagoDtos.CheckoutResponse();
         response.setPlanNombre(plan.getNombre());
         response.setMonto(plan.getPrecio().toPlainString());
-        response.setMoneda("usd");
-        if (stripeSecret.isBlank()) {
-            String sessionId = "stub_" + UUID.randomUUID();
+        response.setMoneda("bob");
+        if (plan.getPrecio().signum() == 0) {
+            String sessionId = "free_" + UUID.randomUUID();
             guardarHistorial(empresa, plan, sessionId, null, "paid", "activo");
             response.setSessionId(sessionId);
-            response.setCheckoutUrl(frontendBaseUrl + "/administrator/payment/success?session_id=" + sessionId);
+            response.setCheckoutUrl(origin + "/payment/success?session_id=" + sessionId);
             return response;
         }
-        JsonNode session = crearSesionStripe(empresa, plan);
+        requireTestStripe();
+        JsonNode session = crearSesionStripe(plan, String.valueOf(empresa.getIdEmpresa()),
+                "&metadata[id_empresa]=" + empresa.getIdEmpresa(), origin,
+                "empresa=" + empresa.getIdEmpresa() + "&plan=" + plan.getIdPlan());
         String sessionId = session.path("id").asText("");
         String url = session.path("url").asText("");
         if (sessionId.isBlank() || url.isBlank()) {
@@ -94,14 +109,78 @@ public class PagoService {
         return response;
     }
 
+    private PagoDtos.CheckoutResponse checkoutCuenta(Usuario usuario, Integer planId, String origin) {
+        entityManager.find(Usuario.class, usuario.getIdUsuario(), jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        Plan plan = planRepository.findById(planId).orElseThrow(() -> ApiException.notFound("Plan no encontrado."));
+        if (plan.getPrecio() == null || plan.getPrecio().signum() < 0) throw ApiException.badRequest("El plan no tiene precio configurado.");
+        var response = new PagoDtos.CheckoutResponse();
+        response.setPlanNombre(plan.getNombre()); response.setMonto(plan.getPrecio().toPlainString()); response.setMoneda("bob");
+        var disponible = compras.findByUsuario_IdUsuarioAndEmpresaIsNullAndEstadoOrderByIdCompraPlanAsc(usuario.getIdUsuario(), "pagado")
+                .stream().filter(c -> c.getPlan().getIdPlan().equals(planId)).findFirst();
+        if (disponible.isPresent()) {
+            response.setSessionId(disponible.get().getStripeSessionId());
+            response.setCheckoutUrl(origin + "/payment/success?session_id=" + disponible.get().getStripeSessionId());
+            return response;
+        }
+        if (plan.getPrecio().signum() > 0) requireTestStripe();
+        var pendiente = compras.findByUsuario_IdUsuarioAndEmpresaIsNullAndEstadoOrderByIdCompraPlanAsc(usuario.getIdUsuario(), "pendiente")
+                .stream().filter(c -> c.getPlan().getIdPlan().equals(planId) && c.getStripeSessionId() != null)
+                .reduce((previous, current) -> current);
+        if (pendiente.isPresent()) {
+            var pending = pendiente.get();
+            JsonNode session = consultarSesionStripe(pending.getStripeSessionId());
+            if ("paid".equalsIgnoreCase(session.path("payment_status").asText(""))) {
+                activarCompra(pending, session);
+                response.setSessionId(pending.getStripeSessionId());
+                response.setCheckoutUrl(origin + "/payment/success?session_id=" + pending.getStripeSessionId());
+                return response;
+            }
+            if ("open".equals(session.path("status").asText(""))
+                    && session.path("success_url").asText("").startsWith(origin + "/payment/success?")
+                    && pending.getCheckoutUrl() != null) {
+                response.setSessionId(pending.getStripeSessionId()); response.setCheckoutUrl(pending.getCheckoutUrl());
+                return response;
+            }
+        }
+        var compra = new com.pos.pagos.domain.CompraPlan(); compra.setUsuario(usuario); compra.setPlan(plan);
+        compras.saveAndFlush(compra);
+        if (plan.getPrecio().signum() == 0) {
+            compra.setEstado("pagado"); compra.setFechaPago(LocalDate.now());
+            compra.setStripeSessionId("free_" + UUID.randomUUID());
+            compra.setCheckoutUrl(origin + "/payment/success?session_id=" + compra.getStripeSessionId());
+        } else {
+            JsonNode session = crearSesionStripe(plan, "compra_" + compra.getIdCompraPlan(),
+                    "&metadata[id_compra_plan]=" + compra.getIdCompraPlan(), origin, "plan=" + planId);
+            compra.setStripeSessionId(session.path("id").asText("")); compra.setCheckoutUrl(session.path("url").asText(""));
+            if (compra.getStripeSessionId().isBlank() || compra.getCheckoutUrl().isBlank()) throw ApiException.badRequest("Stripe no devolvió una sesión de pago.");
+        }
+        compras.save(compra); response.setSessionId(compra.getStripeSessionId()); response.setCheckoutUrl(compra.getCheckoutUrl());
+        return response;
+    }
+
+    private void requireTestStripe() {
+        if (stripeSecret.isBlank()) throw ApiException.badRequest("Configura STRIPE_SECRET_KEY con una clave sk_test_ para abrir Stripe de prueba.");
+        if (testOnly && !stripeSecret.startsWith("sk_test_") && !stripeSecret.startsWith("rk_test_")) throw ApiException.badRequest("La demo solo permite claves de prueba de Stripe.");
+    }
+
     @Transactional
     public PagoDtos.ConfirmarResponse confirmar(Usuario usuario, String sessionId) {
         empresaAccess.requireUsuarioActivo(usuario);
+        var compra = compras.findByStripeSessionId(sessionId);
+        if (compra.isPresent()) {
+            var purchase = compra.get();
+            if (!purchase.getUsuario().getIdUsuario().equals(usuario.getIdUsuario())) throw ApiException.notFound("No se encontró el pago para esta cuenta.");
+            if ("pendiente".equals(purchase.getEstado())) activarCompra(purchase, consultarSesionStripe(sessionId));
+            var result = new PagoDtos.ConfirmarResponse(); result.setCompra(compraService.response(purchase));
+            result.setMensaje("pagado".equals(purchase.getEstado()) ? "Plan adquirido. Puedes crear tu empresa cuando quieras." : "El pago todavía no está confirmado.");
+            return result;
+        }
         HistorialSuscripcion historial = historialRepository.findByStripeSessionId(sessionId).orElse(null);
         if (historial == null) {
             throw ApiException.badRequest("session_id inválido o no encontrado.");
         }
-        if (!sessionId.startsWith("stub_") && "pendiente".equalsIgnoreCase(historial.getEstado())) {
+        empresaAccess.requireEmpresaSinPlan(usuario, historial.getEmpresa().getIdEmpresa());
+        if (!sessionId.startsWith("free_") && !sessionId.startsWith("stub_") && "pendiente".equalsIgnoreCase(historial.getEstado())) {
             activarSiPagada(historial, consultarSesionStripe(sessionId));
         }
         PagoDtos.ConfirmarResponse response = new PagoDtos.ConfirmarResponse();
@@ -112,6 +191,7 @@ public class PagoService {
         return response;
     }
 
+    @Transactional
     public Map<String, Object> webhook(String payload, String signature) {
         if (stripeSecret.isBlank()) {
             return Map.of("received", true, "modo", "local");
@@ -125,6 +205,7 @@ public class PagoService {
                 JsonNode session = event.path("data").path("object");
                 String sessionId = session.path("id").asText("");
                 historialRepository.findByStripeSessionId(sessionId).ifPresent(historial -> activarSiPagada(historial, session));
+                compras.findByStripeSessionId(sessionId).ifPresent(compra -> activarCompra(compra, session));
             }
         } catch (ApiException ex) {
             throw ex;
@@ -134,22 +215,30 @@ public class PagoService {
         return Map.of("received", true);
     }
 
-    private JsonNode crearSesionStripe(Empresa empresa, Plan plan) {
+    private JsonNode crearSesionStripe(Plan plan, String reference, String metadata, String origin, String cancelQuery) {
         int centavos = plan.getPrecio().movePointRight(2).setScale(0, RoundingMode.HALF_UP).intValueExact();
-        String success = url(frontendBaseUrl + "/administrator/payment/success?session_id={CHECKOUT_SESSION_ID}");
-        String cancel = url(frontendBaseUrl + "/administrator/payment/cancel");
+        String success = url(origin + "/payment/success?session_id={CHECKOUT_SESSION_ID}");
+        String cancel = url(origin + "/payment/cancel?" + cancelQuery);
         String nombre = url(plan.getNombre() == null ? "Plan" : plan.getNombre());
         String form = "mode=payment"
                 + "&success_url=" + success
                 + "&cancel_url=" + cancel
-                + "&client_reference_id=" + empresa.getIdEmpresa()
-                + "&metadata[id_empresa]=" + empresa.getIdEmpresa()
+                + "&client_reference_id=" + reference
+                + metadata
                 + "&metadata[id_plan]=" + plan.getIdPlan()
                 + "&line_items[0][quantity]=1"
-                + "&line_items[0][price_data][currency]=usd"
+                + "&payment_method_types[0]=card"
+                + "&line_items[0][price_data][currency]=bob"
                 + "&line_items[0][price_data][unit_amount]=" + centavos
                 + "&line_items[0][price_data][product_data][name]=" + nombre;
         return stripe(form, "/v1/checkout/sessions");
+    }
+
+    private void activarCompra(com.pos.pagos.domain.CompraPlan compra, JsonNode session) {
+        if (!"paid".equalsIgnoreCase(session.path("payment_status").asText(""))) return;
+        entityManager.lock(compra, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE); entityManager.refresh(compra);
+        if (!"pendiente".equals(compra.getEstado())) return;
+        compra.setEstado("pagado"); compra.setFechaPago(LocalDate.now()); compras.save(compra);
     }
 
     private JsonNode consultarSesionStripe(String sessionId) {
@@ -191,11 +280,12 @@ public class PagoService {
         historial.setPlan(plan);
         historial.setEmpresa(empresa);
         historial.setFechaInicio(LocalDate.now());
-        historial.setFechaFin(LocalDate.now().plusDays(30));
+        historial.setFechaFin(plan.getPrecio().signum() == 0 ? null : LocalDate.now().plusDays(30));
         historial.setEstado(estado);
         historial.setStripeSessionId(sessionId);
         historial.setStripePaymentIntentId(paymentIntent);
         historial.setStripePaymentStatus(paymentStatus);
+        if ("activo".equals(estado)) cerrarSuscripcionesAnteriores(empresa.getIdEmpresa(), null);
         historialRepository.save(historial);
     }
 
@@ -204,6 +294,11 @@ public class PagoService {
         if (!"paid".equalsIgnoreCase(paymentStatus)) {
             return;
         }
+        entityManager.lock(historial.getEmpresa(), jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        entityManager.refresh(historial);
+        // Un webhook repetido de un plan ya reemplazado no puede deshacer un cambio posterior.
+        if (!"pendiente".equalsIgnoreCase(historial.getEstado())) return;
+        cerrarSuscripcionesAnteriores(historial.getEmpresa().getIdEmpresa(), historial.getIdHistorialSuscripcion());
         historial.setEstado("activo");
         historial.setStripePaymentStatus("paid");
         String intent = session.path("payment_intent").asText("");
@@ -214,6 +309,24 @@ public class PagoService {
         historial.setFechaFin(LocalDate.now().plusDays(30));
         historialRepository.save(historial);
     }
+
+    private void cerrarSuscripcionesAnteriores(Integer idEmpresa, Integer exceptId) {
+        for (HistorialSuscripcion old : historialRepository.findActivasPorEmpresa(idEmpresa, LocalDate.now())) {
+            if (!old.getIdHistorialSuscripcion().equals(exceptId)) {
+                old.setEstado("reemplazada");
+                historialRepository.save(old);
+            }
+        }
+    }
+
+    private void requireAdministrator(Usuario usuario, Integer companyId) {
+        Long count = entityManager.createQuery("select count(ur) from UsuarioRol ur where ur.usuario.idUsuario = :user and ur.idEmpresa = :company and ur.activo = true and ur.rol.nombre = 'ADMINISTRADOR'", Long.class)
+                .setParameter("user", usuario.getIdUsuario()).setParameter("company", companyId).getSingleResult();
+        if (count == 0) throw ApiException.forbidden("Solo el administrador puede cambiar el plan de la empresa.");
+    }
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     private boolean firmaValida(String payload, String signature) {
         if (payload == null || signature == null || signature.isBlank()) {
@@ -258,6 +371,7 @@ public class PagoService {
         dto.setIdHistorialSuscripcion(historial.getIdHistorialSuscripcion());
         dto.setIdEmpresa(historial.getEmpresa().getIdEmpresa());
         dto.setIdPlan(historial.getPlan().getIdPlan());
+        dto.setPlanNombre(historial.getPlan().getNombre());
         dto.setFechaInicio(historial.getFechaInicio());
         dto.setFechaFin(historial.getFechaFin());
         dto.setEstado(historial.getEstado());

@@ -1,13 +1,13 @@
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { TranslatePipe } from '../../../../core/i18n/translate.pipe';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Navbar } from '../../../../shared/components/navbar/navbar';
-
 
 import { Company, CompanyService } from '../../../../core/services/company.service';
 import { CompanyPermissionsService } from '../../../../core/services/company-permissions.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { PlanSelectorModalComponent } from '../../sections/payments/plan-selector-modal/plan-selector-modal';
+import { PagoService, CompraPlanDisponible } from '../../../../core/services/pago.service';
 
 @Component({
   selector: 'app-my-companies',
@@ -17,6 +17,8 @@ import { PlanSelectorModalComponent } from '../../sections/payments/plan-selecto
   styleUrl: './my-companies.css',
 })
 export class MyCompanies implements OnInit {
+  protected avisoPlan = '';
+  protected planesDisponibles: CompraPlanDisponible[] = [];
   protected companies: Company[] = [];
   protected cargandoEmpresas = false;
   protected errorEmpresas = '';
@@ -29,10 +31,19 @@ export class MyCompanies implements OnInit {
     private readonly companyPermissionsService: CompanyPermissionsService,
     private readonly router: Router,
     private readonly cdr: ChangeDetectorRef,
-  ) {}
+    route: ActivatedRoute,
+    private readonly pago: PagoService,
+  ) {
+    if (route.snapshot.queryParamMap.has('activar'))
+      this.avisoPlan =
+        'Activa un plan para acceder a tu empresa. Puedes elegir el gratuito sin tarjeta.';
+    if (route.snapshot.queryParamMap.has('ampliar'))
+      this.avisoPlan = 'La función elegida requiere un plan superior.';
+  }
 
   abrirModalPago(idEmpresa: string | number): void {
-    this.empresaSeleccionadaId = typeof idEmpresa === 'string' ? parseInt(idEmpresa, 10) : idEmpresa;
+    this.empresaSeleccionadaId =
+      typeof idEmpresa === 'string' ? parseInt(idEmpresa, 10) : idEmpresa;
   }
 
   cerrarModalPago(): void {
@@ -41,6 +52,15 @@ export class MyCompanies implements OnInit {
 
   ngOnInit(): void {
     this.cargarMisEmpresas();
+    this.pago.getPlanesDisponibles().subscribe({
+      next: (compras) => {
+        this.planesDisponibles = compras;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   protected obtenerIdEmpresa(company: Company): string | number {

@@ -89,6 +89,7 @@ public class CajaService {
 		Sucursal sucursal = sucursalRepository.findById(idSucursal)
 				.orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
 		empresaAccess.requireEmpresa(usuario, sucursal.getEmpresa().getIdEmpresa());
+		empresaAccess.requireCashCapacity(sucursal.getEmpresa().getIdEmpresa(), idSucursal);
 
 		try {
 			Caja caja = new Caja();
@@ -121,6 +122,9 @@ public class CajaService {
 	@Transactional
 	public CajaResponse actualizar(Integer idEmpresa, Integer idSucursal, Integer idCaja, CajaUpdate datos) {
 		Caja caja = requireCaja(idEmpresa, idSucursal, idCaja);
+		if (!Boolean.TRUE.equals(caja.getActivo()) && Boolean.TRUE.equals(datos.activo())) {
+			empresaAccess.requireCashCapacity(idEmpresa, idSucursal);
+		}
 		caja.setNombre(datos.nombre());
 		caja.setCodigo(datos.codigo());
 		caja.setActivo(datos.activo());

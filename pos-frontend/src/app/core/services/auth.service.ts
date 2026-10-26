@@ -93,6 +93,13 @@ export class AuthService {
     );
   }
 
+  resendCode(payload: ForgotPasswordRequest): Observable<ForgotPasswordResponse> {
+    return this.apiService.post<ForgotPasswordResponse, ForgotPasswordRequest>(
+      '/api/auth/resend-code',
+      payload,
+    );
+  }
+
   saveSession(accessToken: string): void {
     if (this.isTokenExpired(accessToken)) {
       this.logout();
@@ -126,7 +133,9 @@ export class AuthService {
     const payload = this.decodeTokenPayload(token) as any;
     // possible claim names: role, rol, roles
     if (payload?.roles && Array.isArray(payload.roles))
-      return payload.roles.map((r: any) => (typeof r === 'string' ? r.toLowerCase() : String(r).toLowerCase()));
+      return payload.roles.map((r: any) =>
+        typeof r === 'string' ? r.toLowerCase() : String(r).toLowerCase(),
+      );
     if (payload?.role && typeof payload.role === 'string') return [payload.role.toLowerCase()];
     if (payload?.rol && typeof payload.rol === 'string') return [payload.rol.toLowerCase()];
     return [];

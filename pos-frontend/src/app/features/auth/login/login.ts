@@ -4,14 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { OnboardingService } from '../../../core/services/onboarding.service';
+import { OnboardingSteps } from '../../../shared/components/onboarding-steps/onboarding-steps';
 
 @Component({
   selector: 'app-login',
-  imports: [TranslatePipe, FormsModule, RouterLink],
+  imports: [TranslatePipe, FormsModule, RouterLink, OnboardingSteps],
   templateUrl: './login.html',
   styleUrl: './login.css',
 })
 export class Login {
+  protected readonly idPlan: number | null;
   protected email = '';
   protected contrasena = '';
   protected cargandoLogin = false;
@@ -27,7 +30,11 @@ export class Login {
     private readonly router: Router,
     private readonly authService: AuthService,
     private readonly cdr: ChangeDetectorRef,
-  ) {}
+    private readonly onboarding: OnboardingService,
+  ) {
+    this.idPlan =
+      onboarding.selectPlan(route.snapshot.queryParamMap.get('plan')) ?? onboarding.plan;
+  }
 
   protected iniciarSesion(event: SubmitEvent): void {
     event.preventDefault();
@@ -54,10 +61,11 @@ export class Login {
           return;
         }
 
-        const plan = this.route.snapshot.queryParamMap.get('plan');
+        const plan = this.idPlan;
 
         if (plan) {
-          void this.router.navigate(['/register-company'], { queryParams: { plan } });
+          this.onboarding.clearPendingEmail();
+          void this.router.navigate(['/onboarding/checkout'], { queryParams: { plan } });
           return;
         }
 

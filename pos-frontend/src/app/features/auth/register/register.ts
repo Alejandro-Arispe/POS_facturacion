@@ -1,13 +1,15 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectorRef, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-
 import { AuthService, RegisterRequest } from '../../../core/services/auth.service';
+import { OnboardingService } from '../../../core/services/onboarding.service';
+import { PagoService, Plan } from '../../../core/services/pago.service';
+import { OnboardingSteps } from '../../../shared/components/onboarding-steps/onboarding-steps';
+import { Icon } from '../../../shared/components/icon/icon';
 
 @Component({
   selector: 'app-register',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, OnboardingSteps, Icon],
   templateUrl: './register.html',
   styleUrl: './register.css',
 })
@@ -22,43 +24,59 @@ export class Register {
     contrasena: '',
     confirmarContrasena: '',
   };
-
-  protected readonly idPlan: string | null;
+  protected readonly idPlan: number | null;
+  protected plan: Plan | null = null;
+  protected etapa: 'datos' | 'verificar' = 'datos';
   protected codigo = '';
   protected emailParaVerificar = '';
-  protected mostrarModalVerificacion = false;
-  protected puedeIngresarCodigoVerificacion = false;
-  protected cargandoRegistro = false;
-  protected cargandoVerificacion = false;
+  protected verificado = false;
+  protected cargando = false;
   protected mensaje = '';
   protected error = '';
-  protected errorVerificacion = '';
-  protected mensajeVerificacion = '';
 
   constructor(
-    private readonly authService: AuthService,
+    private readonly auth: AuthService,
     private readonly cdr: ChangeDetectorRef,
     private readonly router: Router,
+    private readonly onboarding: OnboardingService,
+    pago: PagoService,
     route: ActivatedRoute,
   ) {
-    this.idPlan = route.snapshot.queryParamMap.get('plan');
-
+    this.idPlan =
+      onboarding.selectPlan(route.snapshot.queryParamMap.get('plan')) ?? onboarding.plan;
     if (!this.idPlan) {
-      void this.router.navigate(['/planes']);
+      void router.navigate(['/planes']);
+      return;
     }
+    if (onboarding.pendingEmail) {
+      this.emailParaVerificar = onboarding.pendingEmail;
+      this.etapa = 'verificar';
+    }
+    pago.getPlanes().subscribe({
+      next: (planes) => {
+        this.plan = planes.find((p) => p.id_plan === this.idPlan) ?? null;
+        if (!this.plan) void router.navigate(['/planes']);
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.error = this.detail(
+          err,
+          'No se pudo comprobar el plan. Vuelve a elegirlo para continuar.',
+        );
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   protected registrar(event: SubmitEvent): void {
     event.preventDefault();
+    if (this.cargando || !this.plan) return;
     this.error = '';
     this.mensaje = '';
-    this.puedeIngresarCodigoVerificacion = false;
-
     if (this.form.contrasena !== this.form.confirmarContrasena) {
-      this.error = 'Las contrasenas no coinciden.';
+      this.error = 'Las contraseñas no coinciden.';
       return;
     }
-
     const payload: RegisterRequest = {
       email: this.form.email.trim(),
       contrasena: this.form.contrasena,
@@ -68,128 +86,100 @@ export class Register {
       telefono: this.form.telefono.trim(),
       documento: this.form.documento.trim(),
     };
-
-    this.cargandoRegistro = true;
-
-    this.authService.register(payload).subscribe({
+    this.cargando = true;
+    this.auth.register(payload).subscribe({
       next: (response) => {
-        this.cargandoRegistro = false;
-        this.mensaje = response.mensaje ?? response.message ?? '';
-        this.emailParaVerificar = response.email || payload.email;
-
-        if (this.registroRequiereVerificacion(response)) {
-          this.puedeIngresarCodigoVerificacion = true;
-        } else {
-          this.error = 'El registro respondio correctamente, pero no confirmo el envio del correo.';
-        }
-
-        this.cdr.detectChanges();
+        this.cargando = false;
+        this.emailParaVerificar = response.email ?? payload.email;
+        this.onboarding.pendingEmail = this.emailParaVerificar;
+        this.etapa = 'verificar';
+        this.verificado = response.activo === true;
+        this.mensaje = this.verificado
+          ? 'Tu cuenta está lista. Continuando con tu plan…'
+          : 'Tu cuenta está pendiente de verificación. Revisa el código enviado a tu correo.';
+        if (!response.email_enviado && !this.verificado)
+          this.error =
+            'La cuenta se creó, pero no se pudo enviar el correo. Puedes reintentar el envío.';
+        this.cdr.markForCheck();
+        if (this.verificado) this.continuar();
       },
-      error: (error: HttpErrorResponse) => {
-        this.cargandoRegistro = false;
-
-        if (error.status === 200 && this.registroRequiereVerificacion(error.error)) {
-          this.emailParaVerificar = payload.email;
-          this.puedeIngresarCodigoVerificacion = true;
-          this.cdr.detectChanges();
-          return;
-        }
-
-        this.error =
-          'No se pudo completar el registro. Revisa que el backend este disponible e intenta nuevamente.';
-        this.cdr.detectChanges();
+      error: (err) => {
+        this.cargando = false;
+        this.error = this.detail(err, 'No se pudo crear la cuenta. Intenta nuevamente.');
+        this.cdr.markForCheck();
       },
     });
   }
 
-  protected abrirIngresoCodigoVerificacion(): void {
-    this.abrirModalVerificacion(this.emailParaVerificar || this.form.email.trim());
-  }
-
-  protected verificarCodigo(event: SubmitEvent): void {
+  protected verificar(event: SubmitEvent): void {
     event.preventDefault();
-    this.errorVerificacion = '';
-    this.mensajeVerificacion = '';
-
-    const codigo = this.codigo.trim();
-    const email = this.emailParaVerificar.trim();
-
-    if (!email) {
-      this.errorVerificacion = 'Ingresa el correo de la cuenta.';
-      return;
-    }
-
-    if (!codigo) {
-      this.errorVerificacion = 'Ingresa el codigo de verificacion.';
-      return;
-    }
-
-    this.cargandoVerificacion = true;
-
-    this.authService.verifyCode({ email, codigo }).subscribe({
-      next: (response) => {
-        this.cargandoVerificacion = false;
-        this.mensajeVerificacion = response.mensaje ?? 'Cuenta verificada correctamente.';
-        this.cdr.detectChanges();
-
-        setTimeout(() => {
-          this.mostrarModalVerificacion = false;
-          void this.router.navigate(['/login'], { queryParams: { plan: this.idPlan } });
-        }, 5000);
+    if (this.cargando) return;
+    this.cargando = true;
+    this.error = '';
+    this.mensaje = '';
+    this.auth.verifyCode({ email: this.emailParaVerificar, codigo: this.codigo.trim() }).subscribe({
+      next: () => {
+        this.cargando = false;
+        this.verificado = true;
+        this.onboarding.clearPendingEmail();
+        this.mensaje = 'Correo verificado. Continuando con tu plan…';
+        this.cdr.markForCheck();
+        this.continuar();
       },
-      error: () => {
-        this.cargandoVerificacion = false;
-        this.errorVerificacion = 'No se pudo verificar el codigo. Intenta nuevamente.';
-        this.cdr.detectChanges();
+      error: (err) => {
+        this.cargando = false;
+        this.error = this.detail(err, 'No se pudo verificar el código.');
+        this.cdr.markForCheck();
       },
     });
   }
 
-  protected cerrarModalVerificacion(): void {
-    this.mostrarModalVerificacion = false;
+  protected reenviar(): void {
+    if (this.cargando) return;
+    this.cargando = true;
+    this.error = '';
+    this.mensaje = '';
+    this.auth.resendCode({ email: this.emailParaVerificar }).subscribe({
+      next: (response) => {
+        this.cargando = false;
+        this.mensaje = response.mensaje ?? 'Revisa tu correo para encontrar el nuevo código.';
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        this.cargando = false;
+        this.error = this.detail(err, 'No se pudo reenviar el código.');
+        this.cdr.markForCheck();
+      },
+    });
   }
 
-  private abrirModalVerificacion(email: string): void {
-    this.emailParaVerificar = email;
-    this.codigo = '';
-    this.errorVerificacion = '';
-    this.mensajeVerificacion = '';
-    this.mostrarModalVerificacion = true;
-  }
-
-  private registroRequiereVerificacion(response: unknown): boolean {
-    if (this.valorEsVerdadero(response)) {
-      return true;
+  protected continuar(): void {
+    this.onboarding.clearPendingEmail();
+    if (!this.form.contrasena) {
+      void this.router.navigate(['/login'], { queryParams: { plan: this.idPlan } });
+      return;
     }
-
-    const payload = response as {
-      email_enviado?: unknown;
-      emailEnviado?: unknown;
-      registered?: unknown;
-      data?: {
-        email_enviado?: unknown;
-        emailEnviado?: unknown;
-        registered?: unknown;
-      };
-    };
-
-    return (
-      this.valorEsVerdadero(payload?.email_enviado) ||
-      this.valorEsVerdadero(payload?.emailEnviado) ||
-      this.valorEsVerdadero(payload?.registered) ||
-      this.valorEsVerdadero(payload?.data?.email_enviado) ||
-      this.valorEsVerdadero(payload?.data?.emailEnviado) ||
-      this.valorEsVerdadero(payload?.data?.registered)
-    );
+    this.cargando = true;
+    this.error = '';
+    this.auth
+      .login({ email: this.emailParaVerificar, contrasena: this.form.contrasena })
+      .subscribe({
+        next: (response) => {
+          this.auth.saveSession(response.access_token);
+          this.form.contrasena = '';
+          this.form.confirmarContrasena = '';
+          void this.router.navigate(['/onboarding/checkout'], {
+            queryParams: { plan: this.idPlan },
+          });
+        },
+        error: () => {
+          this.cargando = false;
+          void this.router.navigate(['/login'], { queryParams: { plan: this.idPlan } });
+        },
+      });
   }
 
-  private valorEsVerdadero(valor: unknown): boolean {
-    if (typeof valor === 'string') {
-      const valorNormalizado = valor.trim().toLowerCase();
-
-      return valorNormalizado === 'true' || valorNormalizado === '1';
-    }
-
-    return valor === true || valor === 1;
+  private detail(err: { error?: { detail?: unknown } }, fallback: string): string {
+    return typeof err.error?.detail === 'string' ? err.error.detail : fallback;
   }
 }

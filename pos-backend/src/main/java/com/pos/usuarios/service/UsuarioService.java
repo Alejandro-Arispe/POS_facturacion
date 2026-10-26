@@ -109,6 +109,7 @@ public class UsuarioService {
             usuario.setCodigoVerificacionExpiraEn(null);
             usuario.setCodigoVerificacionIntentos(0);
             usuarioRepository.save(usuario);
+            emailService.sendWelcomeEmail(usuario.getEmail(), datos.nombreCompleto());
         }
 
         return new UsuarioRegisterResponse(
@@ -197,10 +198,32 @@ public class UsuarioService {
         usuario.setCodigoVerificacionIntentos(0);
         usuarioRepository.save(usuario);
 
+        emailService.sendWelcomeEmail(usuario.getEmail(), usuario.getPersona().getNombreCompleto());
         return new UsuarioVerifyResponse(
                 usuario.getEmail(),
                 true,
                 "Cuenta verificada y activada correctamente.");
+    }
+
+    @Transactional
+    public MensajeResponse reenviarCodigo(UsuarioForgotPassword datos) {
+        Usuario usuario = usuarioRepository.findByEmailIgnoreCase(datos.email())
+                .orElseThrow(() -> ApiException.badRequest("No existe una cuenta pendiente con ese correo."));
+        if (Boolean.TRUE.equals(usuario.getActivo())) return new MensajeResponse("La cuenta ya está verificada. Puedes iniciar sesión.");
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        if (usuario.getCodigoVerificacionExpiraEn() != null
+                && now.isBefore(usuario.getCodigoVerificacionExpiraEn().minusMinutes(expirationMinutes).plusSeconds(60))) {
+            throw ApiException.badRequest("Espera un minuto antes de solicitar otro código.");
+        }
+        String code = passwordService.randomAlphanumeric(6);
+        if (!emailService.sendVerificationEmail(usuario.getEmail(), usuario.getPersona().getNombreCompleto(), code)) {
+            throw ApiException.badRequest("No se pudo enviar el correo. Revisa la configuración SMTP e intenta nuevamente.");
+        }
+        usuario.setCodigoVerificacionHash(passwordService.sha256Hex(code));
+        usuario.setCodigoVerificacionExpiraEn(now.plusMinutes(expirationMinutes));
+        usuario.setCodigoVerificacionIntentos(0);
+        usuarioRepository.save(usuario);
+        return new MensajeResponse("Enviamos un nuevo código a tu correo.");
     }
 
     @Transactional

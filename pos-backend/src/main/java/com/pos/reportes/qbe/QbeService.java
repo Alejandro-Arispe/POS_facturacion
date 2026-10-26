@@ -43,6 +43,7 @@ public class QbeService {
 
 	public List<QbeDtos.FuenteInfo> fuentes(Integer idEmpresa) {
 		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "REPORTE_GENERAR");
+		empresaAccess.requirePlanFeature(SecurityUtils.currentUser(), idEmpresa, "reportes_avanzados");
 		return QbeCatalogo.FUENTES.values().stream()
 				.map(f -> new QbeDtos.FuenteInfo(
 						f.codigo(),
@@ -59,6 +60,7 @@ public class QbeService {
 	@Transactional(readOnly = true)
 	public QbeDtos.Resultado ejecutar(Integer idEmpresa, QbeDtos.Consulta consulta) {
 		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "REPORTE_GENERAR");
+		empresaAccess.requirePlanFeature(SecurityUtils.currentUser(), idEmpresa, "reportes_avanzados");
 		if (consulta == null || consulta.fuente() == null) {
 			throw ApiException.badRequest("Debe elegir una fuente de datos.");
 		}

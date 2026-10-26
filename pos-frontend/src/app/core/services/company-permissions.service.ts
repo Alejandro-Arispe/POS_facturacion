@@ -47,7 +47,6 @@ export const COMPANY_PERMISSION_CODES = [
   'BITACORA_VER',
 ] as const;
 
-
 export type CompanyPermissionCode = (typeof COMPANY_PERMISSION_CODES)[number];
 export type CompanyPermissionsByCode = Record<CompanyPermissionCode, boolean>;
 
@@ -95,6 +94,7 @@ export interface CompanyPlanModule {
 }
 
 export interface CompanySubscriptionPlan {
+  limites?: { codigo: string; reportes: string; pedidos: boolean; predicciones: boolean };
   id_plan: number;
   nombre: string;
   descripcion: string;
@@ -178,11 +178,13 @@ const PERMISSION_CODE_ALIASES: Partial<Record<string, CompanyPermissionCode>> = 
   'dashboard.ver': 'DASHBOARD_VER',
 };
 
-export const EMPTY_COMPANY_PERMISSIONS: CompanyPermissionsByCode =
-  COMPANY_PERMISSION_CODES.reduce((permissions, code) => {
+export const EMPTY_COMPANY_PERMISSIONS: CompanyPermissionsByCode = COMPANY_PERMISSION_CODES.reduce(
+  (permissions, code) => {
     permissions[code] = false;
     return permissions;
-  }, {} as CompanyPermissionsByCode);
+  },
+  {} as CompanyPermissionsByCode,
+);
 
 @Injectable({
   providedIn: 'root',
@@ -220,11 +222,14 @@ export class CompanyPermissionsService {
     );
   }
 
-  guardarCamposRol(idRol: string | number, campos: CampoPrivilegio[]): Observable<CampoPrivilegio[]> {
-    return this.apiService.put<CampoPrivilegio[], { formulario: string; campos: CampoPrivilegio[] }>(
-      `/api/roles/${idRol}/campos`,
-      { formulario: 'producto', campos },
-    );
+  guardarCamposRol(
+    idRol: string | number,
+    campos: CampoPrivilegio[],
+  ): Observable<CampoPrivilegio[]> {
+    return this.apiService.put<
+      CampoPrivilegio[],
+      { formulario: string; campos: CampoPrivilegio[] }
+    >(`/api/roles/${idRol}/campos`, { formulario: 'producto', campos });
   }
 
   hasPermission(permission: CompanyPermissionCode): boolean {
@@ -251,9 +256,7 @@ export class CompanyPermissionsService {
     return permissionsByCode;
   }
 
-  saveActiveSubscription(
-    subscription: CompanyActiveSubscription | null,
-  ): CompanyPlanConfiguration {
+  saveActiveSubscription(subscription: CompanyActiveSubscription | null): CompanyPlanConfiguration {
     this.activeSubscriptionSignal.set(subscription);
 
     if (subscription) {
@@ -285,7 +288,9 @@ export class CompanyPermissionsService {
     localStorage.removeItem(PLAN_CONFIGURATION_STORAGE_KEY);
   }
 
-  private normalizarCamposProducto(data: Partial<CamposProducto> | null | undefined): CamposProducto {
+  private normalizarCamposProducto(
+    data: Partial<CamposProducto> | null | undefined,
+  ): CamposProducto {
     const campos = camposProductoPorDefecto();
 
     for (const campo of CAMPOS_PRODUCTO) {
@@ -322,26 +327,37 @@ export class CompanyPermissionsService {
     const storedPermissions = localStorage.getItem(STORAGE_KEY);
 
     if (!storedPermissions) {
-      return COMPANY_PERMISSION_CODES.reduce((permissions, code) => {
-        permissions[code] = true;
-        return permissions;
-      }, { ...emptyPermissions });
+      return COMPANY_PERMISSION_CODES.reduce(
+        (permissions, code) => {
+          permissions[code] = true;
+          return permissions;
+        },
+        { ...emptyPermissions },
+      );
     }
 
     try {
-      const parsedPermissions = JSON.parse(storedPermissions) as Partial<Record<CompanyPermissionCode, unknown>>;
+      const parsedPermissions = JSON.parse(storedPermissions) as Partial<
+        Record<CompanyPermissionCode, unknown>
+      >;
       const activeCount = Object.values(parsedPermissions).filter(Boolean).length;
       if (activeCount === 0) {
-        return COMPANY_PERMISSION_CODES.reduce((permissions, code) => {
-          permissions[code] = true;
-          return permissions;
-        }, { ...emptyPermissions });
+        return COMPANY_PERMISSION_CODES.reduce(
+          (permissions, code) => {
+            permissions[code] = true;
+            return permissions;
+          },
+          { ...emptyPermissions },
+        );
       }
 
-      return COMPANY_PERMISSION_CODES.reduce((permissions, code) => {
-        permissions[code] = Boolean(parsedPermissions[code]);
-        return permissions;
-      }, { ...emptyPermissions });
+      return COMPANY_PERMISSION_CODES.reduce(
+        (permissions, code) => {
+          permissions[code] = Boolean(parsedPermissions[code]);
+          return permissions;
+        },
+        { ...emptyPermissions },
+      );
     } catch {
       return emptyPermissions;
     }
@@ -401,7 +417,9 @@ export class CompanyPermissionsService {
     }
 
     try {
-      const parsedConfiguration = JSON.parse(storedPlanConfiguration) as Partial<CompanyPlanConfiguration>;
+      const parsedConfiguration = JSON.parse(
+        storedPlanConfiguration,
+      ) as Partial<CompanyPlanConfiguration>;
 
       return {
         reportes: String(parsedConfiguration.reportes ?? ''),

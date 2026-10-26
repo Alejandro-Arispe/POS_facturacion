@@ -25,18 +25,20 @@ public class EmpresaAccess {
     private final UsuarioRolRepository usuarioRolRepository;
     private final PermisoRepository permisoRepository;
     private final RolPermisoRepository rolPermisoRepository;
+    private final com.pos.empresas.service.PlanPolicy planPolicy;
 
     public EmpresaAccess(
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
             UsuarioRolRepository usuarioRolRepository,
             PermisoRepository permisoRepository,
-            RolPermisoRepository rolPermisoRepository) {
+            RolPermisoRepository rolPermisoRepository, com.pos.empresas.service.PlanPolicy planPolicy) {
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
         this.usuarioRolRepository = usuarioRolRepository;
         this.permisoRepository = permisoRepository;
         this.rolPermisoRepository = rolPermisoRepository;
+        this.planPolicy = planPolicy;
     }
 
     public void requireUsuarioActivo(Usuario usuario) {
@@ -47,6 +49,13 @@ public class EmpresaAccess {
 
     @Transactional(readOnly = true)
     public Empresa requireEmpresa(Usuario usuario, Integer idEmpresa) {
+        Empresa empresa = requireEmpresaSinPlan(usuario, idEmpresa);
+        planPolicy.requireActive(idEmpresa);
+        return empresa;
+    }
+
+    @Transactional(readOnly = true)
+    public Empresa requireEmpresaSinPlan(Usuario usuario, Integer idEmpresa) {
         requireUsuarioActivo(usuario);
         Empresa empresa = empresaRepository.findById(idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
@@ -61,6 +70,23 @@ public class EmpresaAccess {
         return empresa;
     }
 
+    public void requireProductCapacity(Integer idEmpresa) { planPolicy.requireProductCapacity(idEmpresa); }
+    public void requireCashCapacity(Integer idEmpresa, Integer idSucursal) { planPolicy.requireCashCapacity(idEmpresa, idSucursal); }
+    public com.pos.empresas.service.PlanPolicy.Benefits benefits(Integer idEmpresa) {
+        return planPolicy.benefits(planPolicy.requireActive(idEmpresa).getPlan());
+    }
+    public void requirePlanFeature(Usuario usuario, Integer idEmpresa, String feature) {
+        requireEmpresa(usuario, idEmpresa);
+        var benefits = benefits(idEmpresa);
+        boolean allowed = switch (feature) {
+            case "pedidos" -> benefits.pedidos();
+            case "predicciones", "reportes_avanzados" -> benefits.predicciones();
+            case "reportes_estandar" -> !benefits.codigo().equals("gratuito");
+            default -> true;
+        };
+        if (!allowed) throw ApiException.forbidden("Esta función requiere un plan superior. Puedes cambiarlo desde Mis empresas.");
+    }
+
     @Transactional(readOnly = true)
     public Sucursal requireSucursal(Usuario usuario, Integer idEmpresa, Integer idSucursal) {
         requireEmpresa(usuario, idEmpresa);
@@ -71,6 +97,7 @@ public class EmpresaAccess {
     @Transactional(readOnly = true)
     public void requirePermiso(Usuario usuario, Integer idEmpresa, String codigo) {
         requireEmpresa(usuario, idEmpresa);
+        if (codigo.startsWith("PEDIDO_")) requirePlanFeature(usuario, idEmpresa, "pedidos");
         if (!permisoRepository.existsByCodigo(codigo)) {
             return;
         }

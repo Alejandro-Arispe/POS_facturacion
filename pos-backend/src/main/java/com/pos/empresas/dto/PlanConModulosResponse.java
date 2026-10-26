@@ -8,5 +8,6 @@ public record PlanConModulosResponse(
 		String nombre,
 		String descripcion,
 		BigDecimal precio,
-		List<PlanModuloResponse> planModulos) {
+		List<PlanModuloResponse> planModulos,
+        com.pos.empresas.service.PlanPolicy.Benefits limites) {
 }

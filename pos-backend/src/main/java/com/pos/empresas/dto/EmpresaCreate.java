@@ -7,5 +7,9 @@ public record EmpresaCreate(
 		@NotBlank String nombre,
 		@NotBlank String razonSocial,
 		@NotBlank String nit,
-		@NotBlank @Email String correo) {
+		@NotBlank @Email String correo,
+        Integer idCompraPlan) {
+    public EmpresaCreate(String nombre, String razonSocial, String nit, String correo) {
+        this(nombre, razonSocial, nit, correo, null);
+    }
 }

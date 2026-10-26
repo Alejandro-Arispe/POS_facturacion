@@ -12,15 +12,19 @@ import com.pos.empresas.repo.PlanRepository;
 public class PlanService {
 
     private final PlanRepository planRepository;
+    private final PlanPolicy policy;
 
-    public PlanService(PlanRepository planRepository) {
+    public PlanService(PlanRepository planRepository, PlanPolicy policy) {
         this.planRepository = planRepository;
+        this.policy = policy;
     }
 
     @Transactional(readOnly = true)
     public List<PlanResponse> listar() {
         return planRepository.findAllByOrderByIdPlanAsc().stream()
-                .map(PlanResponse::from)
+                .filter(p -> !"Premium".equalsIgnoreCase(p.getNombre()))
+                .sorted(java.util.Comparator.comparing(com.pos.empresas.domain.Plan::getPrecio))
+                .map(p -> PlanResponse.from(p, policy.benefits(p)))
                 .toList();
     }
 }
