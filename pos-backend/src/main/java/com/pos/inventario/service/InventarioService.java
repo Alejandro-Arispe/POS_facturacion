@@ -31,6 +31,7 @@ import com.pos.usuarios.domain.Usuario;
 public class InventarioService {
 
     private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.RbacResolver rbac;
     private final TipoMovimientoRepository tipoMovimientoRepository;
     private final StockRepository stockRepository;
     private final MovimientoInventarioRepository movimientoRepository;
@@ -39,14 +40,14 @@ public class InventarioService {
     private final NotificationService notificationService;
 
     public InventarioService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, com.pos.common.access.RbacResolver rbac,
             TipoMovimientoRepository tipoMovimientoRepository,
             StockRepository stockRepository,
             MovimientoInventarioRepository movimientoRepository,
             ProductoRepository productoRepository,
             SucursalRepository sucursalRepository,
             NotificationService notificationService) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.rbac=rbac;
         this.tipoMovimientoRepository = tipoMovimientoRepository;
         this.stockRepository = stockRepository;
         this.movimientoRepository = movimientoRepository;
@@ -87,7 +88,7 @@ public class InventarioService {
 
     @Transactional(readOnly = true)
     public List<InventarioDtos.StockResponse> listarStock(Usuario usuario, Integer idEmpresa, Integer idSucursal) {
-        empresaAccess.requireSucursal(usuario, idEmpresa, idSucursal);
+        empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"inventory:read");
         List<InventarioDtos.StockResponse> result = new ArrayList<>();
         for (Stock stock : stockRepository.findByIdSucursal(idSucursal)) {
             if (stock.getProducto() != null && idEmpresa.equals(stock.getProducto().getIdEmpresa())) {
@@ -100,7 +101,7 @@ public class InventarioService {
     @Transactional(readOnly = true)
     public List<InventarioDtos.MovimientoListItem> listarMovimientos(
             Usuario usuario, Integer idEmpresa, Integer idSucursal, int skip, int limit) {
-        empresaAccess.requireSucursal(usuario, idEmpresa, idSucursal);
+        empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"inventory_movement:read");
         int size = Math.max(1, Math.min(limit, 100));
         int page = Math.max(0, skip) / size;
         List<MovimientoInventario> movimientos = movimientoRepository
@@ -115,11 +116,14 @@ public class InventarioService {
     @Transactional
     public InventarioDtos.StockResponse actualizarStock(
             Usuario usuario, Integer idEmpresa, Integer idSucursal, Integer idProducto, InventarioDtos.StockUpdate payload) {
-        empresaAccess.requireSucursal(usuario, idEmpresa, idSucursal);
+        empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"inventory:configure");
+        if (payload.getStockMinimo()==null || payload.getStockMinimo()<0 || (payload.getStockMaximo()!=null && (payload.getStockMaximo()<0 || payload.getStockMaximo()<payload.getStockMinimo())))
+            throw ApiException.badRequest("Los límites de stock deben ser no negativos y el máximo no debe ser menor al mínimo.");
+        productoRepository.lockById(idProducto).orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
         Producto producto = productoRepository.findById(idProducto)
                 .orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
         if (!idEmpresa.equals(producto.getIdEmpresa())) {
-            throw ApiException.badRequest("El producto no pertenece a la empresa indicada.");
+            throw ApiException.notFound("Producto no encontrado en esta empresa.");
         }
         LocalDateTime now = LocalDateTime.now();
         Stock stock = stockRepository.findByProducto_IdProductoAndIdSucursal(idProducto, idSucursal)
@@ -143,17 +147,36 @@ public class InventarioService {
             Integer idEmpresa,
             Integer idSucursal,
             InventarioDtos.MovimientoCreate payload) {
-        empresaAccess.requireSucursal(usuario, idEmpresa, idSucursal);
+        empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"inventory_movement:create");
+        return applyMovement(usuario,idEmpresa,idSucursal,payload,false);
+    }
+
+    /** Only server-derived sale outflows use this path. There is no HTTP endpoint for it. */
+    @Transactional
+    public void registrarSalidaVenta(Usuario usuario,Integer company,Integer branch,Integer product,int quantity,Integer sale) {
+        empresaAccess.requirePermiso(usuario,company,branch,"sale:create");
+        var type=tipoMovimientoRepository.findByNombreIgnoreCase("Venta")
+            .orElseThrow(() -> ApiException.badRequest("Tipo de inventario Venta no configurado."));
+        if (!"salida".equalsIgnoreCase(type.getDireccion())) throw ApiException.badRequest("El movimiento Venta debe ser de salida.");
+        var input=new InventarioDtos.MovimientoCreate(); input.setIdProducto(product); input.setCantidad(quantity);
+        input.setIdTipoMovimiento(type.getIdTipoMovimiento()); input.setObservacion("Movimiento de la venta "+sale);
+        applyMovement(usuario,company,branch,input,true);
+    }
+
+    private InventarioDtos.MovimientoResponse applyMovement(Usuario usuario,Integer idEmpresa,Integer idSucursal,InventarioDtos.MovimientoCreate payload,boolean sale) {
         if (payload.getCantidad() == null || payload.getCantidad() <= 0) {
             throw ApiException.badRequest("La cantidad debe ser mayor a cero.");
         }
-        Producto producto = productoRepository.findById(payload.getIdProducto())
+        if (payload.getIdProducto()==null || payload.getIdTipoMovimiento()==null) throw ApiException.badRequest("Producto y tipo de movimiento son obligatorios.");
+        Producto producto = productoRepository.lockById(payload.getIdProducto())
                 .orElseThrow(() -> ApiException.notFound("Producto no encontrado."));
         if (!idEmpresa.equals(producto.getIdEmpresa())) {
-            throw ApiException.badRequest("El producto no pertenece a la empresa indicada.");
+            throw ApiException.notFound("Producto no encontrado en esta empresa.");
         }
         TipoMovimiento tipo = tipoMovimientoRepository.findById(payload.getIdTipoMovimiento())
                 .orElseThrow(() -> ApiException.notFound("Tipo de movimiento no encontrado."));
+        if (!sale && "Venta".equalsIgnoreCase(tipo.getNombre())) throw ApiException.badRequest("Las salidas de venta se generan al registrar la venta.");
+        if (!Boolean.TRUE.equals(producto.getActivo())) throw ApiException.badRequest("El producto está inactivo.");
         String direccion = (tipo.getDireccion() == null ? "" : tipo.getDireccion()).trim().toLowerCase(Locale.ROOT);
         if (!direccion.equals("entrada") && !direccion.equals("salida")) {
             throw ApiException.badRequest("La direccion del tipo de movimiento no es valida.");
@@ -170,9 +193,11 @@ public class InventarioService {
                     created.setFechaActualizacion(now);
                     return stockRepository.save(created);
                 });
-        int nuevaCantidad = direccion.equals("entrada")
-                ? stock.getCantidad() + payload.getCantidad()
-                : stock.getCantidad() - payload.getCantidad();
+        long calculated = direccion.equals("entrada")
+                ? (long) stock.getCantidad() + payload.getCantidad()
+                : (long) stock.getCantidad() - payload.getCantidad();
+        if (calculated > Integer.MAX_VALUE) throw ApiException.badRequest("La cantidad supera la capacidad del inventario.");
+        int nuevaCantidad = (int) calculated;
         if (nuevaCantidad < 0) {
             throw ApiException.badRequest("Stock insuficiente para registrar la salida.");
         }
@@ -229,12 +254,13 @@ public class InventarioService {
         dto.setStockMaximo(stock.getStockMaximo());
         dto.setFechaActualizacion(stock.getFechaActualizacion());
         Producto producto = stock.getProducto();
-        dto.setNombreProducto(producto.getNombre());
-        dto.setCodigoBarra(producto.getCodigoBarra());
-        dto.setUnidadMedida(producto.getUnidadMedida() == null ? "" : producto.getUnidadMedida());
-        dto.setPrecio(producto.getPrecio() == null ? 0 : producto.getPrecio().doubleValue());
-        dto.setImagen(producto.getImagen());
-        dto.setActivo(producto.getActivo());
+        var grants=rbac.resolve(com.pos.common.security.SecurityUtils.currentUser(),producto.getIdEmpresa(),stock.getIdSucursal());
+        if(rbac.field(grants,"product","read","nombre")) dto.setNombreProducto(producto.getNombre());
+        if(rbac.field(grants,"product","read","codigo_barra")) dto.setCodigoBarra(producto.getCodigoBarra());
+        if(rbac.field(grants,"product","read","unidad_medida")) dto.setUnidadMedida(producto.getUnidadMedida());
+        if(rbac.field(grants,"product","read","precio")) dto.setPrecio(producto.getPrecio()==null?null:producto.getPrecio().doubleValue());
+        if(rbac.field(grants,"product","read","imagen")) dto.setImagen(producto.getImagen());
+        if(rbac.field(grants,"product","read","activo")) dto.setActivo(producto.getActivo());
         return dto;
     }
 
@@ -265,7 +291,8 @@ public class InventarioService {
         dto.setTipo(direccion);
         InventarioDtos.ProductoSimple producto = new InventarioDtos.ProductoSimple();
         producto.setIdProducto(movimiento.getProducto().getIdProducto());
-        producto.setNombre(movimiento.getProducto().getNombre());
+        var grants=rbac.resolve(com.pos.common.security.SecurityUtils.currentUser(),movimiento.getProducto().getIdEmpresa(),movimiento.getIdSucursal());
+        if(rbac.field(grants,"product","read","nombre")) producto.setNombre(movimiento.getProducto().getNombre());
         dto.setProducto(producto);
         if (movimiento.getTipoMovimiento() != null) {
             InventarioDtos.TipoSimple tipo = new InventarioDtos.TipoSimple();

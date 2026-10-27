@@ -17,9 +17,11 @@ public class ClienteWebSocketHub {
 
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
+    private final SocketIdentity identity;
+    private final com.pos.notifications.service.NotificationReadPolicy readPolicy;
 
-    public ClienteWebSocketHub(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    public ClienteWebSocketHub(ObjectMapper objectMapper,SocketIdentity identity,com.pos.notifications.service.NotificationReadPolicy readPolicy) {
+        this.objectMapper = objectMapper; this.identity=identity;this.readPolicy=readPolicy;
     }
 
     public void register(String idUsuario, WebSocketSession session) {
@@ -41,9 +43,14 @@ public class ClienteWebSocketHub {
         if (list == null || list.isEmpty()) {
             return;
         }
-        String json = objectMapper.writeValueAsString(message);
-        TextMessage payload = new TextMessage(json);
+        @SuppressWarnings("unchecked") Map<String,Object> data=message.get("payload") instanceof Map<?,?> p?(Map<String,Object>)p:Map.of();
+        Integer company;
+        try {company=Integer.valueOf(String.valueOf(data.get("id_empresa")));} catch(Exception ex){return;}
+        Map<String,Object> safe=Map.of("tipo","alerta","titulo","Actualización de tu cuenta","mensaje","Consulta tus operaciones autorizadas.","payload",readPolicy.payload(data));
+        TextMessage payload = new TextMessage(objectMapper.writeValueAsString(safe));
         for (WebSocketSession session : list) {
+            try {if(!readPolicy.visible(identity.current(session),company,data)) continue;}
+            catch(Exception ex){try {session.close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);}catch(Exception ignored){}continue;}
             if (session.isOpen()) {
                 synchronized (session) {
                     try {

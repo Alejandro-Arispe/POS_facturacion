@@ -32,7 +32,7 @@
       <section class="tabs-panel panel">
         @if (viewMode === 'sales') {
           <div class="tabs" role="tablist" aria-label="Secciones de ventas">
-            @if (hasPermission('VENTA_CREAR')) {
+            @if (hasPermission('sale:create')) {
               <button
                 class="tab-button"
                 [class.active]="activeTab === 'register'"
@@ -45,7 +45,7 @@
               </button>
             }
 
-            @if (hasPermission('VENTA_VER')) {
+            @if (hasPermission('sale:read')) {
               <button
                 class="tab-button"
                 [class.active]="activeTab === 'history'"
@@ -73,7 +73,7 @@
           </div>
 
           <div class="tab-content">
-            @if (activeTab === 'register') {
+            @if (activeTab === 'register' && hasPermission('sale:create')) {
               @if (registerError) {
                 <p class="feedback feedback-error">{{ registerError }}</p>
               }
@@ -128,7 +128,7 @@
                         } @else {
                           <div class="product-results" aria-label="Resultados de productos">
                             @for (product of filteredProducts; track trackProduct($index, product)) {
-                              <button class="product-result" type="button" [disabled]="!hasPermission('VENTA_CREAR')" (click)="addProduct(product)">
+                              <button class="product-result" type="button" [disabled]="!hasPermission('sale:create')" (click)="addProduct(product)">
                                 <span>
                                   <strong>{{ product.nombre }}</strong>
                                   <small>
@@ -171,7 +171,7 @@
                         } @else {
                           <div class="product-results" aria-label="Productos recomendados">
                             @for (product of visibleRecommendedProducts; track trackProduct($index, product)) {
-                              <button class="product-result" type="button" [disabled]="!hasPermission('VENTA_CREAR')" (click)="addProduct(product)">
+                              <button class="product-result" type="button" [disabled]="!hasPermission('sale:create')" (click)="addProduct(product)">
                                 <span>
                                   <strong>{{ product.nombre }}</strong>
                                   <small>
@@ -240,6 +240,7 @@
                               type="checkbox"
                               name="onlineInvoice"
                               [(ngModel)]="onlineInvoice"
+                              [disabled]="!hasPermission('invoice:issue')"
                               [disabled]="!selectedClientId"
                             />
                             <span class="switch-track" aria-hidden="true">
@@ -320,7 +321,16 @@
                                     <span class="detail-code">Barras {{ item.codigoBarras }}</span>
                                   }
                                 </td>
-                                <td>{{ item.precio | money }}</td>
+                                <td>
+                                  @if (canSetSalePrice) {
+                                    <input class="input money-input" type="number" min="0" step="0.01"
+                                      [attr.aria-label]="'Precio unitario de ' + item.nombre"
+                                      [ngModel]="item.precio" [ngModelOptions]="{ standalone: true }"
+                                      (ngModelChange)="updateItemPrice(item, $event)" />
+                                  } @else {
+                                    {{ effectivePrice(item) | money }}
+                                  }
+                                </td>
                                 <td>
                                   <input
                                     class="input quantity-input"
@@ -338,11 +348,11 @@
                                       class="input money-input"
                                       type="number"
                                       min="0"
-                                      [max]="item.descuentoTipo === 'percentage' ? 100 : item.precio * item.cantidad"
+                                      [max]="item.descuentoTipo === 'percentage' ? 100 : effectivePrice(item) * item.cantidad"
                                       step="0.01"
                                       [ngModel]="item.descuento"
                                       [ngModelOptions]="{ standalone: true }"
-                                      [disabled]="!hasPermission('VENTA_DESCUENTO')"
+                                      [disabled]="!canDiscount"
                                       (ngModelChange)="updateItemDiscount(item, $event)"
                                     />
 
@@ -354,7 +364,7 @@
                                           value="percentage"
                                           [ngModel]="item.descuentoTipo"
                                           [ngModelOptions]="{ standalone: true }"
-                                          [disabled]="!hasPermission('VENTA_DESCUENTO')"
+                                          [disabled]="!canDiscount"
                                           (ngModelChange)="updateItemDiscountType(item, 'percentage')"
                                         />
                                         %
@@ -366,7 +376,7 @@
                                           value="fixed"
                                           [ngModel]="item.descuentoTipo"
                                           [ngModelOptions]="{ standalone: true }"
-                                          [disabled]="!hasPermission('VENTA_DESCUENTO')"
+                                          [disabled]="!canDiscount"
                                           (ngModelChange)="updateItemDiscountType(item, 'fixed')"
                                         />
                                         {{ '' | currencySymbol }}
@@ -389,7 +399,7 @@
                   </section>
                 </section>
               }
-            } @else if (activeTab === 'payment') {
+            } @else if (activeTab === 'payment' && hasPermission('sale:create')) {
               <section class="payment-panel" aria-label="Registrar pago">
                 <div class="payment-header">
                   <div>
@@ -466,7 +476,7 @@
                   </button>
                 </div>
               </section>
-            } @else if (activeTab === 'history') {
+            } @else if (activeTab === 'history' && hasPermission('sale:read')) {
               @if (salesHistoryError) {
                 <p class="feedback feedback-error">{{ salesHistoryError }}</p>
               }
@@ -555,7 +565,7 @@
           </div>
         } @else {
           <div class="tabs" role="tablist" aria-label="Secciones de movimientos de caja">
-              @if (hasPermission('MOVIMIENTO_REGISTRAR')) {
+              @if (hasPermission('cash_movement:create')) {
                 <button
                   class="tab-button"
                   [class.active]="movementActiveTab === 'register'"
@@ -568,7 +578,7 @@
                 </button>
               }
 
-            @if (hasPermission('MOVIMIENTO_VER')) {
+            @if (hasPermission('cash_movement:read')) {
               <button
                 class="tab-button"
                 [class.active]="movementActiveTab === 'list'"
@@ -591,12 +601,12 @@
               <p class="feedback feedback-success">{{ movementMessage }}</p>
             }
 
-            @if (movementActiveTab === 'register') {
+            @if (movementActiveTab === 'register' && hasPermission('cash_movement:create')) {
               @if (loadingMovementTypes) {
                 <section class="sales-state" aria-live="polite">
                   <p class="text-muted">Cargando tipos de movimiento de caja...</p>
                 </section>
-              } @else {
+              } @else if (hasPermission('cash_movement:read')) {
                 <section class="movement-workspace">
                   <form class="movement-form-panel" aria-label="Registrar movimiento de caja" (submit)="registrarMovimientoCaja($event)">
                     <div class="form-grid movement-grid">
@@ -759,7 +769,7 @@
 }
 
 <!-- Modal Detalle de Venta (HU-11: Criterio Solo Lectura) -->
-@if (isSaleDetailModalOpen && selectedSaleDetail) {
+@if (isSaleDetailModalOpen && selectedSaleDetail && hasPermission('sale:read')) {
   <div class="modal-backdrop" role="presentation">
     <section
       class="sale-detail-modal panel"

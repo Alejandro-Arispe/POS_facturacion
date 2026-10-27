@@ -88,7 +88,7 @@ public class CajaService {
 		Usuario usuario = SecurityUtils.currentUser();
 		Sucursal sucursal = sucursalRepository.findById(idSucursal)
 				.orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
-		empresaAccess.requireEmpresa(usuario, sucursal.getEmpresa().getIdEmpresa());
+		empresaAccess.requirePermiso(usuario,sucursal.getEmpresa().getIdEmpresa(),idSucursal,"cash_register:create");
 		empresaAccess.requireCashCapacity(sucursal.getEmpresa().getIdEmpresa(), idSucursal);
 
 		try {
@@ -107,6 +107,7 @@ public class CajaService {
 	@Transactional(readOnly = true)
 	public List<CajaResponse> listar(Integer idEmpresa, Integer idSucursal) {
 		requireSucursal(idEmpresa, idSucursal);
+        empresaAccess.requirePermiso(SecurityUtils.currentUser(),idEmpresa,idSucursal,"cash_register:read");
 		Usuario usuario = SecurityUtils.currentUser();
 		return cajaRepository.findBySucursal_IdSucursal(idSucursal).stream()
 				.map(caja -> toCajaResponse(caja, usuario))
@@ -116,11 +117,13 @@ public class CajaService {
 	@Transactional(readOnly = true)
 	public CajaResponse obtener(Integer idEmpresa, Integer idSucursal, Integer idCaja) {
 		Usuario usuario = SecurityUtils.currentUser();
+        empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"cash_register:read");
 		return toCajaResponse(requireCaja(idEmpresa, idSucursal, idCaja), usuario);
 	}
 
 	@Transactional
 	public CajaResponse actualizar(Integer idEmpresa, Integer idSucursal, Integer idCaja, CajaUpdate datos) {
+        empresaAccess.requirePermiso(SecurityUtils.currentUser(),idEmpresa,idSucursal,"cash_register:update");
 		Caja caja = requireCaja(idEmpresa, idSucursal, idCaja);
 		if (!Boolean.TRUE.equals(caja.getActivo()) && Boolean.TRUE.equals(datos.activo())) {
 			empresaAccess.requireCashCapacity(idEmpresa, idSucursal);
@@ -135,9 +138,13 @@ public class CajaService {
 	@Transactional
 	public CajaSesionResponse crearSesion(Integer idCaja, CajaSesionCreate datos) {
 		Usuario usuario = SecurityUtils.currentUser();
+        usuarioRepository.lockById(usuario.getIdUsuario()).orElseThrow(() -> ApiException.notFound("Usuario no encontrado."));
+        cajaRepository.lockById(idCaja).orElseThrow(() -> ApiException.notFound("Caja no encontrada."));
 		Caja caja = cajaRepository.findWithSucursalAndEmpresa(idCaja)
 				.orElseThrow(() -> ApiException.notFound("Caja no encontrada."));
-		empresaAccess.requireEmpresa(usuario, caja.getSucursal().getEmpresa().getIdEmpresa());
+        empresaAccess.requirePermiso(usuario,caja.getSucursal().getEmpresa().getIdEmpresa(),caja.getSucursal().getIdSucursal(),"cash_register:open");
+        if (!Boolean.TRUE.equals(caja.getActivo())) throw ApiException.badRequest("La caja está inactiva.");
+        com.pos.ventas.service.SalePricing.money(datos.montoInicial(),"monto inicial");
 
 		cajaSesionRepository.findAbiertasPorUsuario(usuario.getIdUsuario(), "Abierto").stream()
 				.findFirst()
@@ -167,24 +174,14 @@ public class CajaService {
 			sesion.setNota(datos.nota());
 			sesion = cajaSesionRepository.saveAndFlush(sesion);
 
-			try {
-				TipoMovimientoCaja apertura = tipoMovimientoCajaRepository.findByNombreIgnoreCase("APERTURA")
-						.or(() -> tipoMovimientoCajaRepository.findById(1))
-						.orElse(null);
-				if (apertura != null) {
-					MovimientoCaja movimiento = new MovimientoCaja();
-					movimiento.setIdMetodoPago(efectivo.getIdMetodoPago());
-					movimiento.setTipoMovimientoCaja(apertura);
-					movimiento.setCajaSesion(sesion);
-					movimiento.setIdUsuario(usuario.getIdUsuario());
-					movimiento.setFecha(LocalDateTime.now());
-					movimiento.setMonto(datos.montoInicial());
-					movimiento.setConcepto("APERTURA " + sesion.getIdCajaSesion());
-					movimientoCajaRepository.save(movimiento);
-				}
-			} catch (Exception ignored) {
-				// La sesion se crea aunque falle el movimiento de apertura.
-			}
+            TipoMovimientoCaja apertura = tipoMovimientoCajaRepository.findByNombreIgnoreCase("APERTURA")
+                .orElseThrow(() -> ApiException.badRequest("Tipo de movimiento APERTURA no configurado."));
+            MovimientoCaja movimiento = new MovimientoCaja();
+            movimiento.setIdMetodoPago(efectivo.getIdMetodoPago()); movimiento.setTipoMovimientoCaja(apertura);
+            movimiento.setCajaSesion(sesion); movimiento.setIdUsuario(usuario.getIdUsuario());
+            movimiento.setFecha(LocalDateTime.now()); movimiento.setMonto(datos.montoInicial());
+            movimiento.setConcepto("APERTURA " + sesion.getIdCajaSesion());
+            movimientoCajaRepository.saveAndFlush(movimiento);
 
 			return toSesionResponse(sesion);
 		} catch (DataIntegrityViolationException ex) {
@@ -195,10 +192,15 @@ public class CajaService {
 	@Transactional
 	public MovimientoCajaResponse crearMovimiento(Integer idCajaSesion, MovimientoCajaCreate datos) {
 		Usuario usuario = SecurityUtils.currentUser();
-		CajaSesion sesion = requireSesionDeUsuario(usuario, idCajaSesion);
+        CajaSesion sesion = requireWritableSession(usuario,idCajaSesion,"cash_movement:create");
+        if (!"Abierto".equalsIgnoreCase(sesion.getEstado())) throw ApiException.badRequest("La sesión debe estar abierta.");
+        com.pos.ventas.service.SalePricing.money(datos.monto(),"movimiento");
+        if (datos.monto().signum()==0 || datos.idMetodoPago()==null) throw ApiException.badRequest("Indica un monto positivo y un método de pago.");
 
 		TipoMovimientoCaja tipo = tipoMovimientoCajaRepository.findById(datos.idTipoMovimientoCaja())
 				.orElseThrow(() -> ApiException.notFound("Tipo de movimiento de caja no encontrado."));
+        if (!Set.of("INGRESO","EGRESO","AJUSTE_POSITIVO","AJUSTE_NEGATIVO").contains(tipo.getNombre().toUpperCase(java.util.Locale.ROOT)))
+            throw ApiException.badRequest("Apertura y cierre se generan desde sus operaciones específicas.");
 		if (datos.idMetodoPago() != null) {
 			metodoPagoRepository.findById(datos.idMetodoPago())
 					.orElseThrow(() -> ApiException.notFound("Metodo de pago no encontrado."));
@@ -222,7 +224,7 @@ public class CajaService {
 	@Transactional(readOnly = true)
 	public List<MovimientoCajaResponse> listarMovimientos(Integer idCajaSesion) {
 		Usuario usuario = SecurityUtils.currentUser();
-		requireSesionDeUsuario(usuario, idCajaSesion);
+        sessionPermission(usuario,requireSesionDeUsuario(usuario,idCajaSesion),"cash_movement:read");
 		return movimientoCajaRepository.findBySesionFetchTipo(idCajaSesion).stream()
 				.map(this::toMovimientoResponse)
 				.toList();
@@ -231,7 +233,10 @@ public class CajaService {
 	@Transactional(readOnly = true)
 	public ResumenMovimientosCajaResponse resumenMovimientos(Integer idCajaSesion) {
 		Usuario usuario = SecurityUtils.currentUser();
-		requireSesionDeUsuario(usuario, idCajaSesion);
+        sessionPermission(usuario,requireSesionDeUsuario(usuario,idCajaSesion),"cash_movement:read");
+        return calculateSummary(idCajaSesion);
+    }
+    private ResumenMovimientosCajaResponse calculateSummary(Integer idCajaSesion) {
 
 		List<MovimientoCaja> movimientos = movimientoCajaRepository.findBySesionFetchTipo(idCajaSesion);
 		Set<Integer> idsMetodo = movimientos.stream()
@@ -287,7 +292,18 @@ public class CajaService {
 			throw ApiException.badRequest("Debe enviar al menos un cierre de caja.");
 		}
 
-		CajaSesion sesion = requireSesionDeUsuario(usuario, idCajaSesion);
+        CajaSesion sesion = requireWritableSession(usuario,idCajaSesion,"cash_register:close");
+        Map<Integer,BigDecimal> expected=new LinkedHashMap<>();
+        for(var summary:calculateSummary(idCajaSesion).resumenPorMetodoPago()) expected.put(summary.idMetodoPago(),summary.montoEsperado());
+        Set<Integer> seen=new java.util.HashSet<>();
+        for(var row:cierres) {
+            if(row==null || row.idMetodoPago()==null || !seen.add(row.idMetodoPago())) throw ApiException.badRequest("No repitas métodos de pago en el cierre.");
+            var real=com.pos.ventas.service.SalePricing.money(row.montoReal(),"monto real");
+            BigDecimal amount=expected.getOrDefault(row.idMetodoPago(),BigDecimal.ZERO);
+            if(row.montoEsperado()!=null && row.montoEsperado().compareTo(amount)!=0) throw ApiException.badRequest("El monto esperado cambió. Actualiza el resumen de caja.");
+            if(row.diferencia()!=null && row.diferencia().compareTo(real.subtract(amount))!=0) throw ApiException.badRequest("La diferencia debe coincidir con el cálculo del servidor.");
+        }
+        if(!seen.containsAll(expected.keySet())) throw ApiException.badRequest("Incluye todos los métodos de pago del resumen para cerrar.");
 		if ("Cerrado".equals(sesion.getEstado())) {
 			throw ApiException.badRequest("La sesion de caja ya esta cerrada.");
 		}
@@ -308,9 +324,9 @@ public class CajaService {
 				CajaCierreDetalle detalle = new CajaCierreDetalle();
 				detalle.setCajaSesion(sesion);
 				detalle.setIdMetodoPago(cierre.idMetodoPago());
-				detalle.setMontoEsperado(cierre.montoEsperado());
+				detalle.setMontoEsperado(expected.getOrDefault(cierre.idMetodoPago(),BigDecimal.ZERO));
 				detalle.setMontoReal(cierre.montoReal());
-				detalle.setDiferencia(cierre.diferencia());
+				detalle.setDiferencia(cierre.montoReal().subtract(detalle.getMontoEsperado()));
 				detalle.setObservacion(cierre.observacion());
 				detalle = cajaCierreDetalleRepository.saveAndFlush(detalle);
 				cierresCreados.add(detalle);
@@ -350,7 +366,7 @@ public class CajaService {
 	}
 
 	private Sucursal requireSucursal(Integer idEmpresa, Integer idSucursal) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requireSucursal(SecurityUtils.currentUser(), idEmpresa,idSucursal);
 		return sucursalRepository.findByIdSucursalAndEmpresa_IdEmpresa(idSucursal, idEmpresa)
 				.orElseThrow(() -> ApiException.notFound("Sucursal no encontrada para esta empresa."));
 	}
@@ -364,9 +380,21 @@ public class CajaService {
 	private CajaSesion requireSesionDeUsuario(Usuario usuario, Integer idCajaSesion) {
 		CajaSesion sesion = cajaSesionRepository.findWithCajaSucursalEmpresa(idCajaSesion)
 				.orElseThrow(() -> ApiException.notFound("Sesion de caja no encontrada."));
-		empresaAccess.requireEmpresa(usuario, sesion.getCaja().getSucursal().getEmpresa().getIdEmpresa());
+		empresaAccess.requireSucursal(usuario, sesion.getCaja().getSucursal().getEmpresa().getIdEmpresa(),sesion.getCaja().getSucursal().getIdSucursal());
 		return sesion;
 	}
+
+    private void sessionPermission(Usuario user,CajaSesion session,String code) {
+        var branch=session.getCaja().getSucursal();
+        empresaAccess.requirePermiso(user,branch.getEmpresa().getIdEmpresa(),branch.getIdSucursal(),code);
+    }
+    private CajaSesion requireWritableSession(Usuario user,Integer id,String code) {
+        cajaSesionRepository.lockById(id).orElseThrow(() -> ApiException.notFound("Sesión no encontrada."));
+        CajaSesion session=requireSesionDeUsuario(user,id);
+        sessionPermission(user,session,code);
+        if(!user.getIdUsuario().equals(session.getIdUsuario())) throw ApiException.forbidden("Solo el operador de la sesión puede modificarla.");
+        return session;
+    }
 
 	private void conflictSesionAbierta(Integer idCaja, Integer idCajaSesion, String mensaje) {
 		Map<String, Object> detail = new LinkedHashMap<>();

@@ -1,3 +1,6 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
+import { firstValueFrom } from 'rxjs';
+import { CompanyPermissionsService } from '../../../../../core/services/company-permissions.service';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -45,6 +48,9 @@ const AGGREGATE_LABELS: Record<QbeAggregate['funcion'], string> = {
   styleUrl: './qbe.css',
 })
 export class QbeReport implements OnInit {
+  protected readonly permissions=inject(CompanyPermissionsService);
+  private lastQuery:QbeQuery|null=null;
+  private readonly readSnapshot=watchReadPermissions(() => { this.result=null;this.source=null;this.error="Los permisos cambiaron. Vuelve a abrir la consulta para cargar sus fuentes.";this.cdr.markForCheck(); });
   private readonly route = inject(ActivatedRoute);
   private readonly qbeService = inject(QbeService);
   private readonly preferences = inject(PreferencesService);
@@ -191,6 +197,7 @@ export class QbeReport implements OnInit {
     this.error = '';
     this.qbeService.run(this.companyId, query).subscribe({
       next: (result) => {
+        this.lastQuery=structuredClone(query);
         this.result = result;
         this.loading = false;
         this.cdr.detectChanges();
@@ -217,8 +224,11 @@ export class QbeReport implements OnInit {
     return String(value);
   }
 
-  protected exportExcel(): void {
-    if (!this.result) return;
+  protected async exportExcel(): Promise<void> {
+    if(!this.lastQuery || !this.permissions.hasPermission('report:export')) return;
+    try { this.result=await firstValueFrom(this.qbeService.run(this.companyId,this.lastQuery,true)); }
+    catch(error) {this.result=null;this.fail(error,'No se pudo actualizar la consulta para exportar.');return;}
+    if(!this.permissions.hasPermission('report:export')) return;
     const escape = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const header = this.result.columnas.map((c) => `<th>${escape(c.etiqueta)}</th>`).join('');
     const rows = this.result.filas
@@ -227,7 +237,8 @@ export class QbeReport implements OnInit {
           `<tr>${row
             .map((cell, i) => {
               const col = this.result!.columnas[i];
-              const raw = col.tipo === 'NUMERO' && cell !== null ? String(cell) : this.format(cell, col.tipo, col.codigo);
+              let raw = col.tipo === 'NUMERO' && cell !== null ? String(cell) : this.format(cell, col.tipo, col.codigo);
+              if(/^[\s\x00-\x1f]*[=+\-@]/.test(raw) && col.tipo!=='NUMERO') raw="'"+raw;
               return `<td>${escape(raw)}</td>`;
             })
             .join('')}</tr>`,

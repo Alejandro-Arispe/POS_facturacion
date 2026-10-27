@@ -31,7 +31,7 @@ function normalize(value: string): string {
 
 export function productValue(product: CatalogProduct, key: ColumnKey): string | number | null {
   if (key === 'subcategoria') return product.subcategoria?.nombre ?? 'Sin subcategoría';
-  if (key === 'activo') return product.activo ? 'Activo' : 'Inactivo';
+  if (key === 'activo') return product.activo == null ? null : product.activo ? 'Activo' : 'Inactivo';
   return product[key] ?? null;
 }
 

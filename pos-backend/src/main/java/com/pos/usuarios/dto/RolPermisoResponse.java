@@ -6,13 +6,13 @@ public record RolPermisoResponse(
         Integer idRolPermiso,
         Integer idRol,
         Integer idPermiso,
-        Boolean activo) {
+        Boolean activo, Boolean puedeDelegar) {
 
     public static RolPermisoResponse from(RolPermiso rolPermiso) {
         return new RolPermisoResponse(
                 rolPermiso.getIdRolPermiso(),
                 rolPermiso.getRol() != null ? rolPermiso.getRol().getIdRol() : null,
                 rolPermiso.getPermiso() != null ? rolPermiso.getPermiso().getIdPermiso() : null,
-                rolPermiso.getActivo());
+                rolPermiso.getActivo(), rolPermiso.getPuedeDelegar());
     }
 }

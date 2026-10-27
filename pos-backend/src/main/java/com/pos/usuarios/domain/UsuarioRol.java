@@ -22,6 +22,17 @@ import lombok.Setter;
 @Entity
 @Table(name = "usuario_rol")
 public class UsuarioRol {
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="id_empresa",insertable=false,updatable=false)
+    private com.pos.empresas.domain.Empresa empresa;
+    @ManyToOne(fetch=FetchType.LAZY)
+    @JoinColumn(name="id_sucursal",insertable=false,updatable=false)
+    private com.pos.empresas.domain.Sucursal sucursal;
+
+    @Column(name="sucursal_ambito") private Integer sucursalAmbito;
+    @jakarta.persistence.PrePersist @jakarta.persistence.PreUpdate
+    public void normalizeScope() { sucursalAmbito=idSucursal==null?-1:idSucursal; }
+
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

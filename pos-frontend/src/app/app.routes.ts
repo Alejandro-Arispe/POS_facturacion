@@ -36,7 +36,6 @@ import { Register } from './features/auth/register/register';
 import { HomePage } from './features/landing/home_page/home_page';
 import { Plans } from './features/landing/plans/plans';
 import { authGuard } from './core/guards/auth.guard';
-import { permissionGuard } from './core/guards/permission.guard';
 import { superAdminGuard } from './core/guards/superadmin.guard';
 import { SuperAdminPanel } from './features/superadmin/superadmin-panel';
 import { AuditLog } from './features/companies/sections/audit/audit-log';
@@ -110,58 +109,67 @@ export const routes: Routes = [
     path: 'company/:id/branch/:branchId/view-branch',
     component: ViewBranch,
     canActivate: [authGuard],
+    data: { permission: 'branch:read' },
   },
   {
     path: 'company/:id/branch/:branchId/edit-branch',
     component: EditBranch,
     canActivate: [authGuard],
+    data: { permission: 'branch:update' },
   },
   {
     path: 'company/:id/users/staff',
     component: Staff,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'USUARIO_VER' },
+    canActivate: [authGuard],
+    data: { permission: 'user:read' },
   },
   {
     path: 'company/:id/users/rols',
     component: Rols,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'ROL_VER' },
+    canActivate: [authGuard],
+    data: { permission: 'role:read' },
   },
   {
     path: 'company/:id/branch/:branchId/cash-register',
     component: CashRegister,
     canActivate: [authGuard],
+    data: { permission: 'cash_register:read' },
   },
   {
     path: 'company/:id/branch/:branchId/cash-register/:cashRegisterId/open-cash-register',
     component: OpenCashRegister,
     canActivate: [authGuard],
+    data: { permission: 'cash_register:open' },
   },
   {
     path: 'company/:id/branch/:branchId/cash-register/:cashRegisterId/close-cash-register',
     component: CloseCashRegister,
     canActivate: [authGuard],
+    data: { permission: 'cash_register:close' },
   },
   {
     path: 'company/:id/branch/:branchId/cash-register/:cashRegisterId/sales',
     component: Sales,
     canActivate: [authGuard],
+    data: { permission: ['sale:create', 'sale:read', 'cash_movement:read', 'cash_movement:create'] },
   },
   {
     path: 'company/:id/branch/:branchId/cash-register/:cashRegisterId/credit-collections',
     component: CreditCollections,
     canActivate: [authGuard],
+    data: { permission: 'sale:collect' },
   },
   {
     path: 'company/:id/branch/:branchId/inventario',
     component: Inventario,
     canActivate: [authGuard],
+    data: { permission: ['inventory:read', 'inventory_movement:read', 'inventory_movement:create'] },
   },
   {
     path: 'company/:id/branch/:branchId/orders',
     component: OrdersInbox,
     canActivate: [authGuard],
+    data: { permission: 'order:read' },
   },
   {
     path: 'superadmin',
@@ -171,50 +179,50 @@ export const routes: Routes = [
   {
     path: 'company/:id/audit-log',
     component: AuditLog,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'BITACORA_VER' },
+    canActivate: [authGuard],
+    data: { permission: 'audit:read' },
   },
   {
     path: 'company/:id/dashboard',
     component: Dashboard,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'DASHBOARD_VER' },
+    canActivate: [authGuard],
+    data: { permission: 'dashboard:read' },
   },
   {
     path: 'company/:id/reports/static',
     component: StaticReports,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'REPORTE_GENERAR' },
+    canActivate: [authGuard],
+    data: { permission: 'report:generate' },
   },
   {
     path: 'company/:id/reports/parameterized',
     component: ParameterizedReports,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'REPORTE_GENERAR' },
+    canActivate: [authGuard],
+    data: { permission: 'report:generate' },
   },
   {
     path: 'company/:id/reports/analytics',
     component: AnalyticsDashboard,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'DASHBOARD_VER' },
+    canActivate: [authGuard],
+    data: { permission: 'dashboard:read' },
   },
   {
     path: 'company/:id/reports/qbe',
     component: QbeReport,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'REPORTE_GENERAR' },
+    canActivate: [authGuard],
+    data: { permission: 'report:generate' },
   },
   {
     path: 'company/:id/reports/dynamic',
     component: DynamicReports,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'REPORTE_GENERAR' },
+    canActivate: [authGuard],
+    data: { permission: 'report:generate' },
   },
   {
     path: 'company/:id/reports/prediction',
     component: SalesPrediction,
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'REPORTE_GENERAR' },
+    canActivate: [authGuard],
+    data: { permission: 'report:generate' },
   },
   {
     path: 'company/:id/reports/invoices',
@@ -222,8 +230,8 @@ export const routes: Routes = [
       import('./features/companies/sections/reports/invoices/invoices').then(
         (component) => component.InvoicesReport,
       ),
-    canActivate: [authGuard, permissionGuard],
-    data: { permission: 'REPORTE_GENERAR' },
+    canActivate: [authGuard],
+    data: { permission: 'report:generate' },
   },
   {
     path: 'company/:id/products/categories',

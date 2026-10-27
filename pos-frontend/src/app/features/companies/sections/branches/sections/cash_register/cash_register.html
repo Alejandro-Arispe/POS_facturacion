@@ -24,7 +24,7 @@
           >
             Cajas Registradoras
           </button>
-          @if (hasPermission('CAJA_CREAR')) {
+          @if (hasPermission('cash_register:create')) {
             <button
               class="tab-button"
               [class.active]="activeTab === 'register'"
@@ -38,7 +38,7 @@
           }
 
 
-          @if (editingCashRegisterId !== null && hasPermission('CAJA_EDITAR')) {
+          @if (editingCashRegisterId !== null && hasPermission('cash_register:update')) {
             <button
               class="tab-button"
               [class.active]="activeTab === 'edit'"
@@ -107,7 +107,7 @@
                           </td>
                           <td class="cash-register-actions-cell">
                             <div class="cash-register-actions">
-                              @if (hasPermission('CAJA_ABRIR') && cashRegister.estadoOperativo === 'disponible') {
+                              @if (hasPermission('cash_register:open') && cashRegister.estadoOperativo === 'disponible') {
                                 <button
                                   class="btn btn-primary btn-sm"
                                   type="button"
@@ -117,7 +117,7 @@
                                 </button>
                               }
 
-                              @if (hasPermission('CAJA_ABRIR') && cashRegister.estadoOperativo === 'abierta_por_mi') {
+                              @if (hasPermission('cash_register:open') && cashRegister.estadoOperativo === 'abierta_por_mi') {
                                 <a
                                   class="btn btn-primary btn-sm"
                                   [routerLink]="[
@@ -141,7 +141,7 @@
                                 </button>
                               }
 
-                              @if (cashRegister.estadoOperativo === 'abierta_por_mi' && hasPermission('CAJA_CERRAR')) {
+                              @if (cashRegister.estadoOperativo === 'abierta_por_mi' && hasPermission('cash_register:close')) {
                                 <a
                                   class="btn btn-sm btn-secondary"
                                   [routerLink]="[
@@ -159,7 +159,7 @@
                                 </a>
                               }
 
-                              @if (hasPermission('CAJA_EDITAR')) {
+                              @if (hasPermission('cash_register:update')) {
                                 <button class="btn btn-secondary btn-sm" type="button" (click)="abrirEdicion(cashRegister)">
                                   Editar
                                 </button>

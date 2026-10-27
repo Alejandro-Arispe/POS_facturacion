@@ -60,11 +60,11 @@ export class Staff implements OnInit {
   }
 
   protected setActiveTab(tab: StaffTab): void {
-    if (tab === 'invite' && !this.hasPermission('USUARIO_CREAR')) {
+    if (tab === 'invite' && !this.hasPermission('user:create')) {
       return;
     }
 
-    if (tab === 'edit' && (this.editingStaffId === null || !this.hasPermission('USUARIO_EDITAR'))) {
+    if (tab === 'edit' && (this.editingStaffId === null || !this.hasPermission('user:update'))) {
       return;
     }
 
@@ -80,7 +80,7 @@ export class Staff implements OnInit {
     this.errorInvitacion = '';
     this.mensajeInvitacion = '';
 
-    if (!this.hasPermission('USUARIO_CREAR')) {
+    if (!this.hasPermission('user:create')) {
       this.errorInvitacion = 'No tienes permiso para invitar personal.';
       return;
     }
@@ -153,7 +153,7 @@ export class Staff implements OnInit {
   }
 
   protected editarPersonal(member: CompanyStaffMember): void {
-    if (!this.hasPermission('USUARIO_EDITAR')) {
+    if (!this.hasPermission('user:update')) {
       return;
     }
 
@@ -188,7 +188,7 @@ export class Staff implements OnInit {
     this.errorEdicion = '';
     this.mensajeEdicion = '';
 
-    if (!this.hasPermission('USUARIO_EDITAR')) {
+    if (!this.hasPermission('user:update')) {
       this.errorEdicion = 'No tienes permiso para editar personal.';
       return;
     }
@@ -290,8 +290,10 @@ export class Staff implements OnInit {
     return member.usuario.activo && member.relaciones.some((relation) => relation.activo);
   }
 
-  protected hasPermission(permission: CompanyPermissionCode): boolean {
-    return this.companyPermissionsService.permissions()[permission] === true;
+  protected hasPermission(permission: string): boolean {
+    if (['user:create','user:update'].includes(permission) && !this.companyPermissionsService.hasPermission('role:assign')) return false;
+    if (permission==='user:create' && !this.companyPermissionsService.hasPermission('user:update')) return false;
+    return this.companyPermissionsService.hasPermission(permission);
   }
 
   private cargarSucursales(): void {
@@ -325,6 +327,7 @@ export class Staff implements OnInit {
 
   private cargarRoles(): void {
     this.errorRoles = '';
+    if (!this.companyPermissionsService.hasPermission('role:assign')) {this.roles=[];return;}
 
     if (!this.companyId) {
       this.roles = [];
@@ -332,7 +335,7 @@ export class Staff implements OnInit {
       return;
     }
 
-    this.companyService.getRoles(this.companyId).subscribe({
+    this.companyService.getRolesAsignables(this.companyId).subscribe({
       next: (roles) => {
         this.roles = roles
           .filter((role) => this.shouldShowRole(role))

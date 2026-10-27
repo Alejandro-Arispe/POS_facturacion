@@ -320,7 +320,7 @@ public class PagoService {
     }
 
     private void requireAdministrator(Usuario usuario, Integer companyId) {
-        Long count = entityManager.createQuery("select count(ur) from UsuarioRol ur where ur.usuario.idUsuario = :user and ur.idEmpresa = :company and ur.activo = true and ur.rol.nombre = 'ADMINISTRADOR'", Long.class)
+        Long count = entityManager.createQuery("select count(ur) from UsuarioRol ur where ur.usuario.idUsuario = :user and ur.usuario.activo=true and ur.idEmpresa = :company and ur.activo = true and ur.rol.activo=true and ur.rol.idEmpresa is null and ur.rol.tipo='SISTEMA' and ur.rol.protegido=true and ur.rol.nombre = 'ADMINISTRADOR'", Long.class)
                 .setParameter("user", usuario.getIdUsuario()).setParameter("company", companyId).getSingleResult();
         if (count == 0) throw ApiException.forbidden("Solo el administrador puede cambiar el plan de la empresa.");
     }

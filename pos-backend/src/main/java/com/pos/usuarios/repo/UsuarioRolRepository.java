@@ -11,6 +11,15 @@ import org.springframework.data.repository.query.Param;
 import com.pos.usuarios.domain.UsuarioRol;
 
 public interface UsuarioRolRepository extends JpaRepository<UsuarioRol, Integer> {
+    @Query("""
+        select ur from UsuarioRol ur join fetch ur.rol r join fetch ur.usuario u
+        where u.idUsuario = :userId and ur.idEmpresa = :companyId and ur.activo = true
+        and u.activo = true and r.activo = true
+        and (r.idEmpresa = :companyId or (r.idEmpresa is null and r.tipo = 'SISTEMA'))
+        and (ur.idSucursal is null or exists (select s.idSucursal from Sucursal s where s.idSucursal=ur.idSucursal and s.empresa.idEmpresa=:companyId))
+        order by ur.idUsuarioRol
+        """)
+    List<UsuarioRol> findAutorizaciones(@Param("userId") Integer userId, @Param("companyId") Integer companyId);
 
 	List<UsuarioRol> findByUsuario_IdUsuarioAndActivoTrue(Integer idUsuario);
 
@@ -32,6 +41,9 @@ public interface UsuarioRolRepository extends JpaRepository<UsuarioRol, Integer>
 
 	Optional<UsuarioRol> findFirstByUsuario_IdUsuarioAndIdEmpresaAndIdSucursalAndRol_IdRolAndActivoTrue(
 			Integer idUsuario, Integer idEmpresa, Integer idSucursal, Integer idRol);
+
+    Optional<UsuarioRol> findFirstByUsuario_IdUsuarioAndIdEmpresaAndIdSucursalAndRol_IdRol(
+            Integer idUsuario, Integer idEmpresa, Integer idSucursal, Integer idRol);
 
 	@Query("""
 			select ur from UsuarioRol ur

@@ -16,6 +16,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidJson(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return body(HttpStatus.BAD_REQUEST, "JSON invalido: revisa los atributos y sus valores.");
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> handleApi(ApiException ex) {
         return body(ex.getStatus(), ex.getDetail());
@@ -44,9 +49,19 @@ public class ApiExceptionHandler {
         return body(HttpStatus.BAD_REQUEST, detail.isBlank() ? "Datos invalidos" : detail);
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Map<String,Object>> handleMissingResource(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        return body(HttpStatus.NOT_FOUND,"Recurso no encontrado.");
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String,Object>> handleIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
+        return body(HttpStatus.CONFLICT,"La operación entra en conflicto con datos existentes.");
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
-        return body(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage() == null ? "Error interno" : ex.getMessage());
+        return body(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo completar la operación.");
     }
 
     private ResponseEntity<Map<String, Object>> body(HttpStatus status, Object detail) {

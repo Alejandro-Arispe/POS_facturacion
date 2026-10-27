@@ -6,5 +6,5 @@ public record PermisoConRolResponse(
 		String nombre,
 		Integer idModulo,
 		ModuloResponse modulo,
-		Boolean activoRolPermiso) {
+		Boolean activoRolPermiso, String codigoCanonico, String recurso, String accion, String atributo, Boolean puedeDelegar) {
 }

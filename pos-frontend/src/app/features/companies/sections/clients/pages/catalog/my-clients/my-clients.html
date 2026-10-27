@@ -15,7 +15,7 @@
 
       <section class="tabs-panel panel">
         <div class="tabs" role="tablist" aria-label="Secciones de clientes">
-          @if (hasPermission('CLIENTE_CREAR')) {
+          @if (hasPermission('client:create')) {
             <button
               class="tab-button"
               [class.active]="activeTab === 'invite'"
@@ -105,7 +105,7 @@
                           <td>{{ client.nombre }}</td>
                           <td>{{ client.correo }}</td>
                           <td class="actions-cell">
-                            @if (hasPermission('CLIENTE_EDITAR')) {
+                            @if (hasPermission('client:update')) {
                               <a
                                 class="btn btn-primary btn-sm"
                                 [routerLink]="['/company', companyId, 'clients', client.idCliente, 'edit-client']"

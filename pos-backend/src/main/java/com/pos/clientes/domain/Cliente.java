@@ -20,6 +20,7 @@ import lombok.Setter;
 @Entity
 @Table(
         name = "cliente",
+        indexes = @jakarta.persistence.Index(name="ix_cliente_empresa_usuario",columnList="id_empresa,id_usuario"),
         uniqueConstraints = @UniqueConstraint(
                 name = "uq_cliente_usuario_codigo",
                 columnNames = {"id_usuario", "codigo_cliente"}
@@ -37,6 +38,21 @@ public class Cliente {
 
     @Column(name = "id_usuario", nullable = false)
     private Integer idUsuario;
+
+    @Column(name = "id_empresa")
+    private Integer idEmpresa;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name="id_empresa",insertable=false,updatable=false,foreignKey=@jakarta.persistence.ForeignKey(name="fk_cliente_empresa"))
+    private com.pos.empresas.domain.Empresa empresa;
+
+    @jakarta.persistence.PrePersist
+    @jakarta.persistence.PreUpdate
+    private void inferCompany() {
+        if(idEmpresa==null && categoriaCliente!=null) idEmpresa=categoriaCliente.getIdEmpresa();
+        if(categoriaCliente!=null && !java.util.Objects.equals(idEmpresa,categoriaCliente.getIdEmpresa()))
+            throw new IllegalArgumentException("La categoría y el cliente deben pertenecer a la misma empresa.");
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_categoria_cliente")

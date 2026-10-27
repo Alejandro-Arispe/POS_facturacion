@@ -35,7 +35,7 @@ public class ConfiguracionSistemaService {
 
 	@Transactional
 	public ConfiguracionSistemaResponse actualizar(Integer idEmpresa, ConfiguracionSistemaUpdate datos) {
-		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "EMPRESA_EDITAR");
+		empresaAccess.requireCompanyPermission(SecurityUtils.currentUser(), idEmpresa, "company:update");
 		Empresa empresa = empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
 		ConfiguracionSistema config = configuracionSistemaRepository.findByEmpresa_IdEmpresa(idEmpresa)
 				.orElseGet(() -> crearValoresDefecto(empresa));

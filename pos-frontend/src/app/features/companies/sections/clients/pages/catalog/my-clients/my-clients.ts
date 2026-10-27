@@ -53,7 +53,7 @@ export class ClientesCatalogo implements OnInit {
 
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
   protected companyName = 'Empresa';
-  protected activeTab: ClientCatalogTab = this.hasPermission('CLIENTE_CREAR') ? 'invite' : 'list';
+  protected activeTab: ClientCatalogTab = this.hasPermission('client:create') ? 'invite' : 'list';
   protected cargandoClientes = false;
   protected cargandoInvitacion = false;
   protected errorClientes = '';
@@ -81,7 +81,7 @@ export class ClientesCatalogo implements OnInit {
   }
 
   protected setActiveTab(tab: ClientCatalogTab): void {
-    if (tab === 'invite' && !this.hasPermission('CLIENTE_CREAR')) {
+    if (tab === 'invite' && !this.hasPermission('client:create')) {
       return;
     }
 
@@ -100,7 +100,7 @@ export class ClientesCatalogo implements OnInit {
     this.errorInvitacion = '';
     this.mensajeInvitacion = '';
 
-    if (!this.hasPermission('CLIENTE_CREAR')) {
+    if (!this.hasPermission('client:create')) {
       this.errorInvitacion = 'No tienes permiso para invitar clientes.';
       return;
     }

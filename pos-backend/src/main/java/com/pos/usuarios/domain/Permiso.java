@@ -20,6 +20,14 @@ import lombok.Setter;
 @Entity
 @Table(name = "permiso")
 public class Permiso {
+    @Column(name = "codigo_canonico", unique = true, length = 150)
+    private String codigoCanonico;
+    @Column(length = 60) private String recurso;
+    @Column(length = 50) private String accion;
+    @Column(length = 60) private String atributo;
+    @Column(length = 255) private String descripcion;
+    @org.hibernate.annotations.ColumnDefault("true")
+    @Column(nullable = false) private Boolean activo = true;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

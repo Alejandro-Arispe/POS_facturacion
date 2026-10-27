@@ -19,7 +19,7 @@
 
       <section class="tabs-panel panel">
         <div class="tabs" role="tablist" aria-label="Secciones de personal">
-          @if (hasPermission('USUARIO_CREAR')) {
+          @if (hasPermission('user:create')) {
             <button
               class="tab-button"
               [class.active]="activeTab === 'invite'"
@@ -41,7 +41,7 @@
           >
             Lista de personal
           </button>
-          @if (editingStaffId !== null && hasPermission('USUARIO_EDITAR')) {
+          @if (editingStaffId !== null && hasPermission('user:update')) {
             <button
               class="tab-button"
               [class.active]="activeTab === 'edit'"
@@ -175,7 +175,7 @@
                       } @else {
                         <span class="badge badge-danger">Inactivo</span>
                       }
-                      @if (hasPermission('USUARIO_EDITAR')) {
+                      @if (hasPermission('user:update')) {
                         <button class="btn btn-secondary" type="button" (click)="editarPersonal(member)">
                           Editar
                         </button>

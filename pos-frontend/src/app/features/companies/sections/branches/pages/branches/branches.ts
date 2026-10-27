@@ -46,7 +46,7 @@ export class Branches implements OnInit {
   }
 
   protected setActiveTab(tab: 'register' | 'list'): void {
-    if (tab === 'register' && !this.hasPermission('SUCURSAL_CREAR')) {
+    if (tab === 'register' && !this.hasPermission('branch:create')) {
       return;
     }
 
@@ -70,7 +70,7 @@ export class Branches implements OnInit {
     this.errorRegistro = '';
     this.mensajeRegistro = '';
 
-    if (!this.hasPermission('SUCURSAL_CREAR')) {
+    if (!this.hasPermission('branch:create')) {
       this.errorRegistro = 'No tienes permiso para registrar sucursales.';
       return;
     }

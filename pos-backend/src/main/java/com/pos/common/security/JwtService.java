@@ -50,10 +50,22 @@ public class JwtService {
         return builder.signWith(key, Jwts.SIG.HS256).compact();
     }
 
-    public String createInvitationToken(Integer idEmpresa, Integer idUsuario, Integer idRol, List<Integer> idSucursales, long hours) {
+    public String createClientInvitationToken(Integer company,Integer user,Integer role,long hours,Integer issuer,String id) {
+        Instant now=Instant.now();
+        return Jwts.builder().id(id).claim("tipo","invitacion_cliente")
+            .claim("id_empresa",company).claim("id_usuario",user).claim("id_rol",role).claim("issuer_user",issuer)
+            .issuedAt(Date.from(now)).expiration(Date.from(now.plus(hours,ChronoUnit.HOURS))).signWith(key).compact();
+    }
+
+    public String createInvitationToken(Integer idEmpresa, Integer idUsuario, Integer idRol, List<Integer> idSucursales, long hours, Integer issuer) {
+        return createInvitationToken(idEmpresa,idUsuario,idRol,idSucursales,hours,issuer,null);
+    }
+
+    public String createInvitationToken(Integer idEmpresa,Integer idUsuario,Integer idRol,List<Integer> idSucursales,long hours,Integer issuer,String invitationId) {
         Instant now = Instant.now();
-        return Jwts.builder()
+        return Jwts.builder().id(invitationId)
                 .claim("tipo", "invitacion_empleado")
+                .claim("issuer_user", issuer)
                 .claim("id_empresa", idEmpresa)
                 .claim("id_usuario", idUsuario)
                 .claim("id_rol", idRol)

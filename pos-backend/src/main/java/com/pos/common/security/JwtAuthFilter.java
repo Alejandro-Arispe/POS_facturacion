@@ -37,12 +37,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(7);
             try {
                 Claims claims = jwtService.parse(token);
+                if (claims.get("tipo") != null) throw new IllegalArgumentException("Un token de invitación no es una sesión.");
                 Integer userId = Integer.valueOf(claims.getSubject());
                 Usuario usuario = usuarioRepository.findById(userId).orElse(null);
                 if (usuario != null && Boolean.TRUE.equals(usuario.getActivo())) {
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(usuario, token, Collections.emptyList());
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                } else {
+                    SecurityContextHolder.clearContext();
                 }
             } catch (Exception ignored) {
                 SecurityContextHolder.clearContext();

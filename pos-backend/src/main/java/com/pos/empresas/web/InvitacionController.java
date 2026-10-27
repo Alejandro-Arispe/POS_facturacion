@@ -34,12 +34,11 @@ public class InvitacionController {
 		}
 	}
 
-	@GetMapping(value = "/cliente/aceptar/{idEmpresa}/{idUsuario}", produces = MediaType.TEXT_HTML_VALUE)
+	@GetMapping(value = "/cliente/aceptar/{token}", produces = MediaType.TEXT_HTML_VALUE)
 	public ResponseEntity<String> aceptarCliente(
-			@PathVariable Integer idEmpresa,
-			@PathVariable Integer idUsuario) {
+            @PathVariable String token) {
 		try {
-			InvitacionAceptadaResult resultado = sucursalService.aceptarInvitacionCliente(idEmpresa, idUsuario);
+			InvitacionAceptadaResult resultado = sucursalService.aceptarInvitacionCliente(token);
 			return html(HttpStatus.OK, renderCliente(resultado.mensaje(), resultado.empresaNombre(), false));
 		} catch (ApiException ex) {
 			return html(ex.getStatus(), renderCliente(ex.getMessage(), "", true));
@@ -86,7 +85,7 @@ public class InvitacionController {
 		String empresaBloque = empresaNombre == null || empresaNombre.isBlank()
 				? ""
 				: "<p style=\"color: #666; font-size: 14px; line-height: 1.7; margin: 0 0 24px 0;\">Empresa: <strong>"
-						+ empresaNombre + "</strong></p>";
+						+ escape(empresaNombre) + "</strong></p>";
 		return """
 				<html>
 				    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; margin: 0;">
@@ -103,7 +102,7 @@ public class InvitacionController {
 				        </div>
 				    </body>
 				</html>
-				""".formatted(color, badge, titulo, mensaje, empresaBloque);
+				""".formatted(color, badge, titulo, escape(mensaje), empresaBloque);
 	}
 
 	private String escape(String value) {

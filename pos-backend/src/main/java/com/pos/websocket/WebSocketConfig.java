@@ -9,6 +9,8 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
 
+    @org.springframework.beans.factory.annotation.Value("${app.cors.origins}")
+    private String origins;
     private final AdministradorWebSocketHandler administradorWebSocketHandler;
     private final ClienteWebSocketHandler clienteWebSocketHandler;
 
@@ -22,8 +24,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(administradorWebSocketHandler, "/ws/administrador/{idEmpresa}")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOrigins(java.util.Arrays.stream(origins.split(",")).map(String::trim).toArray(String[]::new));
         registry.addHandler(clienteWebSocketHandler, "/ws/clientes/{idUsuario}")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOrigins(java.util.Arrays.stream(origins.split(",")).map(String::trim).toArray(String[]::new));
     }
 }

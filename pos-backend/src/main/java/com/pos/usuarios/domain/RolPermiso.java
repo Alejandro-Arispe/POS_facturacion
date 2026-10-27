@@ -20,6 +20,9 @@ import lombok.Setter;
 @Entity
 @Table(name = "rol_permiso")
 public class RolPermiso {
+    @org.hibernate.annotations.ColumnDefault("false")
+    @Column(name = "puede_delegar", nullable = false)
+    private Boolean puedeDelegar = false;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

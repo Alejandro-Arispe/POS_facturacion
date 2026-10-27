@@ -43,11 +43,9 @@ export class DynamicReportService {
     private readonly apiService: ApiService,
   ) {}
 
-  run(companyId: string, prompt: string) {
+  run(companyId: string, prompt: string, exporting=false) {
     const endpoint = `/api/reportes/${companyId}/run`;
 
-    return this.apiService.post<DynamicReportResponse, { prompt: string }>(endpoint, {
-      prompt,
-    });
+    return exporting ? this.apiService.postExport<DynamicReportResponse,{prompt:string}>(endpoint,{prompt}) : this.apiService.post<DynamicReportResponse,{prompt:string}>(endpoint,{prompt});
   }
 }

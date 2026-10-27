@@ -46,4 +46,13 @@ public class ProductImageStorage {
             throw ApiException.badRequest("No se pudo guardar la imagen.");
         }
     }
+    /** Removes only files created under this storage, for transaction rollback. */
+    public void remove(String storedPath) {
+        if (storedPath==null || !storedPath.startsWith("/media/products/")) return;
+        Path root=mediaDir.resolve("products").normalize();
+        Path file=root.resolve(storedPath.substring("/media/products/".length())).normalize();
+        if (!file.startsWith(root)) return;
+        try { Files.deleteIfExists(file); } catch (IOException ex) { /* Cleanup can be retried without affecting the DB rollback. */ }
+    }
+
 }

@@ -1,253 +1,114 @@
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { CompanyPermissionsService } from '../../../../../../../core/services/company-permissions.service';
 import {
-  CampoProducto,
-  CamposProducto,
-  CompanyPermissionsService,
-  EstadoCampoProducto,
-  camposProductoPorDefecto,
-} from '../../../../../../../core/services/company-permissions.service';
-import {
-  ActualizarProductoRequest,
   ProductService,
-  Producto,
   SubcategoriaProducto,
 } from '../../../../../../../core/services/product.service';
+import {
+  ProductField,
+  ProductValues,
+  productPayload,
+} from '../../../../../../../core/services/product-fields';
+import { ProductFieldEditor } from '../../../../../../../shared/components/product-field-editor/product-field-editor';
 import { Navbar } from '../../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../../shared/components/sidebar/sidebar';
 
 @Component({
   selector: 'app-edit-product',
   standalone: true,
-  imports: [FormsModule, Navbar, Sidebar, RouterLink],
+  imports: [Navbar, Sidebar, RouterLink, ProductFieldEditor],
   templateUrl: './edit-product.html',
   styleUrl: './edit-product.css',
 })
 export class EditProduct implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly productService = inject(ProductService);
-  private readonly companyPermissionsService = inject(CompanyPermissionsService);
+  private readonly api = inject(ProductService);
+  protected readonly permissions = inject(CompanyPermissionsService);
   private readonly cdr = inject(ChangeDetectorRef);
-
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
-  protected readonly productId = Number(this.route.snapshot.paramMap.get('productId') ?? 0);
-  protected cargandoProducto = false;
-  protected guardandoProducto = false;
-  protected guardandoImagen = false;
-  protected errorEdicion = '';
-  protected mensajeEdicion = '';
-  protected imagenActual: string | null = null;
-  protected imagenSeleccionada: File | null = null;
-  protected subcategorias: SubcategoriaProducto[] = [];
-  protected camposProducto: CamposProducto = camposProductoPorDefecto();
-  protected camposCargados = false;
-
-  protected readonly form: ActualizarProductoRequest & { costo: number | null } = {
-    id_subcategoria: 0,
-    codigo_barra: '',
-    nombre: '',
-    descripcion: '',
-    unidad_medida: '',
-    precio: 0,
-    costo: null,
-    activo: true,
-  };
-
-  ngOnInit(): void {
-    this.cargarCamposProducto();
-    this.cargarSubcategorias();
-    this.cargarProducto();
+  protected readonly productId = Number(this.route.snapshot.paramMap.get('productId'));
+  protected values: ProductValues = {};
+  protected categories: SubcategoriaProducto[] = [];
+  protected readonly touched = new Set<ProductField>();
+  protected image: File | null = null;
+  protected loading = true;
+  protected saving = false;
+  protected error = '';
+  protected success = '';
+  protected get blocked() {
+    return !this.permissions.hasPermission('product:update') || this.permissions.contextError();
   }
-
-  protected estadoCampo(campo: CampoProducto): EstadoCampoProducto {
-    return this.camposProducto[campo];
+  ngOnInit() {
+    if (!this.permissions.hasPermission('product:read')) this.loading = false;
+    else
+      this.api.obtenerProducto(this.productId).subscribe({
+        next: (p) => {
+          this.values = { ...p };
+          this.loading = false;
+          this.cdr.detectChanges();
+        },
+        error: (e) => {
+          this.error = e?.error?.detail ?? 'No se pudo cargar el producto.';
+          this.loading = false;
+          this.cdr.detectChanges();
+        },
+      });
+    this.api.getSubcategorias(this.companyId).subscribe({
+      next: (c) => {
+        this.categories = c;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.categories = [];
+      },
+    });
   }
-
-  protected mostrarCampo(campo: CampoProducto): boolean {
-    return this.camposCargados && this.estadoCampo(campo) !== 'OCULTO';
+  protected change(event: { field: ProductField; value: string | number | boolean | null }) {
+    this.values[event.field] = event.value;
+    this.touched.add(event.field);
+    this.success = '';
   }
-
-  protected soloLectura(campo: CampoProducto): boolean {
-    return this.estadoCampo(campo) === 'SOLO_LECTURA';
-  }
-
-  protected get edicionBloqueada(): boolean {
-    return this.camposCargados && this.estadoCampo('editar') !== 'EDITABLE';
-  }
-
-  protected guardarProducto(event: SubmitEvent): void {
+  protected save(event: Event) {
     event.preventDefault();
-    this.errorEdicion = '';
-    this.mensajeEdicion = '';
-
-    if (!this.productId) {
-      this.errorEdicion = 'No se encontro el producto a editar.';
+    if (this.blocked || this.loading || this.saving || this.error) return;
+    const payload = productPayload(this.values, this.touched, 'update', (a, f) =>
+      this.permissions.hasField('product', a, f),
+    );
+    if (
+      this.touched.has('imagen') &&
+      this.permissions.hasField('product', 'update', 'imagen') &&
+      this.values.imagen === null
+    )
+      payload.imagen = null;
+    if (!Object.keys(payload).length && !this.image) {
+      this.success = 'No hay cambios para guardar.';
       return;
     }
-
-    if (this.edicionBloqueada) {
-      this.errorEdicion = 'No tienes permiso para editar este producto.';
+    if (this.image && !this.permissions.hasField('product', 'update', 'imagen')) {
+      this.error = 'Tu permiso para modificar imágenes cambió.';
       return;
     }
-
-    const payload: ActualizarProductoRequest & { costo?: number | null } = {
-      id_subcategoria: Number(this.form.id_subcategoria),
-      codigo_barra: this.form.codigo_barra?.trim(),
-      nombre: this.form.nombre?.trim(),
-      descripcion: this.form.descripcion?.trim(),
-      unidad_medida: this.form.unidad_medida?.trim(),
-      activo: this.form.activo,
-    };
-
-    if (this.estadoCampo('precio') === 'EDITABLE') {
-      payload.precio = this.form.precio;
-    }
-
-    if (this.estadoCampo('costo') === 'EDITABLE') {
-      payload.costo = this.normalizarCosto(this.form.costo);
-    }
-
-    if (!payload.id_subcategoria || !payload.nombre || !payload.unidad_medida) {
-      this.errorEdicion = 'Completa subcategoria, nombre y unidad de medida del producto.';
-      return;
-    }
-
-    this.guardandoProducto = true;
-
-    this.productService.actualizarProducto(this.productId, payload).subscribe({
-      next: () => {
-        if (this.imagenSeleccionada) {
-          this.actualizarImagenDespuesDeGuardar();
-          return;
-        }
-
-        this.guardandoProducto = false;
-        this.mensajeEdicion = 'Producto actualizado correctamente.';
+    this.saving = true;
+    this.success = '';
+    const request = this.image
+      ? this.api.actualizarProductoConImagen(this.productId, payload, this.image)
+      : this.api.actualizarProducto(this.productId, payload);
+    request.subscribe({
+      next: (p) => {
+        this.values = { ...p };
+        this.image = null;
+        this.touched.clear();
+        this.saving = false;
+        this.success = 'Producto actualizado.';
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.guardandoProducto = false;
-        this.errorEdicion = 'No se pudo actualizar el producto.';
+      error: (e) => {
+        this.saving = false;
+        this.error = e?.error?.detail ?? 'No se pudo actualizar el producto.';
         this.cdr.detectChanges();
       },
     });
   }
-
-  protected onImagenSeleccionada(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    this.imagenSeleccionada = input.files?.[0] ?? null;
-  }
-
-  protected volverListado(): void {
-    void this.router.navigate(['/company', this.companyId, 'products']);
-  }
-
-  private cargarProducto(): void {
-    this.errorEdicion = '';
-
-    if (!this.productId) {
-      this.errorEdicion = 'No se encontro el producto a editar.';
-      return;
-    }
-
-    this.cargandoProducto = true;
-
-    this.productService.obtenerProducto(this.productId).subscribe({
-      next: (producto: Producto) => {
-        const detalle = producto as Producto & { costo?: number | null };
-        this.cargandoProducto = false;
-        this.imagenActual = detalle.imagen ?? null;
-        this.form.codigo_barra = detalle.codigo_barra ?? '';
-        this.form.nombre = detalle.nombre;
-        this.form.descripcion = detalle.descripcion ?? '';
-        this.form.id_subcategoria = detalle.id_subcategoria ?? 0;
-        this.form.unidad_medida = detalle.unidad_medida;
-        this.form.precio = detalle.precio ?? 0;
-        this.form.costo = detalle.costo ?? null;
-        this.form.activo = detalle.activo;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.cargandoProducto = false;
-        this.errorEdicion = 'No se pudieron cargar los datos del producto.';
-        this.cdr.detectChanges();
-      },
-    });
-  }
-
-  private actualizarImagenDespuesDeGuardar(): void {
-    if (!this.imagenSeleccionada) {
-      this.guardandoProducto = false;
-      this.cdr.detectChanges();
-      return;
-    }
-
-    this.guardandoImagen = true;
-    this.productService.actualizarImagenProducto(this.productId, this.imagenSeleccionada).subscribe({
-      next: (productoActualizado) => {
-        this.guardandoImagen = false;
-        this.guardandoProducto = false;
-        this.imagenSeleccionada = null;
-        this.imagenActual = productoActualizado.imagen ?? null;
-        this.mensajeEdicion = 'Producto e imagen actualizados correctamente.';
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.guardandoImagen = false;
-        this.guardandoProducto = false;
-        this.errorEdicion = 'Se actualizo el producto, pero no se pudo actualizar la imagen.';
-        this.cdr.detectChanges();
-      },
-    });
-  }
-
-  private cargarCamposProducto(): void {
-    if (!this.companyId) {
-      this.camposProducto = camposProductoPorDefecto();
-      this.camposCargados = true;
-      return;
-    }
-
-    this.companyPermissionsService.obtenerMisCamposProducto(this.companyId).subscribe({
-      next: (campos) => {
-        this.camposProducto = campos;
-        this.camposCargados = true;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.camposProducto = camposProductoPorDefecto();
-        this.camposCargados = true;
-        this.cdr.detectChanges();
-      },
-    });
-  }
-
-  private normalizarCosto(valor: number | null | undefined): number | null {
-    if (valor == null || Number.isNaN(Number(valor))) {
-      return null;
-    }
-
-    return Math.round(Number(valor) * 100) / 100;
-  }
-
-  private cargarSubcategorias(): void {
-    if (!this.companyId) {
-      this.subcategorias = [];
-      return;
-    }
-
-    this.productService.getSubcategorias(this.companyId).subscribe({
-      next: (subcategorias) => {
-        this.subcategorias = subcategorias;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.subcategorias = [];
-      },
-    });
-  }
-
 }
-

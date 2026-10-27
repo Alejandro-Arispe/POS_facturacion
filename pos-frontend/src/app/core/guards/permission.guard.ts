@@ -9,7 +9,14 @@ import {
 export const permissionGuard: CanActivateFn = (route: ActivatedRouteSnapshot) => {
   const permissionsService = inject(CompanyPermissionsService);
   const router = inject(Router);
+  return checkRoutePermission(route, permissionsService, router);
+};
 
+export function checkRoutePermission(
+  route: ActivatedRouteSnapshot,
+  permissionsService: CompanyPermissionsService,
+  router: Router,
+) {
   const requiredPermission = route.data['permission'] as string | string[] | undefined;
   if (!requiredPermission) {
     return true;
@@ -29,4 +36,4 @@ export const permissionGuard: CanActivateFn = (route: ActivatedRouteSnapshot) =>
     return router.createUrlTree(['/company', companyId, 'branches']);
   }
   return router.createUrlTree(['/my-companies']);
-};
+}

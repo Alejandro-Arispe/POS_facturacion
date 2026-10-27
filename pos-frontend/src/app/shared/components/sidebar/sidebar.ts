@@ -193,72 +193,72 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       {
         label: 'Panel',
         link: ['/company', context.companyId, 'dashboard'],
-        permission: 'DASHBOARD_VER',
+        permission: 'dashboard:read',
       },
       {
         label: 'Sucursales',
         link: ['/company', context.companyId, 'branches'],
-        permission: 'SUCURSAL_VER',
+        permission: 'branch:read',
       },
       {
         label: 'Usuarios',
-        permission: ['USUARIO_VER', 'ROL_VER'],
+        permission: ['user:read', 'role:read'],
         children: [
           {
             label: 'Personal',
             link: ['/company', context.companyId, 'users', 'staff'],
-            permission: 'USUARIO_VER',
+            permission: 'user:read',
           },
           {
             label: 'Roles',
             link: ['/company', context.companyId, 'users', 'rols'],
-            permission: 'ROL_VER',
+            permission: 'role:read',
           },
         ],
       },
       {
         label: 'Clientes',
-        permission: ['CLIENTE_VER', 'CATEGORIA_VER'],
+        permission: ['client:read', 'client_category:read'],
         children: [
           {
             label: 'Agenda',
             link: ['/company', context.companyId, 'clients'],
-            permission: 'CLIENTE_VER',
+            permission: 'client:read',
           },
           {
             label: 'Categorias',
             link: ['/company', context.companyId, 'clients', 'categories'],
-            permission: 'CATEGORIA_VER',
+            permission: 'client_category:read',
           },
         ],
       },
       {
         label: 'Productos',
-        permission: ['PRODUCTO_VER', 'CATEGORIA_VER'],
+        permission: ['product:read', 'client_category:read'],
         children: [
           {
             label: 'Catalogo',
             link: ['/company', context.companyId, 'products'],
-            permission: 'PRODUCTO_VER',
+            permission: 'product:read',
           },
           {
             label: 'Categoria',
             link: ['/company', context.companyId, 'products', 'categories'],
-            permission: 'CATEGORIA_VER',
+            permission: 'client_category:read',
           },
         ],
       },
       {
         label: 'Pedidos',
         link: ['/company', context.companyId, 'orders'],
-        permission: 'PEDIDO_VER',
+        permission: 'order:read',
       },
       ...(reportItems.length > 0
         ? [
             {
               label: 'Reportes',
               link: reportItems[0].link,
-              permission: 'REPORTE_GENERAR',
+              permission: 'report:generate',
               children: reportItems,
             },
           ]
@@ -267,12 +267,12 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
         label: 'Configuración',
         link: ['/administrator/settings'],
         queryParams: { companyId: context.companyId },
-        permission: 'EMPRESA_EDITAR',
+        permission: 'company:update',
       },
       {
         label: 'Bitácora',
         link: ['/company', context.companyId, 'audit-log'],
-        permission: 'BITACORA_VER',
+        permission: 'audit:read',
       },
     ];
   }
@@ -284,43 +284,43 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
         key: 'static',
         label: 'Estaticos',
         link: ['/company', context.companyId, 'reports', 'static'],
-        permission: 'REPORTE_GENERAR',
+        permission: 'report:generate',
       },
       {
         key: 'parameterized',
         label: 'Parametrizados',
         link: ['/company', context.companyId, 'reports', 'parameterized'],
-        permission: 'REPORTE_GENERAR',
+        permission: 'report:generate',
       },
       {
         key: 'analytics',
         label: 'Análisis inteligente',
         link: ['/company', context.companyId, 'reports', 'analytics'],
-        permission: 'DASHBOARD_VER',
+        permission: 'dashboard:read',
       },
       {
         key: 'qbe',
         label: 'Consulta QBE',
         link: ['/company', context.companyId, 'reports', 'qbe'],
-        permission: 'REPORTE_GENERAR',
+        permission: 'report:generate',
       },
       {
         key: 'dynamic',
         label: 'Dinamicos',
         link: ['/company', context.companyId, 'reports', 'dynamic'],
-        permission: 'REPORTE_GENERAR',
+        permission: 'report:generate',
       },
       {
         key: 'prediction',
         label: 'Predicción',
         link: ['/company', context.companyId, 'reports', 'prediction'],
-        permission: 'REPORTE_GENERAR',
+        permission: 'report:generate',
       },
       {
         key: 'invoices',
         label: 'Facturas',
         link: ['/company', context.companyId, 'reports', 'invoices'],
-        permission: 'REPORTE_GENERAR',
+        permission: 'report:generate',
       },
     ];
 
@@ -378,12 +378,12 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       {
         label: 'Cajas',
         link: ['/company', context.companyId, 'branch', context.branchId, 'cash-register'],
-        permission: 'CAJA_VER',
+        permission: 'cash_register:read',
       },
       {
         label: 'Inventario',
         link: ['/company', context.companyId, 'branch', context.branchId, 'inventario'],
-        permission: ['STOCK_VER', 'MOVIMIENTO_VER'],
+        permission: ['inventory:read', 'inventory_movement:read'],
       },
     ];
   }
@@ -402,7 +402,7 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       {
         label: 'Ventas',
         link: [...cashRegisterPath, 'sales'],
-        permission: 'VENTA_VER',
+        permission: ['sale:read', 'sale:create'],
         queryParams: {
           section: 'sales',
           sessionId: context.cashRegisterSessionId,
@@ -411,7 +411,7 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       {
         label: 'Cobro de Creditos',
         link: [...cashRegisterPath, 'credit-collections'],
-        permission: 'VENTA_VER',
+        permission: 'sale:collect',
         queryParams: {
           sessionId: context.cashRegisterSessionId,
         },
@@ -419,7 +419,7 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       {
         label: 'Movimientos',
         link: [...cashRegisterPath, 'sales'],
-        permission: 'MOVIMIENTO_VER',
+        permission: ['cash_movement:read', 'cash_movement:create'],
         queryParams: {
           section: 'movimientos',
           sessionId: context.cashRegisterSessionId,

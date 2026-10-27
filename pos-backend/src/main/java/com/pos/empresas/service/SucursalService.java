@@ -73,6 +73,9 @@ public class SucursalService {
 	private static final SecureRandom RANDOM = new SecureRandom();
 
 	private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.RoleAdministrationPolicy rolePolicy;
+    private final com.pos.common.access.RbacAudit rbacAudit;
+    private final com.pos.common.access.RbacInvitations invitations;
 	private final SucursalRepository sucursalRepository;
 	private final EmpresaRepository empresaRepository;
 	private final UsuarioRolRepository usuarioRolRepository;
@@ -90,7 +93,7 @@ public class SucursalService {
 	private final String appBaseUrl;
 
 	public SucursalService(
-			EmpresaAccess empresaAccess,
+			EmpresaAccess empresaAccess, com.pos.common.access.RoleAdministrationPolicy rolePolicy, com.pos.common.access.RbacAudit rbacAudit, com.pos.common.access.RbacInvitations invitations,
 			SucursalRepository sucursalRepository,
 			EmpresaRepository empresaRepository,
 			UsuarioRolRepository usuarioRolRepository,
@@ -106,7 +109,7 @@ public class SucursalService {
 			ObjectMapper objectMapper,
 			@Value("${app.invitation.expiration-hours:72}") long invitationExpirationHours,
 			@Value("${app.base-url:http://localhost:8000}") String appBaseUrl) {
-		this.empresaAccess = empresaAccess;
+		this.empresaAccess = empresaAccess; this.rolePolicy=rolePolicy;this.rbacAudit=rbacAudit;this.invitations=invitations;
 		this.sucursalRepository = sucursalRepository;
 		this.empresaRepository = empresaRepository;
 		this.usuarioRolRepository = usuarioRolRepository;
@@ -127,7 +130,9 @@ public class SucursalService {
 	@Transactional
 	public SucursalResponse crear(Integer idEmpresa, SucursalCreate datos) {
 		Usuario usuario = SecurityUtils.currentUser();
-		empresaAccess.requireEmpresa(usuario, idEmpresa);
+		empresaAccess.requireCompanyPermission(usuario, idEmpresa,"branch:create");
+        rolePolicy.lock(idEmpresa);
+        var capabilities=rolePolicy.companyScope(usuario,idEmpresa);
 		validarLimiteSucursales(idEmpresa);
 
 		try {
@@ -141,19 +146,15 @@ public class SucursalService {
 			sucursal.setActivo(Boolean.TRUE);
 			sucursal = sucursalRepository.saveAndFlush(sucursal);
 
-			UsuarioRol sinSucursal = usuarioRolRepository
-					.findFirstByUsuario_IdUsuarioAndIdEmpresaAndActivoTrueAndIdSucursalIsNull(
-							usuario.getIdUsuario(), idEmpresa)
-					.orElse(null);
-			if (sinSucursal != null) {
-				sinSucursal.setIdSucursal(sucursal.getIdSucursal());
-				usuarioRolRepository.save(sinSucursal);
-			} else {
-				UsuarioRol base = usuarioRolRepository
-						.findFirstByUsuario_IdUsuarioAndIdEmpresaAndActivoTrue(usuario.getIdUsuario(), idEmpresa)
-						.orElseThrow(() -> ApiException.notFound("Empresa no encontrada para este usuario."));
-				crearUsuarioRol(usuario, base.getRol(), idEmpresa, sucursal.getIdSucursal(), true);
-			}
+            // Only the protected owner needs concrete links for the legacy branch selector.
+            // Company-wide custom assignments remain company-wide; branch roles cannot clone themselves.
+            UsuarioRol ownerLink=capabilities.assignments().stream()
+                    .filter(com.pos.common.access.RbacResolver::companyAdministrator).findFirst().orElse(null);
+            if(ownerLink!=null) {
+                if(ownerLink.getIdSucursal()==null) {ownerLink.setIdSucursal(sucursal.getIdSucursal());usuarioRolRepository.save(ownerLink);}
+                else crearUsuarioRol(usuario,ownerLink.getRol(),idEmpresa,sucursal.getIdSucursal(),true);
+            }
+
 
 			inventarioStockSync.sincronizarStocksPorSucursal(sucursal.getIdSucursal(), LocalDateTime.now());
 			return toResponse(sucursal);
@@ -173,7 +174,7 @@ public class SucursalService {
 
 	@Transactional(readOnly = true)
 	public SucursalResponse obtener(Integer idEmpresa, Integer idSucursal) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa,idSucursal,"branch:read");
 		Sucursal sucursal = sucursalRepository.findByIdSucursalAndEmpresa_IdEmpresa(idSucursal, idEmpresa)
 				.orElseThrow(() -> ApiException.notFound("Sucursal no encontrada para esta empresa."));
 		return toResponse(sucursal);
@@ -184,7 +185,7 @@ public class SucursalService {
 		Usuario usuario = SecurityUtils.currentUser();
 		Sucursal sucursal = sucursalRepository.findById(idSucursal)
 				.orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
-		empresaAccess.requireEmpresa(usuario, sucursal.getEmpresa().getIdEmpresa());
+		empresaAccess.requirePermiso(usuario,sucursal.getEmpresa().getIdEmpresa(),idSucursal,"branch:update");
 
 		if (!Boolean.TRUE.equals(sucursal.getActivo()) && Boolean.TRUE.equals(datos.activo())) {
 			validarLimiteSucursales(sucursal.getEmpresa().getIdEmpresa());
@@ -198,9 +199,10 @@ public class SucursalService {
 		return toResponse(sucursalRepository.save(sucursal));
 	}
 
-	@Transactional(readOnly = true)
+	@Transactional
 	public InvitacionEnviadaResponse invitarEmpleado(Integer idEmpresa, InvitacionEmpleadoCreate datos) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa,"user:create");
+        rolePolicy.lock(idEmpresa);
 
 		List<Integer> idSucursalesUnicas = new ArrayList<>(new LinkedHashSet<>(datos.idSucursales()));
 		if (idSucursalesUnicas.size() != datos.idSucursales().size()) {
@@ -215,13 +217,16 @@ public class SucursalService {
 		Usuario invitado = usuarioRepository.findByEmailIgnoreCase(datos.email())
 				.orElseThrow(() -> ApiException.notFound("No existe un usuario con ese correo."));
 		Rol rol = requireRolActivo(datos.idRol(), idEmpresa);
+        rolePolicy.assign(SecurityUtils.currentUser(),idEmpresa,invitado,rol,idSucursalesUnicas);
 		if (!"CLIENTE".equals(rol.getNombre())) {
 			validarLimiteUsuarios(idEmpresa, invitado.getIdUsuario());
 		}
 
-		String token = jwtService.createInvitationToken(
-				idEmpresa, invitado.getIdUsuario(), datos.idRol(), idSucursalesUnicas, invitationExpirationHours);
-		String invitationLink = appBaseUrl + "/api/invitaciones/empleado/aceptar/" + token;
+		String invitationId=invitations.issue(idEmpresa,invitado.getIdUsuario(),SecurityUtils.currentUser().getIdUsuario(),rol.getIdRol(),invitationExpirationHours);
+        String token = jwtService.createInvitationToken(
+				idEmpresa, invitado.getIdUsuario(), datos.idRol(), idSucursalesUnicas, invitationExpirationHours, SecurityUtils.currentUser().getIdUsuario(),invitationId);
+		rbacAudit.record(SecurityUtils.currentUser(),idEmpresa,"ROL_INVITAR","usuario="+invitado.getIdUsuario()+"; rol="+rol.getIdRol()+"; sucursales="+idSucursalesUnicas);
+        String invitationLink = appBaseUrl + "/api/invitaciones/empleado/aceptar/" + token;
 		String nombre = nombreUsuario(invitado);
 		emailService.sendHtml(
 				invitado.getEmail(),
@@ -236,9 +241,9 @@ public class SucursalService {
 				datos.idRol());
 	}
 
-	@Transactional(readOnly = true)
+	@Transactional
 	public InvitacionEnviadaResponse invitarCliente(Integer idEmpresa, InvitacionClienteCreate datos) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requireCompanyPermission(SecurityUtils.currentUser(), idEmpresa,"client:create");
 		Empresa empresa = empresaRepository.findById(idEmpresa)
 				.orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
 
@@ -255,8 +260,11 @@ public class SucursalService {
 			throw ApiException.badRequest("El usuario ya es cliente de esta empresa.");
 		}
 
-		String invitationLink = appBaseUrl + "/api/invitaciones/cliente/aceptar/"
-				+ idEmpresa + "/" + invitado.getIdUsuario();
+		if(!Boolean.TRUE.equals(rolCliente.getProtegido()) || rolCliente.getIdEmpresa()!=null || !"SISTEMA".equals(rolCliente.getTipo())) throw ApiException.forbidden("El rol de cliente no es una identidad de sistema válida.");
+        Integer issuer=SecurityUtils.currentUser().getIdUsuario();
+        String invitationId=invitations.issue(idEmpresa,invitado.getIdUsuario(),issuer,rolCliente.getIdRol(),invitationExpirationHours);
+        String token=jwtService.createClientInvitationToken(idEmpresa,invitado.getIdUsuario(),rolCliente.getIdRol(),invitationExpirationHours,issuer,invitationId);
+        String invitationLink = appBaseUrl + "/api/invitaciones/cliente/aceptar/" + token;
 		emailService.sendHtml(
 				invitado.getEmail(),
 				"Invitacion para ser cliente de " + empresa.getNombre() + " - POS System",
@@ -307,7 +315,15 @@ public class SucursalService {
 		}
 		Empresa empresa = empresaRepository.findById(idEmpresa)
 				.orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
-		Rol rol = requireRolActivo(idRol, idEmpresa);
+		rolePolicy.lock(idEmpresa);
+        Integer issuerId=intClaim(claims,"issuer_user");
+        if(issuerId==null) throw ApiException.badRequest("Solicita una invitación nueva.");
+        Usuario issuer=usuarioRepository.findById(issuerId).orElseThrow(()->ApiException.forbidden("Emisor no disponible."));
+        empresaAccess.requirePermiso(issuer,idEmpresa,"user:create");
+        Rol rol = requireRolActivo(idRol, idEmpresa);
+        rolePolicy.assign(issuer,idEmpresa,usuario,rol,idSucursales);
+        invitations.consume(claims,idEmpresa,idUsuario,issuerId,idRol);
+        rbacAudit.record(issuer,idEmpresa,"ROL_ACEPTAR_INVITACION","usuario="+idUsuario+"; rol="+idRol+"; sucursales="+idSucursales);
 		if (!"CLIENTE".equals(rol.getNombre())) {
 			validarLimiteUsuarios(idEmpresa, idUsuario);
 		}
@@ -319,14 +335,11 @@ public class SucursalService {
 
 		try {
 			for (Sucursal sucursal : sucursales) {
-				boolean existe = usuarioRolRepository
-						.findFirstByUsuario_IdUsuarioAndIdEmpresaAndIdSucursalAndRol_IdRolAndActivoTrue(
-								idUsuario, idEmpresa, sucursal.getIdSucursal(), idRol)
-						.isPresent();
-				if (existe) {
-					continue;
-				}
-				crearUsuarioRol(usuario, rol, idEmpresa, sucursal.getIdSucursal(), true);
+                UsuarioRol existing=usuarioRolRepository
+                        .findFirstByUsuario_IdUsuarioAndIdEmpresaAndIdSucursalAndRol_IdRol(idUsuario,idEmpresa,sucursal.getIdSucursal(),idRol).orElse(null);
+                if(existing==null) crearUsuarioRol(usuario,rol,idEmpresa,sucursal.getIdSucursal(),true);
+                else {existing.setActivo(true);usuarioRolRepository.save(existing);}
+
 			}
 		} catch (DataIntegrityViolationException ex) {
 			throw ApiException.badRequest("No se pudo aceptar la invitacion.");
@@ -336,7 +349,17 @@ public class SucursalService {
 	}
 
 	@Transactional
-	public InvitacionAceptadaResult aceptarInvitacionCliente(Integer idEmpresa, Integer idUsuario) {
+	public InvitacionAceptadaResult aceptarInvitacionCliente(String token) {
+        Claims claims;
+        try { claims=jwtService.parse(token); } catch(Exception ex) { throw ApiException.badRequest("Invitación inválida o expirada."); }
+        if(!"invitacion_cliente".equals(claims.get("tipo",String.class))) throw ApiException.badRequest("Invitación inválida.");
+        Integer idEmpresa=intClaim(claims,"id_empresa"), idUsuario=intClaim(claims,"id_usuario"), issuerId=intClaim(claims,"issuer_user"), roleId=intClaim(claims,"id_rol");
+        rolePolicy.lock(idEmpresa);
+        Usuario issuer=usuarioRepository.findById(issuerId).orElseThrow(() -> ApiException.forbidden("Emisor no disponible."));
+        empresaAccess.requireCompanyPermission(issuer,idEmpresa,"client:create");
+        Rol invitedRole=requireRolActivo(roleId,idEmpresa);
+        if(invitedRole.getIdEmpresa()!=null || !Boolean.TRUE.equals(invitedRole.getProtegido()) || !"SISTEMA".equals(invitedRole.getTipo()) || !"CLIENTE".equals(invitedRole.getNombre())) throw ApiException.forbidden("Rol de cliente inválido.");
+        invitations.consume(claims,idEmpresa,idUsuario,issuerId,roleId);
 		Usuario usuario = usuarioRepository.findById(idUsuario)
 				.orElseThrow(() -> ApiException.notFound("Usuario no encontrado o inactivo."));
 		if (!Boolean.TRUE.equals(usuario.getActivo())) {
@@ -356,10 +379,13 @@ public class SucursalService {
 		}
 
 		try {
-			crearUsuarioRol(usuario, rolCliente, idEmpresa, null, true);
+            var prior=usuarioRolRepository.findByUsuario_IdUsuarioAndIdEmpresa(idUsuario,idEmpresa).stream().filter(a -> a.getIdSucursal()==null && a.getRol().getIdRol().equals(rolCliente.getIdRol())).findFirst().orElse(null);
+            if(prior==null) crearUsuarioRol(usuario,rolCliente,idEmpresa,null,true); else {prior.setActivo(true);usuarioRolRepository.save(prior);}
+            if(clienteRepository.findByIdUsuario(idUsuario).stream().anyMatch(c -> idEmpresa.equals(c.getIdEmpresa()))) return new InvitacionAceptadaResult("Ahora eres cliente de "+empresa.getNombre()+".",empresa.getNombre());
 			Cliente cliente = new Cliente();
 			cliente.setIdUsuario(idUsuario);
 			cliente.setCategoriaCliente(null);
+            cliente.setIdEmpresa(idEmpresa);
 			cliente.setCodigoCliente(generarCodigoCliente());
 			cliente.setSaldoCredito(null);
 			cliente.setLimiteCredito(null);
@@ -374,13 +400,15 @@ public class SucursalService {
 
 	@Transactional(readOnly = true)
 	public List<PersonalEmpresaAgrupadoResponse> obtenerPersonal(Integer idEmpresa) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa,"user:read");
 		List<UsuarioRol> usuariosRol = usuarioRolRepository.findPersonalExcluyendoRoles(
 				idEmpresa, List.of("ADMINISTRADOR", "CLIENTE"));
 
 		Map<Integer, PersonalEmpresaAgrupadoResponse> porUsuario = new LinkedHashMap<>();
-		for (UsuarioRol usuarioRol : usuariosRol) {
-			Integer idUsuario = usuarioRol.getUsuario().getIdUsuario();
+        for (UsuarioRol usuarioRol : usuariosRol) {
+            if(usuarioRol.getIdSucursal()!=null && !empresaAccess.canPermiso(SecurityUtils.currentUser(),idEmpresa,usuarioRol.getIdSucursal(),"user:read")) continue;
+            if(usuarioRol.getIdSucursal()==null && !empresaAccess.canCompanyPermission(SecurityUtils.currentUser(),idEmpresa,"user:read")) continue;
+            Integer idUsuario = usuarioRol.getUsuario().getIdUsuario();
 			PersonalEmpresaAgrupadoResponse actual = porUsuario.computeIfAbsent(
 					idUsuario,
 					id -> new PersonalEmpresaAgrupadoResponse(id, toUsuarioEmpleado(usuarioRol.getUsuario()), new ArrayList<>()));
@@ -396,7 +424,8 @@ public class SucursalService {
 
 	@Transactional
 	public List<PersonalEmpresaResponse> editarPersonal(Integer idEmpresa, EditarPersonalCreate datos) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa,"user:update");
+        rolePolicy.lock(idEmpresa);
 
 		List<Integer> idSucursalesUnicas = new ArrayList<>(new LinkedHashSet<>(datos.idSucursales()));
 		if (idSucursalesUnicas.size() != datos.idSucursales().size()) {
@@ -411,9 +440,13 @@ public class SucursalService {
 		Usuario usuario = usuarioRepository.findByEmailIgnoreCase(datos.email())
 				.orElseThrow(() -> ApiException.notFound("No existe un usuario con ese correo."));
 		Rol rol = requireRolActivo(datos.idRol(), idEmpresa);
+        rolePolicy.assign(SecurityUtils.currentUser(),idEmpresa,usuario,rol,idSucursalesUnicas);
+        rolePolicy.editAssignments(SecurityUtils.currentUser(),idEmpresa,usuario);
+        invitations.revoke(idEmpresa,usuario.getIdUsuario());
+        rbacAudit.record(SecurityUtils.currentUser(),idEmpresa,"ROL_ASIGNAR","usuario="+usuario.getIdUsuario()+"; rol="+rol.getIdRol()+"; activo="+datos.activo()+"; sucursales="+idSucursalesUnicas);
 
 		List<UsuarioRol> usuariosRol = usuarioRolRepository.findByUsuario_IdUsuarioAndIdEmpresa(
-				usuario.getIdUsuario(), idEmpresa);
+				usuario.getIdUsuario(), idEmpresa).stream().filter(row->!(row.getRol().getIdEmpresa()==null && "CLIENTE".equals(row.getRol().getNombre()))).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         if (Boolean.TRUE.equals(datos.activo()) && !"CLIENTE".equals(rol.getNombre())) {
             validarLimiteUsuarios(idEmpresa, usuario.getIdUsuario());
         }
@@ -430,18 +463,11 @@ public class SucursalService {
 				return usuariosRol.stream().map(this::toPersonalEmpresa).toList();
 			}
 
-			boolean todasApagadas = !usuariosRol.isEmpty()
-					&& usuariosRol.stream().allMatch(ur -> !Boolean.TRUE.equals(ur.getActivo()));
-			if (todasApagadas) {
-				for (UsuarioRol usuarioRol : usuariosRol) {
-					usuarioRol.setActivo(Boolean.TRUE);
-				}
-			}
-
 			Map<Integer, UsuarioRol> existentesPorSucursal = new HashMap<>();
 			Map<String, UsuarioRol> existentesPorSucursalYRol = new HashMap<>();
 			for (UsuarioRol usuarioRol : usuariosRol) {
 				if (usuarioRol.getIdSucursal() == null) {
+                    usuarioRol.setActivo(false);
 					continue;
 				}
 				existentesPorSucursal.putIfAbsent(usuarioRol.getIdSucursal(), usuarioRol);
@@ -468,6 +494,7 @@ public class SucursalService {
 
 			for (UsuarioRol usuarioRol : usuariosRol) {
 				if (usuarioRol.getIdSucursal() == null) {
+                    usuarioRol.setActivo(false);
 					continue;
 				}
 				if (!idsSolicitadas.contains(usuarioRol.getIdSucursal())
@@ -487,7 +514,7 @@ public class SucursalService {
 
 	@Transactional(readOnly = true)
 	public List<ClienteEmpresaResponse> obtenerClientes(Integer idEmpresa) {
-		empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa,"client:read");
 		Rol rolCliente = rolRepository.findByNombreIgnoreCase("CLIENTE")
 				.orElseThrow(() -> ApiException.badRequest("No existe el rol CLIENTE."));
 
@@ -501,8 +528,8 @@ public class SucursalService {
 		List<ClienteEmpresaResponse> resultado = new ArrayList<>();
 		for (UsuarioRol usuarioRol : usuarioRolRepository.findActivosPorEmpresaYRolSinSucursal(
 				idEmpresa, rolCliente.getIdRol())) {
-			Cliente cliente = clienteRepository.findFirstByIdUsuarioOrderByIdClienteAsc(
-					usuarioRol.getUsuario().getIdUsuario()).orElse(null);
+			Cliente cliente = clienteRepository.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(
+					usuarioRol.getUsuario().getIdUsuario(),idEmpresa).orElse(null);
 			BigDecimal saldo = BigDecimal.ZERO;
 			if (cliente != null) {
 				saldo = saldosMap.getOrDefault(cliente.getIdCliente(),
@@ -531,8 +558,8 @@ public class SucursalService {
 				.orElseThrow(() -> ApiException.badRequest("No existe el rol EMPLEADO."));
 
 		List<SucursalEmpleadoAsignadaResponse> resultado = new ArrayList<>();
-		for (UsuarioRol usuarioRol : usuarioRolRepository.findSucursalesEmpleado(
-				usuario.getIdUsuario(), empleado.getIdRol(), idEmpresa)) {
+		for (UsuarioRol usuarioRol : usuarioRolRepository.findByUsuario_IdUsuarioAndActivoTrue(usuario.getIdUsuario()).stream()
+            .filter(a -> a.getIdSucursal()!=null && Boolean.TRUE.equals(a.getRol().getActivo()) && (idEmpresa==null || idEmpresa.equals(a.getIdEmpresa())) && !(a.getRol().getIdEmpresa()==null && "CLIENTE".equals(a.getRol().getNombre()))).toList()) {
 			Empresa empresa = empresaRepository.findById(usuarioRol.getIdEmpresa()).orElse(null);
 			Sucursal sucursal = sucursalRepository.findById(usuarioRol.getIdSucursal()).orElse(null);
 			resultado.add(new SucursalEmpleadoAsignadaResponse(

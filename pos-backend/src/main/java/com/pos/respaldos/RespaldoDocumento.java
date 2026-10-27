@@ -120,7 +120,7 @@ public record RespaldoDocumento(
             Integer idRolPermiso,
             Integer idRol,
             Integer idPermiso,
-            Boolean activo) {
+            Boolean activo, Boolean puedeDelegar) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

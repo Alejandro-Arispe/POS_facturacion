@@ -5,6 +5,7 @@ import { AuthService } from '../services/auth.service';
 import { CompanyService } from '../services/company.service';
 import { CompanyPermissionsService } from '../services/company-permissions.service';
 import { catchError, map, of } from 'rxjs';
+import { checkRoutePermission } from './permission.guard';
 
 export const authGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
@@ -13,9 +14,13 @@ export const authGuard: CanActivateFn = (route, state) => {
   const permissions = inject(CompanyPermissionsService);
 
   if (authService.isAuthenticated()) {
-    const companyId = route.paramMap.get('id');
-    if (companyId && state.url.startsWith('/company/')) {
-      return companies.getMisPermisos(companyId).pipe(
+    const companyId =
+      route.paramMap.get('id') ??
+      route.paramMap.get('idEmpresa') ??
+      route.queryParamMap?.get('companyId');
+    if (companyId) {
+      permissions.clearPermissions();
+      return companies.getMisPermisos(companyId, route.paramMap.get('branchId')).pipe(
         map((response) => {
           const subscription = response.suscripcion_activa;
           if (!subscription || !['activo', 'activa'].includes(subscription.estado.toLowerCase())) {
@@ -23,6 +28,7 @@ export const authGuard: CanActivateFn = (route, state) => {
           }
           permissions.savePermissions(response.permisos);
           permissions.saveActiveSubscription(subscription);
+          permissions.watchContext(companyId, route.paramMap.get('branchId'));
           const limits = subscription.plan?.limites;
           if (
             limits &&
@@ -33,9 +39,12 @@ export const authGuard: CanActivateFn = (route, state) => {
           ) {
             return router.createUrlTree(['/my-companies'], { queryParams: { ampliar: companyId } });
           }
-          return true;
+          return checkRoutePermission(route, permissions, router);
         }),
-        catchError(() => of(router.createUrlTree(['/my-companies']))),
+        catchError(() => {
+          permissions.clearPermissions();
+          return of(router.createUrlTree(['/my-companies']));
+        }),
       );
     }
     return true;

@@ -63,7 +63,7 @@ export class CategoriasPanel implements OnInit {
   }
 
   protected setActiveTab(tab: 'list' | 'register'): void {
-    if (tab === 'register' && !this.hasPermission('CATEGORIA_CREAR')) {
+    if (tab === 'register' && !this.hasPermission('client_category:create')) {
       return;
     }
 
@@ -79,7 +79,7 @@ export class CategoriasPanel implements OnInit {
     event.preventDefault();
     this.limpiarMensajes();
 
-    if (!this.hasPermission('CATEGORIA_CREAR')) {
+    if (!this.hasPermission('client_category:create')) {
       this.errorGeneral = 'No tienes permiso para registrar categorias.';
       return;
     }
@@ -115,7 +115,7 @@ export class CategoriasPanel implements OnInit {
 
 
   protected registrarSubcategoriaTemporal(): void {
-    if (!this.hasPermission('CATEGORIA_CREAR')) {
+    if (!this.hasPermission('client_category:create')) {
       this.errorGeneral = 'No tienes permiso para registrar subcategorias.';
       return;
     }
@@ -272,11 +272,7 @@ export class CategoriasPanel implements OnInit {
 
   protected hasPermission(permission: CompanyPermissionCode): boolean {
     const permissions = this.companyPermissionsService.permissions();
-    const codes = this.companyPermissionsService.getPermissionCodes();
-    if (codes.length === 0) {
-      return true;
-    }
-    return permissions[permission] === true;
+return permissions[permission] === true;
   }
 }
 

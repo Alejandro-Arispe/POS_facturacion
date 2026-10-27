@@ -40,6 +40,7 @@ import jakarta.persistence.TypedQuery;
 public class ReportesService {
 
     private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
     private final EmpresaRepository empresaRepository;
     private final SucursalRepository sucursalRepository;
     private final StockRepository stockRepository;
@@ -51,14 +52,14 @@ public class ReportesService {
     private EntityManager entityManager;
 
     public ReportesService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy,
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
             StockRepository stockRepository,
             ProductoRepository productoRepository,
             MovimientoInventarioRepository movimientoInventarioRepository,
             GeminiClient geminiClient) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
         this.stockRepository = stockRepository;
@@ -121,7 +122,7 @@ public class ReportesService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> resumenVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"sale:read","nombre");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         LocalDateTime desde = dia.atStartOfDay();
         LocalDateTime hasta = dia.atTime(LocalTime.MAX);
@@ -141,7 +142,7 @@ public class ReportesService {
                 for (DetalleVenta detalle : detalles(venta.getIdVenta())) {
                     unidades += detalle.getCantidad() == null ? 0 : detalle.getCantidad();
                     top.merge(detalle.getIdProducto(), detalle.getCantidad(), Integer::sum);
-                    productoRepository.findById(detalle.getIdProducto())
+                    productoRepository.findById(detalle.getIdProducto()).filter(p -> empresaId.equals(p.getIdEmpresa()))
                             .ifPresent(p -> nombres.put(p.getIdProducto(), p.getNombre()));
                 }
             }
@@ -190,7 +191,7 @@ public class ReportesService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> detalleVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"sale:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         LocalDateTime desde = dia.atStartOfDay();
         LocalDateTime hasta = dia.atTime(LocalTime.MAX);
@@ -234,7 +235,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> estadoInventario(Usuario usuario, Integer empresaId) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"inventory:read","nombre");
         List<Map<String, Object>> sucursalDtos = new ArrayList<>();
         int totalProductos = 0;
         int bajo = 0;
@@ -302,7 +303,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> movimientosInventario(Usuario usuario, Integer empresaId) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"inventory_movement:read","nombre","id_subcategoria");
         LocalDate fin = LocalDate.now();
         LocalDate inicio = fin.minusDays(29);
         List<Map<String, Object>> sucursalDtos = new ArrayList<>();
@@ -359,7 +360,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> resumenCajas(Usuario usuario, Integer empresaId) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"cash_register:read");
         List<?> rows = entityManager.createQuery("""
                 select s.idSucursal, s.nombre, c.idCaja, c.nombre, cs.idCajaSesion, cs.estado, cs.fechaApertura, cs.fechaCierre
                 from CajaSesion cs
@@ -432,7 +433,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> movimientosCaja(Usuario usuario, Integer empresaId) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"cash_movement:read");
         List<?> rows = entityManager.createQuery("""
                 select s.idSucursal, s.nombre, mc.idMovimientoCaja, mc.fecha, c.nombre, t.nombre, mc.concepto, mc.monto, c.idCaja, t.idTipoMovimientoCaja, cs.estado
                 from MovimientoCaja mc
@@ -510,6 +511,8 @@ public class ReportesService {
     }
 
     public ReporteDtos.RespuestaInterpretacion interpretar(Integer empresaId, String prompt) {
+        dataPolicy.require(com.pos.common.security.SecurityUtils.currentUser(),empresaId,null,"report:generate");
+        empresaAccess.requirePlanFeature(com.pos.common.security.SecurityUtils.currentUser(),empresaId,"reportes_avanzados");
         empresaAccess.requirePlanFeature(com.pos.common.security.SecurityUtils.currentUser(), empresaId, "reportes_avanzados");
         empresaRepository.findById(empresaId).orElseThrow(() -> ApiException.notFound("La empresa no existe."));
         ReporteDtos.RespuestaInterpretacion conIa = interpretarConIa(prompt);
@@ -626,12 +629,16 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public ReporteDtos.RespuestaReporte ejecutar(Usuario usuario, Integer empresaId, String prompt) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_avanzados");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        dataPolicy.require(usuario,empresaId,null,"report:generate");
         ReporteDtos.RespuestaInterpretacion interpretacion = interpretar(empresaId, prompt);
         String id = interpretacion.getEspecificacion().getIdentificadorPlantilla();
         if (id == null || id.isBlank()) {
             id = "resumen_ventas";
         }
+        String source=id.contains("inventario")?"inventory_movement:read":id.equals("alertas_stock")?"inventory:read":id.equals("movimientos_caja")?"cash_movement:read":"sale:read";
+        requireReport(usuario,empresaId,source);
+        if(id.contains("producto")) dataPolicy.productFields(dataPolicy.require(usuario,empresaId,null,"product:read"),"nombre","id_subcategoria");
+        if(id.equals("ventas_detalle")) dataPolicy.require(usuario,empresaId,null,"client:read");
         Map<String, Object> filtros = interpretacion.getEspecificacion().getFiltros();
         LocalDate[] rango = rangoPeriodo(filtros);
         LocalDate desde = rango[0];
@@ -733,13 +740,14 @@ public class ReportesService {
     public List<ReporteDtos.ProductoAbastecimiento> abastecimiento(Usuario usuario, Integer idSucursal) {
         Sucursal sucursal = sucursalRepository.findById(idSucursal)
                 .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
-        empresaAccess.requireEmpresa(usuario, sucursal.getEmpresa().getIdEmpresa());
+        var scope=dataPolicy.require(usuario,sucursal.getEmpresa().getIdEmpresa(),idSucursal,"report:generate","inventory:read","sale:read");
+        dataPolicy.productFields(scope,"nombre");
         empresaAccess.requirePlanFeature(usuario, sucursal.getEmpresa().getIdEmpresa(), "predicciones");
         LocalDateTime desde = LocalDate.now().minusDays(30).atStartOfDay();
         List<ReporteDtos.ProductoAbastecimiento> result = new ArrayList<>();
         for (Stock stock : stockRepository.findByIdSucursal(idSucursal)) {
             Producto producto = stock.getProducto();
-            if (producto == null) {
+            if (producto == null || !sucursal.getEmpresa().getIdEmpresa().equals(producto.getIdEmpresa())) {
                 continue;
             }
             Number vendido = (Number) entityManager.createQuery("""
@@ -786,6 +794,9 @@ public class ReportesService {
             throw ApiException.notFound("Productos no encontrados.");
         }
         Integer idEmpresa = origen.get(0).getIdEmpresa();
+        if(origen.size()!=new java.util.HashSet<>(ids).size() || origen.stream().anyMatch(p -> !java.util.Objects.equals(idEmpresa,p.getIdEmpresa()))) throw ApiException.notFound("Productos no encontrados en una misma empresa.");
+        var scope=dataPolicy.require(usuario,idEmpresa,null,"product:read","inventory:read");
+        dataPolicy.productFields(scope,"nombre","precio","unidad_medida","codigo_barra","id_subcategoria");
         empresaAccess.requirePlanFeature(usuario, idEmpresa, "predicciones");
         Integer idSub = origen.get(0).getSubcategoria() == null ? null : origen.get(0).getSubcategoria().getIdSubcategoria();
         List<Producto> candidatos = idSub == null
@@ -821,7 +832,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> ventasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.VentasParamRequest filtros) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"sale:read");
         Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
         LocalDateTime desde = (filtros.getFechaInicial() == null ? LocalDate.now().minusDays(30) : filtros.getFechaInicial()).atStartOfDay();
         LocalDateTime hasta = (filtros.getFechaFinal() == null ? LocalDate.now() : filtros.getFechaFinal()).atTime(LocalTime.MAX);
@@ -916,7 +927,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> inventarioParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.InventarioParamRequest filtros) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"inventory_movement:read","nombre","id_subcategoria");
         Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
         Map<String, Object> inventario = movimientosInventario(usuario, empresaId);
         @SuppressWarnings("unchecked")
@@ -980,7 +991,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> cajasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.CajasParamRequest filtros) {
         empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
-        empresaAccess.requireEmpresa(usuario, empresaId);
+        requireReport(usuario,empresaId,"cash_movement:read");
         Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
         Map<String, Object> data = movimientosCaja(usuario, empresaId);
         @SuppressWarnings("unchecked")
@@ -1054,6 +1065,11 @@ public class ReportesService {
         response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", totales)));
         response.put("detalle_analitico", sucursalesFiltradas);
         return response;
+    }
+
+    private void requireReport(Usuario user,Integer company,String resource,String... productFields) {
+        var scope=dataPolicy.require(user,company,null,"report:generate",resource);
+        dataPolicy.productFields(scope,productFields);
     }
 
     private List<Venta> ventasDeSucursal(Integer idSucursal, LocalDateTime desde, LocalDateTime hasta) {

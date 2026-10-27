@@ -60,6 +60,13 @@ public class PlanPolicy {
         return fallback;
     }
 
+    @Transactional(readOnly=true)
+    public boolean permits(Integer company,String feature) {
+        var active=subscriptions.findActivasPorEmpresa(company,LocalDate.now());
+        if(active.isEmpty()) return false;
+        return !"pedidos".equals(feature) || benefits(active.get(0).getPlan()).pedidos();
+    }
+
     @Transactional(readOnly = true)
     public HistorialSuscripcion requireActive(Integer companyId) {
         return subscriptions.findActivasPorEmpresa(companyId, LocalDate.now()).stream().findFirst()

@@ -73,7 +73,7 @@ export class CategoriasClientes {
   }
 
   protected setActiveTab(tab: ClientCategoryTab): void {
-    if (tab === 'register' && !this.hasPermission('CATEGORIA_CREAR')) {
+    if (tab === 'register' && !this.hasPermission('client_category:create')) {
       return;
     }
 
@@ -92,7 +92,7 @@ export class CategoriasClientes {
     this.errorRegistro = '';
     this.mensajeRegistro = '';
 
-    if (!this.hasPermission('CATEGORIA_CREAR')) {
+    if (!this.hasPermission('client_category:create')) {
       this.errorRegistro = 'No tienes permiso para registrar categorias.';
       return;
     }
@@ -200,11 +200,7 @@ export class CategoriasClientes {
 
   protected hasPermission(permission: CompanyPermissionCode): boolean {
     const permissions = this.companyPermissionsService.permissions();
-    const codes = this.companyPermissionsService.getPermissionCodes();
-    if (codes.length === 0) {
-      return true;
-    }
-    return permissions[permission] === true;
+return permissions[permission] === true;
   }
 }
 

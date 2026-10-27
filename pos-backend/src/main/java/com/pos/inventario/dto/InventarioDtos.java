@@ -54,6 +54,7 @@ public final class InventarioDtos {
     @Getter
     @Setter
     @NoArgsConstructor
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     public static class StockResponse {
         private Integer idStock;
         private Integer idProducto;
@@ -65,7 +66,7 @@ public final class InventarioDtos {
         private String nombreProducto;
         private String codigoBarra;
         private String unidadMedida;
-        private double precio;
+        private Double precio;
         private String imagen;
         private Boolean activo;
     }
@@ -77,11 +78,14 @@ public final class InventarioDtos {
     public static class StockUpdate {
         private Integer stockMinimo;
         private Integer stockMaximo;
+        @com.fasterxml.jackson.annotation.JsonAnySetter
+        public void unknown(String key,Object value) { throw com.pos.common.exception.ApiException.badRequest("Atributo de configuración de stock no admitido: "+key); }
     }
 
     @Getter
     @Setter
     @NoArgsConstructor
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     public static class ProductoSimple {
         private Integer idProducto;
         private String nombre;

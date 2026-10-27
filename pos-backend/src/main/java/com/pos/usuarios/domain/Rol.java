@@ -17,6 +17,21 @@ import lombok.Setter;
 @Entity
 @Table(name = "rol")
 public class Rol {
+    @jakarta.persistence.ManyToOne(fetch=jakarta.persistence.FetchType.LAZY)
+    @jakarta.persistence.JoinColumn(name="id_empresa",insertable=false,updatable=false)
+    private com.pos.empresas.domain.Empresa empresa;
+
+    @Column(name="ambito", length=40) private String ambito;
+    @jakarta.persistence.PrePersist @jakarta.persistence.PreUpdate
+    public void normalizeScope() {
+        nombreNormalizado=nombre==null?null:nombre.strip().toUpperCase(java.util.Locale.ROOT);
+        ambito=idEmpresa==null?"GLOBAL":"EMPRESA:"+idEmpresa;
+    }
+
+    @Column(name = "nombre_normalizado", length = 100)
+    private String nombreNormalizado;
+    @org.hibernate.annotations.ColumnDefault("false")
+    @Column(nullable = false) private Boolean protegido = false;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

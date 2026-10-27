@@ -34,9 +34,7 @@ public class NotificationController {
 
     @PostMapping("/send-alert")
     public Map<String, Object> sendAlert(@RequestBody NotificationDtos.SendAlertRequest request) {
-        empresaAccess.requireEmpresa(SecurityUtils.currentUser(), request.getIdEmpresa());
-        return notificationService.enviarAlerta(
-                request.getIdEmpresa(), request.getTitulo(), request.getMensaje(), request.getPayload());
+        throw com.pos.common.exception.ApiException.forbidden("Las alertas se generan desde las operaciones autorizadas del sistema.");
     }
 
     @GetMapping("/history/empresas/{idEmpresa}")

@@ -3,6 +3,7 @@ import { signal } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiService } from './api.service';
+import { CompanyPermissionsService } from './company-permissions.service';
 
 export interface RegisterRequest {
   email: string;
@@ -69,7 +70,10 @@ export class AuthService {
   private readonly cashRegisterOpenPolicyPrefix = 'cash-register-open-policy:';
   readonly isAuthenticated = signal(this.hasValidStoredToken());
 
-  constructor(private readonly apiService: ApiService) {}
+  constructor(
+    private readonly apiService: ApiService,
+    private readonly permissions: CompanyPermissionsService,
+  ) {}
 
   register(payload: RegisterRequest): Observable<RegisterResponse> {
     return this.apiService.post<RegisterResponse, RegisterRequest>('/api/auth/register', payload);
@@ -151,6 +155,7 @@ export class AuthService {
   }
 
   logout(): void {
+    this.permissions.clearPermissions();
     sessionStorage.removeItem(this.tokenKey);
     this.clearCashRegisterOpenPolicies();
     this.isAuthenticated.set(false);

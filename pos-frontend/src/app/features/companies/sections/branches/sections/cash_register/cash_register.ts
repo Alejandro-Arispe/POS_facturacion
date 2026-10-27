@@ -91,11 +91,11 @@ export class CashRegister implements OnInit {
   }
 
   protected setActiveTab(tab: CashRegisterTab): void {
-    if (tab === 'register' && !this.hasPermission('CAJA_CREAR')) {
+    if (tab === 'register' && !this.hasPermission('cash_register:create')) {
       return;
     }
 
-    if (tab === 'edit' && (this.editingCashRegisterId === null || !this.hasPermission('CAJA_EDITAR'))) {
+    if (tab === 'edit' && (this.editingCashRegisterId === null || !this.hasPermission('cash_register:update'))) {
       return;
     }
 
@@ -219,7 +219,7 @@ export class CashRegister implements OnInit {
     event.preventDefault();
     this.clearMessages();
 
-    if (!this.hasPermission('CAJA_EDITAR')) {
+    if (!this.hasPermission('cash_register:update')) {
       this.error = 'No tienes permiso para registrar cajas.';
       return;
     }
@@ -282,7 +282,7 @@ export class CashRegister implements OnInit {
   }
 
   protected abrirEdicion(cashRegister: CashRegisterItem): void {
-    if (!this.hasPermission('CAJA_EDITAR')) {
+    if (!this.hasPermission('cash_register:update')) {
       this.error = 'No tienes permiso para editar cajas.';
       return;
     }
@@ -312,7 +312,7 @@ export class CashRegister implements OnInit {
     event.preventDefault();
     this.clearMessages();
 
-    if (!this.hasPermission('CAJA_EDITAR')) {
+    if (!this.hasPermission('cash_register:update')) {
       this.error = 'No tienes permiso para editar cajas.';
       return;
     }
@@ -507,11 +507,7 @@ export class CashRegister implements OnInit {
 
   protected hasPermission(permission: CompanyPermissionCode): boolean {
     const permissions = this.companyPermissionsService.permissions();
-    const codes = this.companyPermissionsService.getPermissionCodes();
-    if (codes.length === 0) {
-      return true;
-    }
-    return permissions[permission] === true;
+return permissions[permission] === true;
   }
 }
 

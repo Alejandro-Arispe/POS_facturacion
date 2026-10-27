@@ -102,6 +102,7 @@ public final class QbeCatalogo {
 						new Campo("subcategoria", "Subcategoría", "sp.nombre", Tipo.TEXTO),
 						new Campo("unidad", "Unidad", "p.unidad_medida", Tipo.TEXTO),
 						new Campo("precio", "Precio", "p.precio", Tipo.NUMERO),
+                        new Campo("costo", "Costo de compra", "p.costo", Tipo.NUMERO),
 						new Campo("activo", "Activo", "p.activo", Tipo.BOOLEANO)),
 				List.of("producto", "categoria", "unidad", "precio")));
 
@@ -152,10 +153,8 @@ public final class QbeCatalogo {
 				"cliente cl join usuario u on u.id_usuario = cl.id_usuario "
 						+ "join persona pe on pe.id_persona = u.id_persona "
 						+ "left join categoria_cliente cc on cc.id_categoria_cliente = cl.id_categoria_cliente",
-				"exists (select 1 from usuario_rol ur join rol r on r.id_rol = ur.id_rol "
-						+ "where ur.id_usuario = cl.id_usuario and ur.id_empresa = :idEmpresa "
-						+ "and r.nombre = 'CLIENTE' and ur.activo = true)",
-				List.of(
+				"cl.id_empresa = :idEmpresa",
+                List.of(
 						new Campo("codigo", "Código", "cl.codigo_cliente", Tipo.TEXTO),
 						new Campo("nombre", "Nombre", "pe.nombre_completo", Tipo.TEXTO),
 						new Campo("email", "Correo", "u.email", Tipo.TEXTO),

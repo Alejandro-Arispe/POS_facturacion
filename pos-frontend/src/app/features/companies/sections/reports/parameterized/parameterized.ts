@@ -1,3 +1,5 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
+import { CompanyPermissionsService } from '../../../../../core/services/company-permissions.service';
 import { ChangeDetectorRef, Component, ElementRef, OnInit, inject } from '@angular/core';
 import { PreferencesService } from '../../../../../core/services/preferences.service';
 import { ActivatedRoute } from '@angular/router';
@@ -25,7 +27,10 @@ type ParameterizedReportTab = 'sale' | 'inventory' | 'cash';
   styleUrl: './parameterized.css',
 })
 export class ParameterizedReports implements OnInit {
+  protected readonly permissions=inject(CompanyPermissionsService);
+  protected exportError='';
   private readonly preferences = inject(PreferencesService);
+  private readonly readSnapshot=watchReadPermissions(() => { this.salesReport=null;this.inventoryReport=null;this.cashReport=null;this.cdr.markForCheck(); });
   private readonly route = inject(ActivatedRoute);
   private readonly companyService = inject(CompanyService);
   private readonly productService = inject(ProductService);
@@ -140,7 +145,7 @@ export class ParameterizedReports implements OnInit {
     this.cashReport = null;
   }
 
-  protected generateSalesReport(): void {
+  protected generateSalesReport(after?: () => void, exporting=false): void {
     this.loadingSalesReport = true;
     const normalizeStr = (str: string) =>
       str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
@@ -166,7 +171,7 @@ export class ParameterizedReports implements OnInit {
     const selectedProduct = this.saleFilters.product;
     const productObj = normalizeStr(selectedProduct) === 'todos'
       ? null
-      : this.productsList.find((p) => normalizeStr(p.nombre) === normalizeStr(selectedProduct));
+      : this.productsList.find((p) => normalizeStr(p.nombre ?? '') === normalizeStr(selectedProduct));
     const productId = productObj ? productObj.id_producto : null;
 
     const selectedStaff = this.saleFilters.staff;
@@ -205,8 +210,7 @@ export class ParameterizedReports implements OnInit {
       return this.preferences.formatMoney(v);
     };
 
-    this.apiService
-      .post<any, any>(`/api/reportes/${this.companyId}/ventasparametrizado`, payload)
+    (exporting ? this.apiService.postExport<any,any>(`/api/reportes/${this.companyId}/ventasparametrizado`,payload) : this.apiService.post<any,any>(`/api/reportes/${this.companyId}/ventasparametrizado`,payload))
       .pipe(
         finalize(() => {
           this.loadingSalesReport = false;
@@ -254,14 +258,16 @@ export class ParameterizedReports implements OnInit {
             total: formatCurrency(Number(item.total)),
           })),
         };
+        if(after && this.permissions.hasPermission('report:export')) after();
       },
       error: (err) => {
+        this.salesReport=null;this.exportError=err?.error?.detail??'No se pudo actualizar el reporte.';
         console.error('Error generating sales report:', err);
       },
     });
   }
 
-  protected generateInventoryReport(): void {
+  protected generateInventoryReport(after?: () => void, exporting=false): void {
     this.loadingInventoryReport = true;
     const normalizeStr = (str: string) =>
       str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
@@ -281,7 +287,7 @@ export class ParameterizedReports implements OnInit {
     const selectedProduct = this.inventoryFilters.product;
     const productObj = normalizeStr(selectedProduct) === 'todos'
       ? null
-      : this.productsList.find((p) => normalizeStr(p.nombre) === normalizeStr(selectedProduct));
+      : this.productsList.find((p) => normalizeStr(p.nombre ?? '') === normalizeStr(selectedProduct));
     const productId = productObj ? productObj.id_producto : null;
 
     const selectedCategory = this.inventoryFilters.category;
@@ -313,8 +319,7 @@ export class ParameterizedReports implements OnInit {
       id_categoria_producto: categoryId ? Number(categoryId) : null,
     };
 
-    this.apiService
-      .post<any, any>(`/api/reportes/${this.companyId}/inventarioparametrizado`, payload)
+    (exporting ? this.apiService.postExport<any,any>(`/api/reportes/${this.companyId}/inventarioparametrizado`,payload) : this.apiService.post<any,any>(`/api/reportes/${this.companyId}/inventarioparametrizado`,payload))
       .pipe(
         finalize(() => {
           this.loadingInventoryReport = false;
@@ -362,14 +367,16 @@ export class ParameterizedReports implements OnInit {
             quantity: item.cantidad,
           })),
         };
+        if(after && this.permissions.hasPermission('report:export')) after();
       },
       error: (err) => {
+        this.inventoryReport=null;this.exportError=err?.error?.detail??'No se pudo actualizar el reporte.';
         console.error('Error generating inventory report:', err);
       },
     });
   }
 
-  protected generateCashReport(): void {
+  protected generateCashReport(after?: () => void, exporting=false): void {
     this.loadingCashReport = true;
     const normalizeStr = (str: string) =>
       str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
@@ -427,8 +434,7 @@ export class ParameterizedReports implements OnInit {
       return this.preferences.formatMoney(v);
     };
 
-    this.apiService
-      .post<any, any>(`/api/reportes/${this.companyId}/cajasparametrizado`, payload)
+    (exporting ? this.apiService.postExport<any,any>(`/api/reportes/${this.companyId}/cajasparametrizado`,payload) : this.apiService.post<any,any>(`/api/reportes/${this.companyId}/cajasparametrizado`,payload))
       .pipe(
         finalize(() => {
           this.loadingCashReport = false;
@@ -494,8 +500,10 @@ export class ParameterizedReports implements OnInit {
             amount: formatCurrency(Number(item.monto)),
           })),
         };
+        if(after && this.permissions.hasPermission('report:export')) after();
       },
       error: (err) => {
+        this.cashReport=null;this.exportError=err?.error?.detail??'No se pudo actualizar el reporte.';
         console.error('Error generating cash report:', err);
       },
     });
@@ -669,16 +677,11 @@ export class ParameterizedReports implements OnInit {
   }
 
   protected exportSalesReport(format: 'pdf' | 'excel'): void {
-    console.log('exportSalesReport clicked with format:', format);
-    if (!this.salesReport) {
-      console.warn('exportSalesReport: salesReport data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportSalesReportPdf();
-    } else {
-      this.exportSalesReportExcel();
-    }
+    if(!this.permissions.hasPermission('report:export') || this.loadingSalesReport) return;
+    this.exportError='';
+    this.generateSalesReport(() => {
+      if(format==='pdf') this.exportSalesReportPdf();else this.exportSalesReportExcel();
+    },true);
   }
 
   private exportSalesReportPdf(): void {
@@ -744,16 +747,11 @@ export class ParameterizedReports implements OnInit {
   }
 
   protected exportInventoryReport(format: 'pdf' | 'excel'): void {
-    console.log('exportInventoryReport clicked with format:', format);
-    if (!this.inventoryReport) {
-      console.warn('exportInventoryReport: inventoryReport data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportInventoryReportPdf();
-    } else {
-      this.exportInventoryReportExcel();
-    }
+    if(!this.permissions.hasPermission('report:export') || this.loadingInventoryReport) return;
+    this.exportError='';
+    this.generateInventoryReport(() => {
+      if(format==='pdf') this.exportInventoryReportPdf();else this.exportInventoryReportExcel();
+    },true);
   }
 
   private exportInventoryReportPdf(): void {
@@ -819,16 +817,11 @@ export class ParameterizedReports implements OnInit {
   }
 
   protected exportCashReport(format: 'pdf' | 'excel'): void {
-    console.log('exportCashReport clicked with format:', format);
-    if (!this.cashReport) {
-      console.warn('exportCashReport: cashReport data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportCashReportPdf();
-    } else {
-      this.exportCashReportExcel();
-    }
+    if(!this.permissions.hasPermission('report:export') || this.loadingCashReport) return;
+    this.exportError='';
+    this.generateCashReport(() => {
+      if(format==='pdf') this.exportCashReportPdf();else this.exportCashReportExcel();
+    },true);
   }
 
   private exportCashReportPdf(): void {
@@ -1085,6 +1078,7 @@ export class ParameterizedReports implements OnInit {
   }
 
   private escapeHtml(value: string): string {
+    if(/^[\s\x00-\x1f]*[=+\-@]/.test(value)) value="\'"+value;
     return value
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

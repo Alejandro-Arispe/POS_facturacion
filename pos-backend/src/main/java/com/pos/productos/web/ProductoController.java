@@ -25,11 +25,11 @@ import com.pos.productos.service.ProductoService;
 public class ProductoController {
 
     private final ProductoService productoService;
-    private final ProductImageStorage imageStorage;
+    private final ProductPayloads payloads;
 
-    public ProductoController(ProductoService productoService, ProductImageStorage imageStorage) {
+    public ProductoController(ProductoService productoService, ProductPayloads payloads) {
         this.productoService = productoService;
-        this.imageStorage = imageStorage;
+        this.payloads = payloads;
     }
 
     @GetMapping("/categorias")
@@ -70,26 +70,32 @@ public class ProductoController {
     }
 
     @GetMapping({"", "/"})
-    public List<ProductoDtos.ProductoResponse> listar() {
+    public List<Map<String,Object>> listar() {
         return productoService.listarProductos(SecurityUtils.currentUser());
     }
 
     @GetMapping("/{idProducto}")
-    public ProductoDtos.ProductoResponse obtener(@PathVariable Integer idProducto) {
+    public Map<String,Object> obtener(@PathVariable Integer idProducto) {
         return productoService.obtenerProducto(SecurityUtils.currentUser(), idProducto);
     }
 
     @PutMapping("/{idProducto}")
-    public ProductoDtos.ProductoResponse actualizar(
+    public Map<String,Object> actualizar(
             @PathVariable Integer idProducto, @RequestBody ProductoDtos.ProductoUpdate datos) {
         return productoService.actualizarProducto(SecurityUtils.currentUser(), idProducto, datos);
     }
 
     @PutMapping("/{idProducto}/imagen")
-    public ProductoDtos.ProductoResponse imagen(
+    public Map<String,Object> imagen(
             @PathVariable Integer idProducto, @RequestParam("imagen") MultipartFile imagen) {
-        String path = imageStorage.save(imagen);
-        return productoService.actualizarImagen(SecurityUtils.currentUser(), idProducto, path);
+        return productoService.actualizarImagen(SecurityUtils.currentUser(), idProducto, imagen);
+    }
+
+    @PutMapping("/{idProducto}/con-imagen")
+    public Map<String,Object> actualizarConImagen(@PathVariable Integer idProducto,
+            org.springframework.web.multipart.MultipartHttpServletRequest request) {
+        return productoService.actualizarConImagen(SecurityUtils.currentUser(),idProducto,
+                payloads.parse(request,ProductoDtos.ProductoUpdate.class),request.getFile("imagen"));
     }
 
     @DeleteMapping("/{idProducto}")

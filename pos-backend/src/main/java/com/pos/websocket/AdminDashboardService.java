@@ -27,6 +27,7 @@ import jakarta.persistence.PersistenceContext;
 public class AdminDashboardService {
 
     private final EmpresaRepository empresaRepository;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
     private final SucursalRepository sucursalRepository;
     private final StockRepository stockRepository;
 
@@ -34,16 +35,18 @@ public class AdminDashboardService {
     private EntityManager entityManager;
 
     public AdminDashboardService(
-            EmpresaRepository empresaRepository,
+            EmpresaRepository empresaRepository, com.pos.common.access.DataReadPolicy dataPolicy,
             SucursalRepository sucursalRepository,
             StockRepository stockRepository) {
-        this.empresaRepository = empresaRepository;
+        this.empresaRepository = empresaRepository; this.dataPolicy=dataPolicy;
         this.sucursalRepository = sucursalRepository;
         this.stockRepository = stockRepository;
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> calcular(Integer idEmpresa, Integer idSucursal) {
+    public Map<String, Object> calcular(com.pos.usuarios.domain.Usuario user,Integer idEmpresa, Integer idSucursal) {
+        var scope=dataPolicy.require(user,idEmpresa,idSucursal,"dashboard:read","sale:read","inventory:read","cash_register:read");
+        dataPolicy.productFields(scope,"nombre");
         Empresa empresa = empresaRepository.findById(idEmpresa).orElse(null);
         if (empresa == null) {
             return Map.of("error", "Empresa no encontrada.", "id_empresa", idEmpresa);
@@ -83,7 +86,7 @@ public class AdminDashboardService {
                     .getSingleResult();
         }
 
-        List<Sucursal> sucursales = sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa);
+        List<Sucursal> sucursales = sucursalRepository.findAsignadasAUsuario(idEmpresa,user.getIdUsuario());
         int bajo = 0;
         int agotados = 0;
         for (Sucursal sucursal : sucursales) {
@@ -91,6 +94,7 @@ public class AdminDashboardService {
                 continue;
             }
             for (Stock stock : stockRepository.findByIdSucursal(sucursal.getIdSucursal())) {
+                if(stock.getProducto()==null || !idEmpresa.equals(stock.getProducto().getIdEmpresa())) continue;
                 if (stock.getCantidad() == null || stock.getCantidad() <= 0) {
                     agotados++;
                 } else if (stock.getStockMinimo() != null && stock.getCantidad() < stock.getStockMinimo()) {

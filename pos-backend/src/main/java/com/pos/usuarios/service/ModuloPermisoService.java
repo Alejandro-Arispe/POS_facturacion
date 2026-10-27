@@ -36,12 +36,12 @@ public class ModuloPermisoService {
 
         Map<Integer, List<PermisoSimpleResponse>> porModulo = new LinkedHashMap<>();
         for (Permiso permiso : permisos) {
-            if (permiso.getModulo() == null) {
+            if (permiso.getModulo() == null || !Boolean.TRUE.equals(permiso.getActivo()) || permiso.getCodigoCanonico()==null) {
                 continue;
             }
             porModulo
                     .computeIfAbsent(permiso.getModulo().getIdModulo(), key -> new ArrayList<>())
-                    .add(new PermisoSimpleResponse(permiso.getIdPermiso(), permiso.getCodigo(), permiso.getNombre()));
+                    .add(PermisoSimpleResponse.from(permiso));
         }
 
         List<PermisosPorModuloResponse> response = new ArrayList<>();
