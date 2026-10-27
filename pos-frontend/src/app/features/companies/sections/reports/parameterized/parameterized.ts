@@ -58,8 +58,7 @@ export class ParameterizedReports implements OnInit {
   private cashMovementTypesList: CashRegisterMovementType[] = [];
 
   protected saleFilters = {
-    startDate: '01/05/2026',
-    endDate: '31/05/2026',
+    ...this.defaultDateRange(),
     branch: 'Todas',
     saleType: 'Todas',
     paymentMethod: 'Todos',
@@ -71,8 +70,7 @@ export class ParameterizedReports implements OnInit {
   protected loadingSalesReport = false;
 
   protected inventoryFilters = {
-    startDate: '01/05/2026',
-    endDate: '31/05/2026',
+    ...this.defaultDateRange(),
     branch: 'Todas',
     movementType: 'Todos',
     product: 'Todos',
@@ -83,8 +81,7 @@ export class ParameterizedReports implements OnInit {
   protected loadingInventoryReport = false;
 
   protected cashFilters = {
-    startDate: '01/05/2026',
-    endDate: '31/05/2026',
+    ...this.defaultDateRange(),
     branch: 'Todas',
     cash: 'Todas',
     movementType: 'Todos',
@@ -105,8 +102,7 @@ export class ParameterizedReports implements OnInit {
 
   protected clearSaleFilters(): void {
     this.saleFilters = {
-      startDate: '01/05/2026',
-      endDate: '31/05/2026',
+      ...this.defaultDateRange(),
       branch: 'Todas',
       saleType: 'Todas',
       paymentMethod: 'Todos',
@@ -118,8 +114,7 @@ export class ParameterizedReports implements OnInit {
 
   protected clearInventoryFilters(): void {
     this.inventoryFilters = {
-      startDate: '01/05/2026',
-      endDate: '31/05/2026',
+      ...this.defaultDateRange(),
       branch: 'Todas',
       movementType: 'Todos',
       product: 'Todos',
@@ -130,8 +125,7 @@ export class ParameterizedReports implements OnInit {
 
   protected clearCashFilters(): void {
     this.cashFilters = {
-      startDate: '01/05/2026',
-      endDate: '31/05/2026',
+      ...this.defaultDateRange(),
       branch: 'Todas',
       cash: 'Todas',
       movementType: 'Todos',
@@ -215,35 +209,15 @@ export class ParameterizedReports implements OnInit {
       )
       .subscribe({
       next: (response) => {
-        const totalSalesObj = response.resumen_gerencial?.find(
-          (r: any) =>
-            r.indicador?.toLowerCase().includes('total de ventas') ||
-            r.indicador?.toLowerCase().includes('ventas realizadas')
-        );
-        const totalSales = totalSalesObj ? totalSalesObj.valor : 0;
-
-        const totalAmountObj = response.resumen_gerencial?.find(
-          (r: any) =>
-            r.indicador?.toLowerCase().includes('monto') ||
-            r.indicador?.toLowerCase().includes('total vendido')
-        );
-        const totalAmountVal = totalAmountObj ? totalAmountObj.valor : 0;
-        const totalAmount = formatCurrency(totalAmountVal);
-
-        const totalProductsObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('productos')
-        );
-        const totalProducts = totalProductsObj ? totalProductsObj.valor : 0;
-
         this.salesReport = {
-          company: response.empresa || 'Supermercado La Estrella',
+          company: response.empresa ?? '',
           generatedAt: response.fecha_generacion,
-          filters: this.saleFilters,
-          summary: {
-            totalSales,
-            totalAmount,
-            totalProducts,
-          },
+          filters: { ...this.saleFilters },
+          summaryItems: [
+            { label: 'Total de ventas realizadas', value: this.indicatorValue(response, 'cantidad_ventas') },
+            { label: 'Monto total vendido', value: formatCurrency(this.indicatorValue(response, 'monto_total')) },
+            { label: 'Productos vendidos (unidades)', value: this.indicatorValue(response, 'productos_vendidos') },
+          ],
           details: (response.detalle_analitico || []).map((item: any) => ({
             nro: item.numero_venta,
             datetime: item.fecha_hora,
@@ -323,39 +297,22 @@ export class ParameterizedReports implements OnInit {
       )
       .subscribe({
       next: (response) => {
-        const totalMovementsObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('movimientos')
-        );
-        const totalMovements = totalMovementsObj ? totalMovementsObj.valor : 0;
-
-        const availableStockObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('disponible')
-        );
-        const availableStock = availableStockObj ? availableStockObj.valor : 0;
-
-        const lowStockObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('bajo')
-        );
-        const lowStock = lowStockObj ? lowStockObj.valor : 0;
-
-        const outOfStockObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('agotados')
-        );
-        const outOfStock = outOfStockObj ? outOfStockObj.valor : 0;
-
         this.inventoryReport = {
-          company: response.empresa || 'Supermercado La Estrella',
+          company: response.empresa ?? '',
           generatedAt: response.fecha_generacion,
-          filters: this.inventoryFilters,
-          summary: {
-            totalMovements,
-            availableStock,
-            lowStock,
-            outOfStock,
-          },
+          filters: { ...this.inventoryFilters },
+          summaryItems: [
+            { label: 'Movimientos registrados', value: this.indicatorValue(response, 'total_movimientos') },
+            { label: 'Unidades que entraron', value: this.indicatorValue(response, 'total_entradas') },
+            { label: 'Unidades que salieron', value: this.indicatorValue(response, 'total_salidas') },
+            { label: 'Stock disponible actual (unidades)', value: this.indicatorValue(response, 'stock_disponible') },
+            { label: 'Productos con stock bajo', value: this.indicatorValue(response, 'productos_bajo_stock') },
+            { label: 'Productos agotados', value: this.indicatorValue(response, 'productos_agotados') },
+          ],
           details: (response.detalle_analitico || []).map((item: any) => ({
             nro: item.numero_movimiento,
             datetime: item.fecha_hora,
+            branch: item.sucursal,
             product: item.producto,
             category: item.categoria,
             type: item.tipo,
@@ -437,54 +394,22 @@ export class ParameterizedReports implements OnInit {
       )
       .subscribe({
       next: (response) => {
-        const totalSessionsObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('sesiones de caja')
-        );
-        const totalSessions = totalSessionsObj ? totalSessionsObj.valor : 0;
-
-        const openSessionsObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('abiertas')
-        );
-        const openSessions = openSessionsObj ? openSessionsObj.valor : 0;
-
-        const closedSessionsObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('cerradas')
-        );
-        const closedSessions = closedSessionsObj ? closedSessionsObj.valor : 0;
-
-        const totalOpeningAmountObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('aperturas')
-        );
-        const totalOpeningAmount = totalOpeningAmountObj ? formatCurrency(totalOpeningAmountObj.valor) : formatCurrency(0);
-
-        const expectedTotalAmountObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('esperado')
-        );
-        const expectedTotalAmount = expectedTotalAmountObj ? formatCurrency(expectedTotalAmountObj.valor) : formatCurrency(0);
-
-        const declaredTotalAmountObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('declarado')
-        );
-        const declaredTotalAmount = declaredTotalAmountObj ? formatCurrency(declaredTotalAmountObj.valor) : formatCurrency(0);
-
-        const totalDifferenceObj = response.resumen_gerencial?.find(
-          (r: any) => r.indicador?.toLowerCase().includes('diferencia')
-        );
-        const totalDifference = totalDifferenceObj ? formatCurrency(totalDifferenceObj.valor) : formatCurrency(0);
-
         this.cashReport = {
-          company: response.empresa || 'Supermercado La Estrella',
+          company: response.empresa ?? '',
           generatedAt: response.fecha_generacion,
-          filters: this.cashFilters,
-          summary: {
-            totalSessions,
-            openSessions,
-            closedSessions,
-            totalOpeningAmount,
-            expectedTotalAmount,
-            declaredTotalAmount,
-            totalDifference,
-          },
+          filters: { ...this.cashFilters },
+          summaryItems: [
+            { label: 'Sesiones de caja registradas', value: this.indicatorValue(response, 'total_sesiones') },
+            { label: 'Sesiones abiertas', value: this.indicatorValue(response, 'sesiones_abiertas') },
+            { label: 'Sesiones cerradas', value: this.indicatorValue(response, 'sesiones_cerradas') },
+            { label: 'Monto total de aperturas', value: formatCurrency(this.indicatorValue(response, 'monto_aperturas')) },
+            { label: 'Monto total esperado al cierre', value: formatCurrency(this.indicatorValue(response, 'monto_esperado')) },
+            { label: 'Monto total declarado al cierre', value: formatCurrency(this.indicatorValue(response, 'monto_declarado')) },
+            { label: 'Diferencia total', value: formatCurrency(this.indicatorValue(response, 'diferencia')) },
+            { label: 'Ingresos de caja', value: formatCurrency(this.indicatorValue(response, 'total_ingresos')) },
+            { label: 'Egresos de caja', value: formatCurrency(this.indicatorValue(response, 'total_egresos')) },
+            { label: 'Flujo neto', value: formatCurrency(this.indicatorValue(response, 'flujo_neto')) },
+          ],
           details: (response.detalle_analitico || []).map((item: any) => ({
             nro: item.numero_movimiento,
             datetime: item.fecha_hora,
@@ -499,6 +424,22 @@ export class ParameterizedReports implements OnInit {
         console.error('Error generating cash report:', err);
       },
     });
+  }
+
+  /** Lee un indicador del resumen gerencial por su clave estable (no por el texto de la etiqueta). */
+  private indicatorValue(response: any, key: string): number {
+    const item = (response?.resumen_gerencial ?? []).find((indicator: any) => indicator?.clave === key);
+    const value = Number(item?.valor ?? 0);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  /** Rango por defecto de los filtros: desde el primer dia del mes actual hasta hoy (dd/mm/aaaa). */
+  private defaultDateRange(): { startDate: string; endDate: string } {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const format = (date: Date) =>
+      `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    return { startDate: format(firstDay), endDate: format(today) };
   }
 
   private refreshCurrentReportResult(): void {
@@ -698,9 +639,7 @@ export class ParameterizedReports implements OnInit {
       `- Personal: ${r.filters.staff}`,
       '',
       'Resumen gerencial:',
-      `- Total de ventas realizadas: ${r.summary.totalSales}`,
-      `- Monto total vendido: ${r.summary.totalAmount}`,
-      `- Productos vendidos: ${r.summary.totalProducts}`,
+      ...r.summaryItems.map((item: any) => `- ${item.label}: ${item.value}`),
       '',
       'Detalle Analitico de Ventas:',
       'N. Venta | Fecha y hora | Personal | Tipo | Metodo pago | Productos | Total',
@@ -731,11 +670,7 @@ export class ParameterizedReports implements OnInit {
       </tr>`;
     }).join('');
 
-    const worksheet = this.buildExcelHtml('Reporte de Ventas Parametrizado', r, headerCells, bodyRows, [
-      { label: 'Total de ventas realizadas', value: r.summary.totalSales },
-      { label: 'Monto total vendido', value: r.summary.totalAmount },
-      { label: 'Productos vendidos', value: r.summary.totalProducts }
-    ]);
+    const worksheet = this.buildExcelHtml('Reporte de Ventas Parametrizado', r, headerCells, bodyRows, r.summaryItems);
 
     this.downloadBlob(
       new Blob([worksheet], { type: 'application/vnd.ms-excel;charset=utf-8' }),
@@ -772,18 +707,15 @@ export class ParameterizedReports implements OnInit {
       `- Categoria: ${r.filters.category}`,
       '',
       'Resumen gerencial:',
-      `- Movimientos registrados: ${r.summary.totalMovements}`,
-      `- Productos con stock disponible: ${r.summary.availableStock}`,
-      `- Productos con stock bajo: ${r.summary.lowStock}`,
-      `- Productos agotados: ${r.summary.outOfStock}`,
+      ...r.summaryItems.map((item: any) => `- ${item.label}: ${item.value}`),
       '',
       'Detalle Analitico de Movimientos de Inventario:',
-      'N. Movimiento | Fecha y hora | Producto | Categoria | Tipo | Cantidad',
+      'N. Movimiento | Fecha y hora | Sucursal | Producto | Categoria | Tipo | Cantidad',
       '--------------------------------------------------------------------------------------------'
     ];
 
     r.details.forEach((item: any) => {
-      lines.push(`${item.nro} | ${item.datetime} | ${item.product} | ${item.category} | ${item.type} | ${item.quantity}`);
+      lines.push(`${item.nro} | ${item.datetime} | ${item.branch} | ${item.product} | ${item.category} | ${item.type} | ${item.quantity}`);
     });
 
     const pdf = this.createPdfDocument(lines);
@@ -792,12 +724,13 @@ export class ParameterizedReports implements OnInit {
 
   private exportInventoryReportExcel(): void {
     const r = this.inventoryReport;
-    const headers = ['N. movimiento', 'Fecha y hora', 'Producto', 'Categoria', 'Tipo', 'Cantidad'];
+    const headers = ['N. movimiento', 'Fecha y hora', 'Sucursal', 'Producto', 'Categoria', 'Tipo', 'Cantidad'];
     const headerCells = headers.map(h => `<th>${this.escapeHtml(h)}</th>`).join('');
     const bodyRows = r.details.map((item: any) => {
       return `<tr>
         <td>${this.escapeHtml(String(item.nro))}</td>
         <td>${this.escapeHtml(String(item.datetime))}</td>
+        <td>${this.escapeHtml(String(item.branch))}</td>
         <td>${this.escapeHtml(String(item.product))}</td>
         <td>${this.escapeHtml(String(item.category))}</td>
         <td>${this.escapeHtml(String(item.type))}</td>
@@ -805,12 +738,7 @@ export class ParameterizedReports implements OnInit {
       </tr>`;
     }).join('');
 
-    const worksheet = this.buildExcelHtml('Reporte de Inventario Parametrizado', r, headerCells, bodyRows, [
-      { label: 'Movimientos registrados', value: r.summary.totalMovements },
-      { label: 'Productos con stock disponible', value: r.summary.availableStock },
-      { label: 'Productos con stock bajo', value: r.summary.lowStock },
-      { label: 'Productos agotados', value: r.summary.outOfStock }
-    ]);
+    const worksheet = this.buildExcelHtml('Reporte de Inventario Parametrizado', r, headerCells, bodyRows, r.summaryItems);
 
     this.downloadBlob(
       new Blob([worksheet], { type: 'application/vnd.ms-excel;charset=utf-8' }),
@@ -847,13 +775,7 @@ export class ParameterizedReports implements OnInit {
       `- Estado de sesion: ${r.filters.sessionStatus}`,
       '',
       'Resumen gerencial:',
-      `- Sesiones de caja registradas: ${r.summary.totalSessions}`,
-      `- Sesiones abiertas: ${r.summary.openSessions}`,
-      `- Sesiones cerradas: ${r.summary.closedSessions}`,
-      `- Monto total de aperturas: ${r.summary.totalOpeningAmount}`,
-      `- Monto total esperado al cierre: ${r.summary.expectedTotalAmount}`,
-      `- Monto total declarado al cierre: ${r.summary.declaredTotalAmount}`,
-      `- Diferencia total: ${r.summary.totalDifference}`,
+      ...r.summaryItems.map((item: any) => `- ${item.label}: ${item.value}`),
       '',
       'Detalle Analitico de Movimientos de Caja:',
       'N. Movimiento | Fecha y hora | Caja | Tipo | Concepto | Monto',
@@ -883,15 +805,7 @@ export class ParameterizedReports implements OnInit {
       </tr>`;
     }).join('');
 
-    const worksheet = this.buildExcelHtml('Reporte de Cajas Parametrizado', r, headerCells, bodyRows, [
-      { label: 'Sesiones de caja registradas', value: r.summary.totalSessions },
-      { label: 'Sesiones abiertas', value: r.summary.openSessions },
-      { label: 'Sesiones cerradas', value: r.summary.closedSessions },
-      { label: 'Monto total de aperturas', value: r.summary.totalOpeningAmount },
-      { label: 'Monto total esperado al cierre', value: r.summary.expectedTotalAmount },
-      { label: 'Monto total declarado al cierre', value: r.summary.declaredTotalAmount },
-      { label: 'Diferencia total', value: r.summary.totalDifference }
-    ]);
+    const worksheet = this.buildExcelHtml('Reporte de Cajas Parametrizado', r, headerCells, bodyRows, r.summaryItems);
 
     this.downloadBlob(
       new Blob([worksheet], { type: 'application/vnd.ms-excel;charset=utf-8' }),

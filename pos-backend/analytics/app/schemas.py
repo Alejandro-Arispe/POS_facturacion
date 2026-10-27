@@ -19,6 +19,14 @@ class SaleLine(BaseModel):
     payment_method: str | None = None
 
 
+class Payment(BaseModel):
+    """Lo pagado con un metodo dentro de una venta (una venta puede tener varios pagos)."""
+
+    sale_id: int
+    method: str | None = None
+    amount: float
+
+
 class StockItem(BaseModel):
     product: str
     branch: str | None = None
@@ -33,6 +41,7 @@ class AnalyticsRequest(BaseModel):
     end: date
     forecast_days: int = Field(default=14, ge=1, le=60)
     lines: list[SaleLine] = Field(default_factory=list)
+    payments: list[Payment] = Field(default_factory=list)
     stock: list[StockItem] = Field(default_factory=list)
 
 

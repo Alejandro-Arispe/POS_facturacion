@@ -38,12 +38,7 @@ public class AnaliticaService {
 			       cp.nombre as category,
 			       d.cantidad as quantity,
 			       d.total as line_total,
-			       v.total as sale_total,
-			       (select mp.nombre from venta_pago vp
-			          join metodo_pago mp on mp.id_metodo_pago = vp.id_metodo_pago
-			         where vp.id_venta = v.id_venta
-			         order by vp.monto desc
-			         limit 1) as payment_method
+			       v.total as sale_total
 			  from detalle_venta d
 			  join venta v on v.id_venta = d.id_venta
 			  join caja_sesion cs on cs.id_caja_sesion = v.id_caja_sesion
@@ -52,6 +47,21 @@ public class AnaliticaService {
 			  join producto p on p.id_producto = d.id_producto
 			  left join subcategoria_producto sp on sp.id_subcategoria = p.id_subcategoria
 			  left join categoria_producto cp on cp.id_categoria_producto = sp.id_categoria_producto
+			 where s.id_empresa = :idEmpresa
+			   and v.fecha >= :desde
+			   and v.fecha < :hasta
+			   and upper(coalesce(v.estado, '')) not in ('ANULADA', 'CANCELADA')
+			""";
+
+	/** Pagos de cada venta: el reparto por metodo de pago usa lo pagado con cada uno (igual que los reportes). */
+	private static final String SQL_PAGOS = """
+			select v.id_venta as sale_id, mp.nombre as method, vp.monto as amount
+			  from venta_pago vp
+			  join metodo_pago mp on mp.id_metodo_pago = vp.id_metodo_pago
+			  join venta v on v.id_venta = vp.id_venta
+			  join caja_sesion cs on cs.id_caja_sesion = v.id_caja_sesion
+			  join caja ca on ca.id_caja = cs.id_caja
+			  join sucursal s on s.id_sucursal = ca.id_sucursal
 			 where s.id_empresa = :idEmpresa
 			   and v.fecha >= :desde
 			   and v.fecha < :hasta
@@ -103,11 +113,13 @@ public class AnaliticaService {
 				.addValue("hasta", UtcTimestamps.parametro(fin.plusDays(1).atStartOfDay()));
 		String sqlLineas = SQL_LINEAS;
 		String sqlStock = SQL_STOCK;
+		String sqlPagos = SQL_PAGOS;
 		if (idSucursal != null) {
 			empresaAccess.requireSucursal(SecurityUtils.currentUser(), idEmpresa, idSucursal);
 			params.addValue("idSucursal", idSucursal);
 			sqlLineas += " and s.id_sucursal = :idSucursal";
 			sqlStock += " and s.id_sucursal = :idSucursal";
+			sqlPagos += " and s.id_sucursal = :idSucursal";
 		}
 
 		List<Map<String, Object>> lineas = jdbc.query(sqlLineas, params, (rs, i) -> {
@@ -120,8 +132,14 @@ public class AnaliticaService {
 			linea.put("quantity", rs.getBigDecimal("quantity"));
 			linea.put("line_total", rs.getBigDecimal("line_total"));
 			linea.put("sale_total", rs.getBigDecimal("sale_total"));
-			linea.put("payment_method", rs.getString("payment_method"));
 			return linea;
+		});
+		List<Map<String, Object>> pagos = jdbc.query(sqlPagos, params, (rs, i) -> {
+			Map<String, Object> pago = new LinkedHashMap<>();
+			pago.put("sale_id", rs.getInt("sale_id"));
+			pago.put("method", rs.getString("method"));
+			pago.put("amount", rs.getBigDecimal("amount"));
+			return pago;
 		});
 		List<Map<String, Object>> stock = jdbc.query(sqlStock, params, (rs, i) -> {
 			Map<String, Object> item = new LinkedHashMap<>();
@@ -143,6 +161,7 @@ public class AnaliticaService {
 		solicitud.put("end", fin.toString());
 		solicitud.put("forecast_days", 14);
 		solicitud.put("lines", lineas);
+		solicitud.put("payments", pagos);
 		solicitud.put("stock", stock);
 
 		try {
