@@ -377,14 +377,7 @@ public class CajaService {
 	}
 
 	private BigDecimal signoTipo(String nombreTipo) {
-		String nombre = nombreTipo == null ? "" : nombreTipo.strip().toUpperCase();
-		if ("EGRESO".equals(nombre) || "AJUSTE_NEGATIVO".equals(nombre)) {
-			return new BigDecimal("-1");
-		}
-		if ("CIERRE".equals(nombre)) {
-			return BigDecimal.ZERO;
-		}
-		return BigDecimal.ONE;
+		return BigDecimal.valueOf(SignoMovimientoCaja.signo(nombreTipo));
 	}
 
 	private CajaResponse toCajaResponse(Caja caja) {

@@ -75,6 +75,40 @@ def _group(df: pd.DataFrame, column: str, total: float) -> list[GroupStat]:
     ]
 
 
+CREDIT_LABEL = "Crédito (pendiente de cobro)"
+
+
+def _payment_methods(req: AnalyticsRequest, sales: pd.DataFrame, total: float) -> list[GroupStat]:
+    """Reparte cada venta segun lo pagado con cada metodo; las ventas sin pagos son ventas a credito."""
+    if sales.empty:
+        return []
+    sale_ids = set(sales["sale_id"])
+    rows: list[dict] = []
+    paid_ids: set[int] = set()
+    for p in req.payments:
+        if p.sale_id in sale_ids:
+            rows.append({"label": p.method or "Sin dato", "revenue": p.amount, "sale_id": p.sale_id})
+            paid_ids.add(p.sale_id)
+    unpaid = sales[~sales["sale_id"].isin(paid_ids)]
+    for _, sale in unpaid.iterrows():
+        rows.append({"label": CREDIT_LABEL, "revenue": float(sale["sale_total"]), "sale_id": int(sale["sale_id"])})
+    grouped = (
+        pd.DataFrame(rows)
+        .groupby("label")
+        .agg(revenue=("revenue", "sum"), sales=("sale_id", "nunique"))
+        .sort_values("revenue", ascending=False)
+    )
+    return [
+        GroupStat(
+            label=str(label),
+            revenue=round(float(row.revenue), 2),
+            sales=int(row.sales),
+            share_pct=round(float(row.revenue) / total * 100, 1) if total else 0,
+        )
+        for label, row in grouped.iterrows()
+    ]
+
+
 def analyze(req: AnalyticsRequest) -> AnalyticsResponse:
     if not req.lines:
         return _empty_response(req)
@@ -98,7 +132,6 @@ def analyze(req: AnalyticsRequest) -> AnalyticsResponse:
             date=("date", "first"),
             sale_total=("sale_total", "first"),
             branch=("branch", "first"),
-            payment_method=("payment_method", "first"),
             units=("quantity", "sum"),
             items=("product", "count"),
         )
@@ -247,7 +280,7 @@ def analyze(req: AnalyticsRequest) -> AnalyticsResponse:
         products=products,
         categories=categories,
         branches=_group(sales, "branch", revenue),
-        payment_methods=_group(sales, "payment_method", revenue),
+        payment_methods=_payment_methods(req, sales, revenue),
         weekdays=weekdays,
         heatmap=heatmap,
         insights=insights,

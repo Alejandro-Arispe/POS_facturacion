@@ -268,7 +268,7 @@ export class DynamicReports {
     }
 
     if (type === 'booleano') {
-      return value ? 'S�' : 'No';
+      return value ? 'Sí' : 'No';
     }
 
     return String(value);

@@ -169,18 +169,12 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
-                          <td>Total de ventas realizadas</td>
-                          <td class="text-right">{{ salesReport.summary.totalSales }}</td>
-                        </tr>
-                        <tr>
-                          <td>Monto total vendido</td>
-                          <td class="text-right">{{ salesReport.summary.totalAmount }}</td>
-                        </tr>
-                        <tr>
-                          <td>Productos vendidos</td>
-                          <td class="text-right">{{ salesReport.summary.totalProducts }}</td>
-                        </tr>
+                        @for (item of salesReport.summaryItems; track item.label) {
+                          <tr>
+                            <td>{{ item.label }}</td>
+                            <td class="text-right">{{ item.value }}</td>
+                          </tr>
+                        }
                       </tbody>
                     </table>
                   </div>
@@ -335,22 +329,12 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
-                          <td>Movimientos registrados</td>
-                          <td class="text-right">{{ inventoryReport.summary.totalMovements }}</td>
-                        </tr>
-                        <tr>
-                          <td>Productos con stock disponible</td>
-                          <td class="text-right">{{ inventoryReport.summary.availableStock }}</td>
-                        </tr>
-                        <tr>
-                          <td>Productos con stock bajo</td>
-                          <td class="text-right">{{ inventoryReport.summary.lowStock }}</td>
-                        </tr>
-                        <tr>
-                          <td>Productos agotados</td>
-                          <td class="text-right">{{ inventoryReport.summary.outOfStock }}</td>
-                        </tr>
+                        @for (item of inventoryReport.summaryItems; track item.label) {
+                          <tr>
+                            <td>{{ item.label }}</td>
+                            <td class="text-right">{{ item.value }}</td>
+                          </tr>
+                        }
                       </tbody>
                     </table>
                   </div>
@@ -366,6 +350,7 @@
                         <tr>
                           <th>N.º movimiento</th>
                           <th>Fecha y hora</th>
+                          <th>Sucursal</th>
                           <th>Producto</th>
                           <th>Categoría</th>
                           <th>Tipo</th>
@@ -377,6 +362,7 @@
                           <tr>
                             <td>{{ item.nro }}</td>
                             <td>{{ item.datetime }}</td>
+                            <td>{{ item.branch }}</td>
                             <td>{{ item.product }}</td>
                             <td>{{ item.category }}</td>
                             <td>{{ item.type }}</td>
@@ -503,34 +489,12 @@
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
-                          <td>Sesiones de caja registradas</td>
-                          <td class="text-right">{{ cashReport.summary.totalSessions }}</td>
-                        </tr>
-                        <tr>
-                          <td>Sesiones abiertas</td>
-                          <td class="text-right">{{ cashReport.summary.openSessions }}</td>
-                        </tr>
-                        <tr>
-                          <td>Sesiones cerradas</td>
-                          <td class="text-right">{{ cashReport.summary.closedSessions }}</td>
-                        </tr>
-                        <tr>
-                          <td>Monto total de aperturas</td>
-                          <td class="text-right">{{ cashReport.summary.totalOpeningAmount }}</td>
-                        </tr>
-                        <tr>
-                          <td>Monto total esperado al cierre</td>
-                          <td class="text-right">{{ cashReport.summary.expectedTotalAmount }}</td>
-                        </tr>
-                        <tr>
-                          <td>Monto total declarado al cierre</td>
-                          <td class="text-right">{{ cashReport.summary.declaredTotalAmount }}</td>
-                        </tr>
-                        <tr>
-                          <td>Diferencia total</td>
-                          <td class="text-right">{{ cashReport.summary.totalDifference }}</td>
-                        </tr>
+                        @for (item of cashReport.summaryItems; track item.label) {
+                          <tr>
+                            <td>{{ item.label }}</td>
+                            <td class="text-right">{{ item.value }}</td>
+                          </tr>
+                        }
                       </tbody>
                     </table>
                   </div>

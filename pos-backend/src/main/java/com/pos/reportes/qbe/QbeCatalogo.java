@@ -4,6 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.pos.reportes.service.EstadoStock;
+
 /**
  * Fuentes de datos disponibles para la consulta por ejemplo (QBE). Cada campo expone una expresion SQL
  * fija: el usuario solo elige codigos de esta lista, nunca escribe SQL, por lo que no hay inyeccion posible.
@@ -120,8 +122,8 @@ public final class QbeCatalogo {
 						new Campo("stock_minimo", "Stock mínimo", "st.stock_minimo", Tipo.NUMERO),
 						new Campo("stock_maximo", "Stock máximo", "st.stock_maximo", Tipo.NUMERO),
 						new Campo("valor", "Valor del stock", "(st.cantidad * p.precio)", Tipo.NUMERO),
-						new Campo("bajo_minimo", "Bajo el mínimo",
-								"(case when st.cantidad < st.stock_minimo then true else false end)", Tipo.BOOLEANO)),
+						new Campo("bajo_minimo", "Stock bajo o agotado",
+								"(case when " + EstadoStock.ALERTA_SQL + " then true else false end)", Tipo.BOOLEANO)),
 				List.of("sucursal", "producto", "categoria", "cantidad", "valor")));
 
 		registrar(new Fuente(

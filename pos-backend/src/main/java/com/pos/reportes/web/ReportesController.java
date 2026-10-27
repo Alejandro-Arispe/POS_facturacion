@@ -53,25 +53,31 @@ public class ReportesController {
     }
 
     @GetMapping("/{empresaId}/movimientosinventario")
-    public Map<String, Object> movimientosInventario(@PathVariable Integer empresaId) {
-        return reportesService.movimientosInventario(SecurityUtils.currentUser(), empresaId);
+    public Map<String, Object> movimientosInventario(
+            @PathVariable Integer empresaId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
+        return reportesService.movimientosInventario(SecurityUtils.currentUser(), empresaId, desde, hasta);
     }
 
     @GetMapping("/{empresaId}/resumencajas")
-    public Map<String, Object> resumenCajas(@PathVariable Integer empresaId) {
-        return reportesService.resumenCajas(SecurityUtils.currentUser(), empresaId);
+    public Map<String, Object> resumenCajas(
+            @PathVariable Integer empresaId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        return reportesService.resumenCajas(SecurityUtils.currentUser(), empresaId, fecha);
     }
 
     @GetMapping("/{empresaId}/movimientoscaja")
-    public Map<String, Object> movimientosCaja(@PathVariable Integer empresaId) {
-        return reportesService.movimientosCaja(SecurityUtils.currentUser(), empresaId);
+    public Map<String, Object> movimientosCaja(
+            @PathVariable Integer empresaId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        return reportesService.movimientosCaja(SecurityUtils.currentUser(), empresaId, fecha);
     }
 
     @PostMapping({"/{empresaId}/interpretar", "/{empresaId}/interpret"})
     public ReporteDtos.RespuestaInterpretacion interpretar(
             @PathVariable Integer empresaId, @RequestBody ReporteDtos.Solicitud solicitud) {
-        SecurityUtils.currentUser();
-        return reportesService.interpretar(empresaId, solicitud.getPrompt());
+        return reportesService.interpretar(SecurityUtils.currentUser(), empresaId, solicitud.getPrompt());
     }
 
     @PostMapping({"/{empresaId}/ejecutar", "/{empresaId}/run"})
