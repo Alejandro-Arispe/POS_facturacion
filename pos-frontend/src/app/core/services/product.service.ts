@@ -23,14 +23,15 @@ export interface SubcategoriaProducto {
 export interface Producto {
   id_producto: number;
   id_empresa?: number;
-  id_subcategoria: number | null;
+  id_subcategoria?: number | null;
   codigo_barra?: string | null;
-  nombre: string;
+  nombre?: string;
   descripcion?: string | null;
-  unidad_medida: string;
-  precio: number;
+  unidad_medida?: string;
+  precio?: number | null;
+  costo?: number | null;
   imagen?: string | null;
-  activo: boolean;
+  activo?: boolean;
   subcategoria?: SubcategoriaProducto | null;
 }
 
@@ -47,15 +48,7 @@ export interface CrearSubcategoriaRequest {
   activo: boolean;
 }
 
-export interface CrearProductoRequest {
-  id_subcategoria: number;
-  codigo_barra?: string;
-  nombre: string;
-  descripcion?: string;
-  unidad_medida: string;
-  precio: number;
-  activo: boolean;
-}
+export type CrearProductoRequest = import('./product-fields').ProductValues;
 
 export interface ActualizarCategoriaRequest {
   nombre?: string;
@@ -70,15 +63,7 @@ export interface ActualizarSubcategoriaRequest {
   activo?: boolean;
 }
 
-export interface ActualizarProductoRequest {
-  id_subcategoria?: number;
-  codigo_barra?: string;
-  nombre?: string;
-  descripcion?: string;
-  unidad_medida?: string;
-  precio?: number;
-  activo?: boolean;
-}
+export type ActualizarProductoRequest = import('./product-fields').ProductValues;
 
 export interface StockProducto {
   id_stock: number;
@@ -97,12 +82,12 @@ export interface StockSucursalProducto {
   stock_minimo: number;
   stock_maximo: number;
   fecha_actualizacion?: string | null;
-  nombre_producto: string;
+  nombre_producto?: string;
   codigo_barra?: string | null;
-  unidad_medida: string;
-  precio: number;
+  unidad_medida?: string;
+  precio?: number;
   imagen?: string | null;
-  activo: boolean;
+  activo?: boolean;
 }
 
 export interface TipoMovimiento {
@@ -182,7 +167,9 @@ export class ProductService {
   }
 
   obtenerCategoria(idCategoriaProducto: number): Observable<CategoriaProducto> {
-    return this.apiService.get<CategoriaProducto>(`/api/productos/categorias/${idCategoriaProducto}`);
+    return this.apiService.get<CategoriaProducto>(
+      `/api/productos/categorias/${idCategoriaProducto}`,
+    );
   }
 
   actualizarCategoria(
@@ -196,7 +183,9 @@ export class ProductService {
   }
 
   eliminarCategoria(idCategoriaProducto: number): Observable<{ mensaje: string }> {
-    return this.apiService.delete<{ mensaje: string }>(`/api/productos/categorias/${idCategoriaProducto}`);
+    return this.apiService.delete<{ mensaje: string }>(
+      `/api/productos/categorias/${idCategoriaProducto}`,
+    );
   }
 
   getSubcategorias(idEmpresa: string): Observable<SubcategoriaProducto[]> {
@@ -211,7 +200,9 @@ export class ProductService {
   }
 
   obtenerSubcategoria(idSubcategoria: number): Observable<SubcategoriaProducto> {
-    return this.apiService.get<SubcategoriaProducto>(`/api/productos/subcategorias/${idSubcategoria}`);
+    return this.apiService.get<SubcategoriaProducto>(
+      `/api/productos/subcategorias/${idSubcategoria}`,
+    );
   }
 
   actualizarSubcategoria(
@@ -224,12 +215,22 @@ export class ProductService {
     );
   }
 
+  exportarProductos(company: string, columnas: string[], ids: number[]): Observable<string> {
+    return this.apiService.postText(`/api/empresas/${company}/productos/exportar`, {
+      columnas,
+      ids,
+    });
+  }
+
   getProductos(idEmpresa: string): Observable<Producto[]> {
     return this.apiService.get<Producto[]>(`/api/empresas/${idEmpresa}/productos`);
   }
 
   crearProducto(idEmpresa: string, payload: CrearProductoRequest): Observable<Producto> {
-    return this.apiService.post<Producto, CrearProductoRequest>(`/api/empresas/${idEmpresa}/productos`, payload);
+    return this.apiService.post<Producto, CrearProductoRequest>(
+      `/api/empresas/${idEmpresa}/productos`,
+      payload,
+    );
   }
 
   obtenerProducto(idProducto: number): Observable<Producto> {
@@ -253,20 +254,34 @@ export class ProductService {
     return this.apiService.put<Producto, FormData>(`/api/productos/${idProducto}/imagen`, formData);
   }
 
-  crearProductoConImagen(idEmpresa: string, payload: CrearProductoRequest, imagen: File): Observable<Producto> {
-    const formData = new FormData();
-    formData.append('id_subcategoria', String(payload.id_subcategoria));
-    formData.append('codigo_barra', payload.codigo_barra ?? '');
-    formData.append('nombre', payload.nombre);
-    formData.append('descripcion', payload.descripcion ?? '');
-    formData.append('unidad_medida', payload.unidad_medida);
-    formData.append('precio', String(payload.precio));
-    formData.append('activo', String(payload.activo));
-    formData.append('imagen', imagen);
-
-    return this.apiService.post<Producto, FormData>(`/api/empresas/${idEmpresa}/productos/con-imagen`, formData);
+  crearProductoConImagen(
+    idEmpresa: string,
+    payload: CrearProductoRequest,
+    imagen: File,
+  ): Observable<Producto> {
+    return this.apiService.post<Producto, FormData>(
+      `/api/empresas/${idEmpresa}/productos/con-imagen`,
+      this.productFormData(payload, imagen),
+    );
   }
 
+  actualizarProductoConImagen(
+    id: number,
+    payload: ActualizarProductoRequest,
+    imagen: File,
+  ): Observable<Producto> {
+    return this.apiService.put<Producto, FormData>(
+      `/api/productos/${id}/con-imagen`,
+      this.productFormData(payload, imagen),
+    );
+  }
+
+  private productFormData(payload: CrearProductoRequest, image: File): FormData {
+    const form = new FormData();
+    form.append('datos', JSON.stringify(payload));
+    form.append('imagen', image);
+    return form;
+  }
 
   actualizarStock(idProducto: number, payload: ActualizarStockRequest): Observable<StockProducto> {
     return this.apiService.put<StockProducto, ActualizarStockRequest>(
@@ -309,7 +324,10 @@ export class ProductService {
     return this.apiService.get<MetodoPago[]>('/api/ventas/metodos-pago');
   }
 
-  getMovimientosSucursal(idEmpresa: string, idSucursal: string): Observable<MovimientoInventario[]> {
+  getMovimientosSucursal(
+    idEmpresa: string,
+    idSucursal: string,
+  ): Observable<MovimientoInventario[]> {
     return this.apiService.get<MovimientoInventario[]>(
       `/api/inventario/empresas/${idEmpresa}/sucursales/${idSucursal}/movimientos`,
     );
@@ -318,7 +336,12 @@ export class ProductService {
   crearMovimientoProducto(
     idEmpresa: string,
     idSucursal: string,
-    payload: { id_producto: number; id_tipo_movimiento: number; cantidad: number; observacion?: string },
+    payload: {
+      id_producto: number;
+      id_tipo_movimiento: number;
+      cantidad: number;
+      observacion?: string;
+    },
   ): Observable<any> {
     return this.apiService.post<any, typeof payload>(
       `/api/inventario/empresas/${idEmpresa}/sucursales/${idSucursal}/movimientos`,
@@ -329,5 +352,4 @@ export class ProductService {
   getResumenInventario(): Observable<any> {
     return this.apiService.get<any>('/api/inventario/estado');
   }
-
 }

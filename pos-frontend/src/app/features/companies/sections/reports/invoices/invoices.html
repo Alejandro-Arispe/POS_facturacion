@@ -53,7 +53,7 @@
                       <div class="file-actions">
                         <a
                           class="file-button xml"
-                          [href]="fileUrl(invoice.xml_generado)"
+                          href="#" (click)="$event.preventDefault(); downloadInvoice(invoice, 'xml')"
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Abrir XML"
@@ -63,7 +63,7 @@
                         </a>
                         <a
                           class="file-button pdf"
-                          [href]="fileUrl(invoice.pdf_generado)"
+                          href="#" (click)="$event.preventDefault(); downloadInvoice(invoice, 'pdf')"
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Abrir PDF"

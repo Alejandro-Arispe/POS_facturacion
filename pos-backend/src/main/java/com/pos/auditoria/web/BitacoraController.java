@@ -37,7 +37,7 @@ public class BitacoraController {
 			@RequestParam(required = false) String usuario,
 			@RequestParam(required = false) Integer page,
 			@RequestParam(required = false) Integer size) {
-		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "BITACORA_VER");
+		empresaAccess.requireCompanyPermission(SecurityUtils.currentUser(), idEmpresa, "audit:read");
 		return bitacoraService.buscar(
 				new BitacoraDtos.Filtro(idEmpresa, desde, hasta, accion, modulo, usuario, page, size), idEmpresa);
 	}

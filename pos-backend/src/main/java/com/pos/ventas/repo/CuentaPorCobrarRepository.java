@@ -20,4 +20,7 @@ public interface CuentaPorCobrarRepository extends JpaRepository<CuentaPorCobrar
 
     @Query("SELECT c.venta.idCliente, COALESCE(SUM(c.saldoPendiente), 0) FROM CuentaPorCobrar c WHERE UPPER(c.estado) <> 'PAGADA' AND c.venta.idCliente IS NOT NULL GROUP BY c.venta.idCliente")
     List<Object[]> findSaldosPendientesPorCliente();
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select e from CuentaPorCobrar e where e.idCxc = :id")
+    java.util.Optional<CuentaPorCobrar> findForUpdate(@org.springframework.data.repository.query.Param("id") Integer id);
 }

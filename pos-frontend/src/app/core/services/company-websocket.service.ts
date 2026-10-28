@@ -1,3 +1,4 @@
+import { AuthService } from './auth.service';
 import { Injectable, inject } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -8,6 +9,7 @@ import { environments } from '../../environments/environments';
   providedIn: 'root',
 })
 export class CompanyWebSocketService {
+  private readonly auth=inject(AuthService);
   private readonly router = inject(Router);
   private socket: WebSocket | null = null;
   private currentCompanyId: string | null = null;
@@ -56,14 +58,17 @@ export class CompanyWebSocketService {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        this.connection$.next('connected');
+        const token=this.auth.getAccessToken();
+        if(!token) {this.socket?.close();return;}
+        this.socket?.send(JSON.stringify({tipo:'autenticar',token}));
         console.log(`WebSocket connected to company ${companyId}`);
       };
 
       this.socket.onmessage = (event) => {
-        console.log(`WebSocket message received for company ${companyId}:`, event.data);
+
         try {
           const parsed = JSON.parse(event.data);
+          if(parsed.tipo==='dashboard') this.connection$.next('connected');
           this.messages$.next(parsed);
         } catch (err) {
           console.error('Error parsing WebSocket message:', err);
@@ -77,6 +82,7 @@ export class CompanyWebSocketService {
 
       this.socket.onclose = (event) => {
         this.connection$.next('error');
+        this.messages$.next(null);
         console.log(
           `WebSocket closed for company ${companyId}. Code: ${event.code}, Reason: ${event.reason}`,
         );

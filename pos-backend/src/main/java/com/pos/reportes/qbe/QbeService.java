@@ -35,31 +35,32 @@ public class QbeService {
 
 	private final NamedParameterJdbcTemplate jdbc;
 	private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
 
-	public QbeService(NamedParameterJdbcTemplate jdbc, EmpresaAccess empresaAccess) {
+	public QbeService(NamedParameterJdbcTemplate jdbc, EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy) {
 		this.jdbc = jdbc;
-		this.empresaAccess = empresaAccess;
+		this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;
 	}
 
 	public List<QbeDtos.FuenteInfo> fuentes(Integer idEmpresa) {
-		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "REPORTE_GENERAR");
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "report:generate");
 		empresaAccess.requirePlanFeature(SecurityUtils.currentUser(), idEmpresa, "reportes_avanzados");
-		return QbeCatalogo.FUENTES.values().stream()
-				.map(f -> new QbeDtos.FuenteInfo(
-						f.codigo(),
-						f.nombre(),
-						f.descripcion(),
-						f.campos().stream()
-								.map(c -> new QbeDtos.CampoInfo(
-										c.codigo(), c.etiqueta(), c.tipo().name(), QbeCatalogo.OPERADORES.get(c.tipo())))
-								.toList(),
-						f.camposPorDefecto()))
-				.toList();
+        var user=SecurityUtils.currentUser();
+        List<QbeDtos.FuenteInfo> result=new ArrayList<>();
+        for(Fuente source:QbeCatalogo.FUENTES.values()) {
+            var scope=dataPolicy.query(user,idEmpresa,source.codigo());
+            if(!scope.available()) continue;
+            var fields=source.campos().stream().filter(c -> dataPolicy.column(scope.grants(),source.codigo(),c.codigo()))
+                .map(c -> new QbeDtos.CampoInfo(c.codigo(),c.etiqueta(),c.tipo().name(),QbeCatalogo.OPERADORES.get(c.tipo()))).toList();
+            var defaults=source.camposPorDefecto().stream().filter(c -> dataPolicy.column(scope.grants(),source.codigo(),c)).toList();
+            result.add(new QbeDtos.FuenteInfo(source.codigo(),source.nombre(),source.descripcion(),fields,defaults));
+        }
+        return result;
 	}
 
 	@Transactional(readOnly = true)
 	public QbeDtos.Resultado ejecutar(Integer idEmpresa, QbeDtos.Consulta consulta) {
-		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "REPORTE_GENERAR");
+		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "report:generate");
 		empresaAccess.requirePlanFeature(SecurityUtils.currentUser(), idEmpresa, "reportes_avanzados");
 		if (consulta == null || consulta.fuente() == null) {
 			throw ApiException.badRequest("Debe elegir una fuente de datos.");
@@ -69,6 +70,15 @@ public class QbeService {
 			throw ApiException.badRequest("Fuente de datos desconocida: " + consulta.fuente());
 		}
 
+        var scope=dataPolicy.query(SecurityUtils.currentUser(),idEmpresa,fuente.codigo());
+        if(!scope.available()) throw ApiException.forbidden("No tienes acceso a esa fuente de datos.");
+        java.util.Set<String> used=new java.util.LinkedHashSet<>();
+        if(consulta.campos()!=null) used.addAll(consulta.campos());
+        if(consulta.agrupar()!=null) used.addAll(consulta.agrupar());
+        if(consulta.condiciones()!=null) consulta.condiciones().stream().filter(java.util.Objects::nonNull).map(QbeDtos.Condicion::campo).filter(java.util.Objects::nonNull).forEach(used::add);
+        if(consulta.agregados()!=null) consulta.agregados().stream().filter(java.util.Objects::nonNull).map(QbeDtos.Agregado::campo).filter(java.util.Objects::nonNull).forEach(used::add);
+        for(String field:used) {requireCampo(fuente,field);dataPolicy.columnRequired(scope.grants(),fuente.codigo(),field);}
+        if(consulta.orden()!=null && fuente.campo(consulta.orden().campo())!=null) dataPolicy.columnRequired(scope.grants(),fuente.codigo(),consulta.orden().campo());
 		MapSqlParameterSource params = new MapSqlParameterSource("idEmpresa", idEmpresa);
 		List<String> seleccion = new ArrayList<>();
 		List<QbeDtos.Columna> columnas = new ArrayList<>();
@@ -116,7 +126,7 @@ public class QbeService {
 			}
 		} else {
 			List<String> campos = consulta.campos() == null || consulta.campos().isEmpty()
-					? fuente.camposPorDefecto()
+					? fuente.camposPorDefecto().stream().filter(c -> dataPolicy.column(scope.grants(),fuente.codigo(),c)).toList()
 					: consulta.campos();
 			for (String codigo : new LinkedHashSet<>(campos)) {
 				Campo campo = requireCampo(fuente, codigo);
@@ -125,8 +135,14 @@ public class QbeService {
 			}
 		}
 
+        if(seleccion.isEmpty()) throw ApiException.forbidden("No tienes columnas legibles en esta fuente.");
 		List<String> where = new ArrayList<>();
 		where.add(fuente.filtroEmpresa());
+        if(Set.of("productos_vendidos","inventario","movimientos").contains(fuente.codigo())) where.add("p.id_empresa=:idEmpresa");
+        if(!Set.of("productos","clientes").contains(fuente.codigo())) {
+            where.add("s.id_sucursal in (:rbacBranches)"); params.addValue("rbacBranches",scope.branches());
+            where.add("s.id_empresa=:idEmpresa");
+        }
 		if (consulta.condiciones() != null) {
 			int i = 0;
 			for (QbeDtos.Condicion condicion : consulta.condiciones()) {

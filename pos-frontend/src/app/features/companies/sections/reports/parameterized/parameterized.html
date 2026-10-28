@@ -1,5 +1,6 @@
 <div class="page-container reports-page">
   <app-navbar />
+  @if(exportError) { <p class="feedback feedback-error" role="alert">{{ exportError }}</p> }
 
   <main class="reports-layout">
     <app-sidebar context="company" [companyId]="companyId" />

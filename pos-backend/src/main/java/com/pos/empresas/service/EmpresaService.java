@@ -62,6 +62,7 @@ public class EmpresaService {
 	private final PermisoRepository permisoRepository;
 	private final RolPermisoRepository rolPermisoRepository;
     private final com.pos.pagos.service.CompraPlanService compras;
+    private final com.pos.common.access.RbacResolver rbac;
 
 	public EmpresaService(
 			EmpresaAccess empresaAccess,
@@ -72,7 +73,7 @@ public class EmpresaService {
 			PlanModuloRepository planModuloRepository,
 			ModuloRepository moduloRepository,
 			PermisoRepository permisoRepository,
-			RolPermisoRepository rolPermisoRepository, com.pos.pagos.service.CompraPlanService compras) {
+			RolPermisoRepository rolPermisoRepository, com.pos.pagos.service.CompraPlanService compras, com.pos.common.access.RbacResolver rbac) {
 		this.empresaAccess = empresaAccess;
 		this.empresaRepository = empresaRepository;
 		this.usuarioRolRepository = usuarioRolRepository;
@@ -82,7 +83,7 @@ public class EmpresaService {
 		this.moduloRepository = moduloRepository;
 		this.permisoRepository = permisoRepository;
 		this.rolPermisoRepository = rolPermisoRepository;
-        this.compras = compras;
+        this.compras = compras; this.rbac=rbac;
 	}
 
 	@Transactional
@@ -143,7 +144,7 @@ public class EmpresaService {
 				.orElseThrow(() -> ApiException.badRequest("No existe el rol EMPLEADO."));
 		Set<Integer> ids = new LinkedHashSet<>();
 		for (UsuarioRol usuarioRol : usuarioRolRepository.findByUsuario_IdUsuarioAndActivoTrue(usuario.getIdUsuario())) {
-			if (usuarioRol.getRol() != null && empleado.getIdRol().equals(usuarioRol.getRol().getIdRol())) {
+			if (usuarioRol.getRol() != null && Boolean.TRUE.equals(usuarioRol.getRol().getActivo()) && (empleado.getIdRol().equals(usuarioRol.getRol().getIdRol()) || usuarioRol.getRol().getIdEmpresa()!=null)) {
 				ids.add(usuarioRol.getIdEmpresa());
 			}
 		}
@@ -157,6 +158,7 @@ public class EmpresaService {
 
 	@Transactional
 	public EmpresaResponse actualizar(Integer idEmpresa, EmpresaUpdate datos) {
+        empresaAccess.requireCompanyPermission(SecurityUtils.currentUser(),idEmpresa,"company:update");
 		Empresa empresa = empresaAccess.requireEmpresaSinPlan(SecurityUtils.currentUser(), idEmpresa);
 		empresa.setNombre(datos.nombre());
 		empresa.setRazonSocial(datos.razonSocial());
@@ -167,28 +169,21 @@ public class EmpresaService {
 	}
 
 	@Transactional(readOnly = true)
-	public MisPermisosEmpresaResponse misPermisos(Integer idEmpresa) {
+	public MisPermisosEmpresaResponse misPermisos(Integer idEmpresa) { return misPermisos(idEmpresa,null); }
+
+    @Transactional(readOnly=true)
+    public MisPermisosEmpresaResponse misPermisos(Integer idEmpresa,Integer idSucursal) {
 		Usuario usuario = SecurityUtils.currentUser();
 		empresaAccess.requireEmpresaSinPlan(usuario, idEmpresa);
+        if(idSucursal!=null) empresaAccess.requireSucursal(usuario,idEmpresa,idSucursal);
 
-		List<UsuarioRol> roles = usuarioRolRepository.findActivosDistintoCliente(usuario.getIdUsuario(), idEmpresa);
-		if (roles.isEmpty()) {
-			throw ApiException.notFound("No se encontro un rol distinto de cliente para este usuario en esta empresa.");
-		}
-		UsuarioRol usuarioRol = roles.get(0);
-
-		List<PermisoConRolResponse> permisos = new ArrayList<>();
-		for (RolPermiso rolPermiso : rolPermisoRepository.findByRolIdWithPermisoAndModulo(usuarioRol.getRol().getIdRol())) {
-			Permiso permiso = rolPermiso.getPermiso();
-			Modulo modulo = permiso.getModulo();
-			permisos.add(new PermisoConRolResponse(
-					permiso.getIdPermiso(),
-					permiso.getCodigo(),
-					permiso.getNombre(),
-					modulo != null ? modulo.getIdModulo() : null,
-					toModulo(modulo),
-					Boolean.TRUE.equals(rolPermiso.getActivo())));
-		}
+        List<PermisoConRolResponse> permisos = new ArrayList<>();
+        var grants=rbac.resolve(usuario,idEmpresa,idSucursal);
+        for (Permiso permiso : grants.permissions().values()) {
+            Modulo modulo=permiso.getModulo();
+            permisos.add(new PermisoConRolResponse(permiso.getIdPermiso(),permiso.getCodigo(),permiso.getNombre(),
+                    modulo==null?null:modulo.getIdModulo(),toModulo(modulo),true,permiso.getCodigoCanonico(),permiso.getRecurso(),permiso.getAccion(),permiso.getAtributo(),grants.delegable().contains(permiso.getIdPermiso())));
+        }
 
 		return new MisPermisosEmpresaResponse(permisos, toSuscripcionDetalle(idEmpresa));
 	}
@@ -198,6 +193,7 @@ public class EmpresaService {
 		empresaAccess.requireUsuarioActivo(SecurityUtils.currentUser());
 		Map<Integer, PermisosPorModuloResponse> agrupados = new LinkedHashMap<>();
 		for (Permiso permiso : permisoRepository.findAllWithModulo()) {
+            if(!Boolean.TRUE.equals(permiso.getActivo()) || permiso.getCodigoCanonico()==null) continue;
 			Modulo modulo = permiso.getModulo();
 			if (modulo == null) {
 				continue;
@@ -209,10 +205,7 @@ public class EmpresaService {
 							modulo.getCodigo(),
 							modulo.getNombre(),
 							new ArrayList<>()));
-			actual.permisos().add(new PermisoSimpleResponse(
-					permiso.getIdPermiso(),
-					permiso.getCodigo(),
-					permiso.getNombre()));
+			actual.permisos().add(PermisoSimpleResponse.from(permiso));
 		}
 		List<PermisosPorModuloResponse> resultado = new ArrayList<>(agrupados.values());
 		resultado.sort(Comparator.comparing(PermisosPorModuloResponse::idModulo));

@@ -3,7 +3,17 @@
   <main class="catalog-layout">
     <app-sidebar context="company" [companyId]="companyId" />
     <section class="min-w-0" aria-label="Catálogo de productos">
-      @if (activeTab === 'list') {
+      @if (!hasPermission('product:read') && activeTab === 'list') {
+        <section class="panel p-6" role="alert">
+          <h1 class="text-xl font-bold">Catálogo de productos</h1>
+          <p class="mt-2 text-sm text-muted">No tienes permiso para consultar productos.</p>
+          @if (hasPermission('product:create')) {
+            <button class="btn btn-primary mt-4" (click)="setActiveTab('register')">
+              Nuevo producto
+            </button>
+          }
+        </section>
+      } @else if (activeTab === 'list') {
         <section class="catalog-panel rounded-2xl border border-line bg-surface">
           <header class="flex flex-wrap items-start justify-between gap-5 px-5 pb-5 pt-6 sm:px-6">
             <div>
@@ -72,7 +82,11 @@
                 type="button"
                 class="catalog-tool"
                 [disabled]="
-                  !filteredProducts.length || !camposCargados || cargandoDatos || cargandoProductos
+                  !filteredProducts.length ||
+                  !camposCargados ||
+                  cargandoDatos ||
+                  cargandoProductos ||
+                  exporting
                 "
                 [attr.aria-label]="
                   selectedIds.size
@@ -83,7 +97,7 @@
               >
                 <app-icon name="download" [size]="15" />Exportar
               </button>
-              @if (hasPermission('PRODUCTO_CREAR')) {
+              @if (hasPermission('product:create')) {
                 <button
                   type="button"
                   class="btn btn-primary !min-h-9 !px-3 !py-2 !text-xs"
@@ -218,7 +232,7 @@
               <p class="mt-2 max-w-sm text-sm text-muted">
                 Todavía no hay productos registrados en esta empresa.
               </p>
-              @if (hasPermission('PRODUCTO_CREAR')) {
+              @if (hasPermission('product:create')) {
                 <button
                   class="btn btn-primary mt-5"
                   type="button"
@@ -342,10 +356,14 @@
                                   <span
                                     class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-canvas/70 text-muted"
                                   >
-                                    @if (product.imagen && !failedImages.has(product.id_producto)) {
+                                    @if (
+                                      canRead('imagen') &&
+                                      product.imagen &&
+                                      !failedImages.has(product.id_producto)
+                                    ) {
                                       <img
                                         class="size-full object-contain p-1"
-                                        [src]="imageUrl(product)"
+                                        [secureSrc]="imageUrl(product)"
                                         [alt]="product.nombre"
                                         loading="lazy"
                                         width="40"
@@ -369,11 +387,13 @@
                                       ]"
                                       >{{ product.nombre }}</a
                                     >
-                                    <span
-                                      class="mt-0.5 block max-w-56 truncate text-[11px] text-muted"
-                                      [title]="product.codigo_barra || ''"
-                                      >{{ product.codigo_barra || 'Sin código de barras' }}</span
-                                    >
+                                    @if (canRead('codigo_barra')) {
+                                      <span
+                                        class="mt-0.5 block max-w-56 truncate text-[11px] text-muted"
+                                        [title]="product.codigo_barra || ''"
+                                        >{{ product.codigo_barra || 'Sin código de barras' }}</span
+                                      >
+                                    }
                                   </div>
                                 </div>
                               }
@@ -433,7 +453,7 @@
                               ><app-icon name="eye" [size]="17"
                             /></a>
                             @if (
-                              (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) ||
+                              (mostrarCampo('editar') && hasPermission('product:update')) ||
                               mostrarCampo('eliminar')
                             ) {
                               <button
@@ -549,116 +569,35 @@
           <section class="product-register">
             <h2 class="title-md">Registrar producto</h2>
             <form class="entity-form" (submit)="registrarProducto($event)">
-              <div class="form-grid-2">
-                <div class="form-group">
-                  <label class="label" for="producto_nombre">Nombre</label>
-                  <input
-                    class="input"
-                    id="producto_nombre"
-                    name="producto_nombre"
-                    required
-                    [(ngModel)]="productoForm.nombre"
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label class="label" for="producto_subcategoria">Subcategoria</label>
-                  <select
-                    class="input"
-                    id="producto_subcategoria"
-                    name="producto_subcategoria"
-                    required
-                    [(ngModel)]="productoForm.id_subcategoria"
-                  >
-                    <option [ngValue]="0" disabled>Selecciona una subcategoria</option>
-                    @for (subcategoria of subcategorias; track subcategoria.id_subcategoria) {
-                      <option [ngValue]="subcategoria.id_subcategoria">
-                        {{ subcategoria.nombre }}
-                      </option>
-                    }
-                  </select>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="label" for="producto_descripcion">Descripcion</label>
-                <textarea
-                  class="textarea"
-                  id="producto_descripcion"
-                  name="producto_descripcion"
-                  rows="3"
-                  [(ngModel)]="productoForm.descripcion"
-                ></textarea>
-              </div>
-
-              <div class="form-group">
-                <label class="label" for="producto_codigo_barra">Codigo de barras</label>
-                <input
-                  class="input"
-                  id="producto_codigo_barra"
-                  name="producto_codigo_barra"
-                  placeholder="Opcional"
-                  [(ngModel)]="productoForm.codigo_barra"
-                />
-              </div>
-
-              <div class="form-grid-2">
-                <div class="form-group">
-                  <label class="label" for="producto_unidad_medida">Unidad de medida</label>
-                  <input
-                    class="input"
-                    id="producto_unidad_medida"
-                    name="producto_unidad_medida"
-                    required
-                    [(ngModel)]="productoForm.unidad_medida"
-                  />
-                </div>
-                @if (mostrarCampo('precio')) {
-                  <div class="form-group">
-                    <label class="label" for="producto_precio">Precio</label>
-                    <input
-                      class="input"
-                      id="producto_precio"
-                      name="producto_precio"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      [disabled]="soloLectura('precio')"
-                      [(ngModel)]="productoForm.precio"
-                    />
-                  </div>
-                }
-                @if (mostrarCampo('costo')) {
-                  <div class="form-group">
-                    <label class="label" for="producto_costo">Costo</label>
-                    <input
-                      class="input"
-                      id="producto_costo"
-                      name="producto_costo"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      [disabled]="soloLectura('costo')"
-                      [(ngModel)]="productoForm.costo"
-                    />
-                  </div>
-                }
-              </div>
-
-              <div class="form-group">
-                <label class="label" for="producto_imagen">Imagen del producto</label>
-                <input
-                  class="input"
-                  id="producto_imagen"
-                  name="producto_imagen"
-                  type="file"
-                  accept="image/*"
-                  (change)="onImagenProductoSeleccionada($event)"
-                />
-              </div>
-
+              @if (missingCreate.length) {
+                <p class="feedback feedback-error" role="alert">
+                  Para registrar un producto necesitas permisos de creación en:
+                  {{ missingCreate.join(', ') }}. Solicítalos al administrador.
+                </p>
+              }
+              <app-product-field-editor
+                action="create"
+                [values]="productoForm"
+                [categories]="subcategorias"
+                [disabled]="guardandoProducto"
+                (fieldChange)="changeCreate($event)"
+                (imageChange)="imagenProductoSeleccionada = $event"
+              />
+              @if (imagenProductoSeleccionada) {
+                <p class="text-sm text-muted">
+                  Imagen seleccionada: {{ imagenProductoSeleccionada.name }}
+                </p>
+              }
               <div class="form-actions">
-                <button class="btn btn-primary" type="submit" [disabled]="guardandoProducto">
+                <button
+                  class="btn btn-primary"
+                  type="submit"
+                  [disabled]="
+                    guardandoProducto ||
+                    missingCreate.length > 0 ||
+                    !hasPermission('product:create')
+                  "
+                >
                   {{ guardandoProducto ? 'Guardando...' : 'Registrar producto' }}
                 </button>
                 <button
@@ -678,7 +617,7 @@
   </main>
 </div>
 
-@if (activeProduct; as product) {
+@if (hasPermission('product:read') && activeProduct; as product) {
   <div
     id="product-actions"
     class="catalog-popover fixed z-50 w-[184px] p-1.5"
@@ -686,9 +625,9 @@
     [style.top.px]="actionPosition.top"
     [style.left.px]="actionPosition.left"
     role="group"
-    [attr.aria-label]="'Acciones de ' + product.nombre"
+    [attr.aria-label]="'Acciones del producto #' + product.id_producto"
   >
-    @if (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) {
+    @if (mostrarCampo('editar') && hasPermission('product:update')) {
       @if (soloLectura('editar')) {
         <button class="action-menu-item" type="button" disabled>
           <app-icon name="edit" [size]="16" />Editar producto

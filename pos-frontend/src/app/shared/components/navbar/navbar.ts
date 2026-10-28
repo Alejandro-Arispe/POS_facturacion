@@ -96,14 +96,14 @@ export class Navbar implements OnInit, OnDestroy {
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
     const destinations = [
-      { label: 'Panel general', path: ['dashboard'], permission: 'DASHBOARD_VER' },
-      { label: 'Sucursales y cajas', path: ['branches'], permission: 'SUCURSAL_VER' },
-      { label: 'Productos', path: ['products'], permission: 'PRODUCTO_VER' },
-      { label: 'Clientes', path: ['clients'], permission: 'CLIENTE_VER' },
-      { label: 'Personal', path: ['users', 'staff'], permission: 'USUARIO_VER' },
-      { label: 'Reportes', path: ['reports', 'static'], permission: 'REPORTE_GENERAR' },
-      { label: 'Pedidos', path: ['orders'], permission: 'PEDIDO_VER' },
-      { label: 'Bitácora', path: ['audit-log'], permission: 'BITACORA_VER' },
+      { label: 'Panel general', path: ['dashboard'], permission: 'dashboard:read' },
+      { label: 'Sucursales y cajas', path: ['branches'], permission: 'branch:read' },
+      { label: 'Productos', path: ['products'], permission: 'product:read' },
+      { label: 'Clientes', path: ['clients'], permission: 'client:read' },
+      { label: 'Personal', path: ['users', 'staff'], permission: 'user:read' },
+      { label: 'Reportes', path: ['reports', 'static'], permission: 'report:generate' },
+      { label: 'Pedidos', path: ['orders'], permission: 'order:read' },
+      { label: 'Bitácora', path: ['audit-log'], permission: 'audit:read' },
     ];
     return destinations
       .filter(
@@ -256,7 +256,7 @@ export class Navbar implements OnInit, OnDestroy {
   protected canViewAlerts(): boolean {
     return (
       this.getCompanyIdFromUrl() !== null &&
-      this.companyPermissionsService.permissions().ALERTA_VER === true
+      this.companyPermissionsService.permissions()['inventory_alert:read'] === true
     );
   }
 

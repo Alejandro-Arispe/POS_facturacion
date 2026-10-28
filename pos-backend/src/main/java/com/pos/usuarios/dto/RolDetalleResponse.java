@@ -9,5 +9,5 @@ public record RolDetalleResponse(
         String tipo,
         String descripcion,
         Boolean activo,
-        List<RolPermisoResponse> rolPermisos) {
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) List<RolPermisoResponse> rolPermisos) {
 }

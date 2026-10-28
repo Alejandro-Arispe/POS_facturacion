@@ -1,3 +1,5 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
+import { firstValueFrom } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, ElementRef, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
@@ -345,6 +347,7 @@ interface CashMovementsReportView {
   styleUrl: './static.css',
 })
 export class StaticReports {
+  private readonly readSnapshot=watchReadPermissions(() => { this.salesSummaryReport=this.createEmptySalesSummaryReport();this.salesDetailsReport=this.createEmptySalesDetailsReport();this.inventoryStatusReport=this.createEmptyInventoryStatusReport();this.inventoryMovementsReport=this.createEmptyInventoryMovementsReport();this.cashSummaryReport=this.createEmptyCashSummaryReport();this.cashMovementsReport=this.createEmptyCashMovementsReport();this.cdr.markForCheck(); });
   private readonly route = inject(ActivatedRoute);
   private readonly companyPermissionsService = inject(CompanyPermissionsService);
   private readonly apiService = inject(ApiService);
@@ -354,6 +357,7 @@ export class StaticReports {
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
   // TODO: Verificar si los reportes estaticos deben filtrarse por sucursal en el backend.
   protected readonly branchId = this.route.snapshot.paramMap.get('branchId') ?? '';
+  protected exportingReport=false;
   protected activeTab: StaticReportTab = 'sales';
   protected salesReportType: 'none' | 'summary' | 'details' = 'none';
   protected inventoryReportType: 'none' | 'status' | 'movements' = 'none';
@@ -1267,17 +1271,16 @@ export class StaticReports {
 
   // --- Export Actions ---
 
-  protected exportSalesSummaryReport(format: 'pdf' | 'excel'): void {
-    console.log('exportSalesSummaryReport clicked with format:', format);
-    if (!this.salesSummaryReport) {
-      console.warn('exportSalesSummaryReport: data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportSalesSummaryReportPdf();
-    } else {
-      this.exportSalesSummaryReportExcel();
-    }
+  protected async exportSalesSummaryReport(format: 'pdf' | 'excel'): Promise<void> {
+    if(this.exportingReport || !this.hasPermission('report:export')) return;
+    this.exportingReport=true;
+    try {
+      const raw=await firstValueFrom(this.apiService.getExport<unknown>(`/api/reportes/${this.companyId}/resumenventas`));
+      this.salesSummaryReport=this.mapSalesSummaryReport(this.unwrapStaticReportResponse<any>(raw));
+      if(!this.hasPermission('report:export')) return;
+      if(format==='pdf') this.exportSalesSummaryReportPdf(); else this.exportSalesSummaryReportExcel();
+    } catch(error:any) {this.salesSummaryReport=this.createEmptySalesSummaryReport();this.salesSummaryError=error?.error?.detail??'No se pudo actualizar el reporte para exportar.';}
+    finally {this.exportingReport=false;this.cdr.detectChanges();}
   }
 
   private exportSalesSummaryReportPdf(): void {
@@ -1400,17 +1403,16 @@ export class StaticReports {
     );
   }
 
-  protected exportSalesDetailsReport(format: 'pdf' | 'excel'): void {
-    console.log('exportSalesDetailsReport clicked with format:', format);
-    if (!this.salesDetailsReport) {
-      console.warn('exportSalesDetailsReport: data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportSalesDetailsReportPdf();
-    } else {
-      this.exportSalesDetailsReportExcel();
-    }
+  protected async exportSalesDetailsReport(format: 'pdf' | 'excel'): Promise<void> {
+    if(this.exportingReport || !this.hasPermission('report:export')) return;
+    this.exportingReport=true;
+    try {
+      const raw=await firstValueFrom(this.apiService.getExport<unknown>(`/api/reportes/${this.companyId}/detallesventas`));
+      this.salesDetailsReport=this.mapSalesDetailsReport(this.unwrapStaticReportResponse<any>(raw));
+      if(!this.hasPermission('report:export')) return;
+      if(format==='pdf') this.exportSalesDetailsReportPdf(); else this.exportSalesDetailsReportExcel();
+    } catch(error:any) {this.salesDetailsReport=this.createEmptySalesDetailsReport();this.salesDetailsError=error?.error?.detail??'No se pudo actualizar el reporte para exportar.';}
+    finally {this.exportingReport=false;this.cdr.detectChanges();}
   }
 
   private exportSalesDetailsReportPdf(): void {
@@ -1532,17 +1534,16 @@ export class StaticReports {
     );
   }
 
-  protected exportInventoryStatusReport(format: 'pdf' | 'excel'): void {
-    console.log('exportInventoryStatusReport clicked with format:', format);
-    if (!this.inventoryStatusReport) {
-      console.warn('exportInventoryStatusReport: data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportInventoryStatusReportPdf();
-    } else {
-      this.exportInventoryStatusReportExcel();
-    }
+  protected async exportInventoryStatusReport(format: 'pdf' | 'excel'): Promise<void> {
+    if(this.exportingReport || !this.hasPermission('report:export')) return;
+    this.exportingReport=true;
+    try {
+      const raw=await firstValueFrom(this.apiService.getExport<unknown>(`/api/reportes/${this.companyId}/estadoinventario`));
+      this.inventoryStatusReport=this.mapInventoryStatusReport(this.unwrapStaticReportResponse<any>(raw));
+      if(!this.hasPermission('report:export')) return;
+      if(format==='pdf') this.exportInventoryStatusReportPdf(); else this.exportInventoryStatusReportExcel();
+    } catch(error:any) {this.inventoryStatusReport=this.createEmptyInventoryStatusReport();this.inventoryStatusError=error?.error?.detail??'No se pudo actualizar el reporte para exportar.';}
+    finally {this.exportingReport=false;this.cdr.detectChanges();}
   }
 
   private exportInventoryStatusReportPdf(): void {
@@ -1672,17 +1673,16 @@ export class StaticReports {
     );
   }
 
-  protected exportInventoryMovementsReport(format: 'pdf' | 'excel'): void {
-    console.log('exportInventoryMovementsReport clicked with format:', format);
-    if (!this.inventoryMovementsReport) {
-      console.warn('exportInventoryMovementsReport: data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportInventoryMovementsReportPdf();
-    } else {
-      this.exportInventoryMovementsReportExcel();
-    }
+  protected async exportInventoryMovementsReport(format: 'pdf' | 'excel'): Promise<void> {
+    if(this.exportingReport || !this.hasPermission('report:export')) return;
+    this.exportingReport=true;
+    try {
+      const raw=await firstValueFrom(this.apiService.getExport<unknown>(`/api/reportes/${this.companyId}/movimientosinventario`));
+      this.inventoryMovementsReport=this.mapInventoryMovementsReport(this.unwrapStaticReportResponse<any>(raw));
+      if(!this.hasPermission('report:export')) return;
+      if(format==='pdf') this.exportInventoryMovementsReportPdf(); else this.exportInventoryMovementsReportExcel();
+    } catch(error:any) {this.inventoryMovementsReport=this.createEmptyInventoryMovementsReport();this.inventoryMovementsError=error?.error?.detail??'No se pudo actualizar el reporte para exportar.';}
+    finally {this.exportingReport=false;this.cdr.detectChanges();}
   }
 
   private exportInventoryMovementsReportPdf(): void {
@@ -1800,17 +1800,16 @@ export class StaticReports {
     );
   }
 
-  protected exportCashSummaryReport(format: 'pdf' | 'excel'): void {
-    console.log('exportCashSummaryReport clicked with format:', format);
-    if (!this.cashSummaryReport) {
-      console.warn('exportCashSummaryReport: data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportCashSummaryReportPdf();
-    } else {
-      this.exportCashSummaryReportExcel();
-    }
+  protected async exportCashSummaryReport(format: 'pdf' | 'excel'): Promise<void> {
+    if(this.exportingReport || !this.hasPermission('report:export')) return;
+    this.exportingReport=true;
+    try {
+      const raw=await firstValueFrom(this.apiService.getExport<unknown>(`/api/reportes/${this.companyId}/resumencajas`));
+      this.cashSummaryReport=this.mapCashSummaryReport(this.unwrapStaticReportResponse<any>(raw));
+      if(!this.hasPermission('report:export')) return;
+      if(format==='pdf') this.exportCashSummaryReportPdf(); else this.exportCashSummaryReportExcel();
+    } catch(error:any) {this.cashSummaryReport=this.createEmptyCashSummaryReport();this.cashSummaryError=error?.error?.detail??'No se pudo actualizar el reporte para exportar.';}
+    finally {this.exportingReport=false;this.cdr.detectChanges();}
   }
 
   private exportCashSummaryReportPdf(): void {
@@ -1948,17 +1947,16 @@ export class StaticReports {
     );
   }
 
-  protected exportCashMovementsReport(format: 'pdf' | 'excel'): void {
-    console.log('exportCashMovementsReport clicked with format:', format);
-    if (!this.cashMovementsReport) {
-      console.warn('exportCashMovementsReport: data is null');
-      return;
-    }
-    if (format === 'pdf') {
-      this.exportCashMovementsReportPdf();
-    } else {
-      this.exportCashMovementsReportExcel();
-    }
+  protected async exportCashMovementsReport(format: 'pdf' | 'excel'): Promise<void> {
+    if(this.exportingReport || !this.hasPermission('report:export')) return;
+    this.exportingReport=true;
+    try {
+      const raw=await firstValueFrom(this.apiService.getExport<unknown>(`/api/reportes/${this.companyId}/movimientoscaja`));
+      this.cashMovementsReport=this.mapCashMovementsReport(this.unwrapStaticReportResponse<any>(raw));
+      if(!this.hasPermission('report:export')) return;
+      if(format==='pdf') this.exportCashMovementsReportPdf(); else this.exportCashMovementsReportExcel();
+    } catch(error:any) {this.cashMovementsReport=this.createEmptyCashMovementsReport();this.cashMovementsError=error?.error?.detail??'No se pudo actualizar el reporte para exportar.';}
+    finally {this.exportingReport=false;this.cdr.detectChanges();}
   }
 
   private exportCashMovementsReportPdf(): void {
@@ -2242,6 +2240,7 @@ export class StaticReports {
   }
 
   private escapeHtml(value: string): string {
+    if(/^[\s\x00-\x1f]*[=+\-@]/.test(value)) value="\'"+value;
     return value
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

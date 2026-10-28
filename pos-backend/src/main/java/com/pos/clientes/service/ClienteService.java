@@ -41,7 +41,8 @@ public class ClienteService {
 
     @Transactional
     public ClienteDtos.CategoriaResponse crearCategoria(Usuario usuario, Integer idEmpresa, ClienteDtos.CategoriaCreate datos) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:create");
+        validateCategory(datos.getDescuentoBase(),datos.getPlazoCredito(),datos.getLimiteCredito());
         CategoriaCliente categoria = new CategoriaCliente();
         categoria.setIdEmpresa(idEmpresa);
         categoria.setNombre(datos.getNombre());
@@ -55,17 +56,17 @@ public class ClienteService {
 
     @Transactional(readOnly = true)
     public List<ClienteDtos.CategoriaResponse> listarCategorias(Usuario usuario, Integer idEmpresa) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
         return categoriaRepository.findByIdEmpresa(idEmpresa).stream().map(this::toCategoria).toList();
     }
 
     @Transactional(readOnly = true)
     public ClienteDtos.CategoriaResponse obtenerCategoria(Usuario usuario, Integer idEmpresa, Integer idCategoria) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
         CategoriaCliente categoria = categoriaRepository.findById(idCategoria)
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
         if (!idEmpresa.equals(categoria.getIdEmpresa())) {
-            throw ApiException.unauthorized("Categoria de cliente no pertenece a esta empresa.");
+            throw ApiException.notFound("Categoría de cliente no encontrada.");
         }
         return toCategoria(categoria);
     }
@@ -73,7 +74,8 @@ public class ClienteService {
     @Transactional
     public ClienteDtos.CategoriaResponse actualizarCategoria(
             Usuario usuario, Integer idEmpresa, Integer idCategoria, ClienteDtos.CategoriaUpdate datos) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:update");
+        validateCategory(datos.getDescuentoBase(),datos.getPlazoCredito(),datos.getLimiteCredito());
         CategoriaCliente categoria = categoriaRepository.findByIdCategoriaClienteAndIdEmpresa(idCategoria, idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
         if (datos.getNombre() != null) {
@@ -107,12 +109,14 @@ public class ClienteService {
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
         Cliente cliente = new Cliente();
         if (categoria.getIdEmpresa() != null) {
-            empresaAccess.requireEmpresa(usuario, categoria.getIdEmpresa());
+            empresaAccess.requirePermiso(usuario,categoria.getIdEmpresa(),"client:create");
         }
+        cliente.setIdEmpresa(categoria.getIdEmpresa());
+        validateCredit(datos.getSaldoCredito(),datos.getLimiteCredito(),BigDecimal.ZERO);
         cliente.setIdUsuario(idUsuario);
         cliente.setCategoriaCliente(categoria);
         cliente.setCodigoCliente(datos.getCodigoCliente());
-        cliente.setSaldoCredito(nvl(datos.getSaldoCredito()));
+        cliente.setSaldoCredito(BigDecimal.ZERO);
         cliente.setLimiteCredito(nvl(datos.getLimiteCredito()));
         cliente.setActivo(datos.getActivo() == null || datos.getActivo());
         return toCliente(clienteRepository.save(cliente));
@@ -122,15 +126,16 @@ public class ClienteService {
     public List<ClienteDtos.ClienteResponse> listarClientes(Usuario usuario, Integer idUsuario) {
         empresaAccess.requireUsuarioActivo(usuario);
         requireMismaCuenta(usuario, idUsuario);
-        return clienteRepository.findByIdUsuario(idUsuario).stream().map(this::toCliente).toList();
+        return clienteRepository.findByIdUsuario(idUsuario).stream().filter(c -> c.getIdEmpresa()!=null && empresaAccess.canAccess(usuario,c.getIdEmpresa(),null,"")).map(this::toCliente).toList();
     }
 
     @Transactional(readOnly = true)
     public ClienteDtos.ClienteResponse obtenerCliente(Usuario usuario, Integer idUsuario, Integer idCliente) {
         empresaAccess.requireUsuarioActivo(usuario);
         requireMismaCuenta(usuario, idUsuario);
-        return toCliente(clienteRepository.findByIdUsuarioAndIdCliente(idUsuario, idCliente)
-                .orElseThrow(() -> ApiException.notFound("Cliente no encontrado.")));
+        Cliente client=clienteRepository.findByIdUsuarioAndIdCliente(idUsuario,idCliente).orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
+        if(client.getIdEmpresa()==null || !empresaAccess.canAccess(usuario,client.getIdEmpresa(),null,"")) throw ApiException.notFound("Cliente no encontrado.");
+        return toCliente(client);
     }
 
     @Transactional
@@ -140,26 +145,19 @@ public class ClienteService {
         requireMismaCuenta(usuario, idUsuario);
         Cliente cliente = clienteRepository.findByIdUsuarioAndIdCliente(idUsuario, idCliente)
                 .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
-        applyUpdate(cliente, datos);
-        return toCliente(clienteRepository.save(cliente));
+        if(cliente.getIdEmpresa()==null) throw ApiException.forbidden("El perfil necesita una empresa antes de administrarlo.");
+        return actualizarClienteEmpresa(usuario,cliente.getIdEmpresa(),idCliente,datos);
     }
 
     @Transactional
     public ClienteDtos.ClienteResponse actualizarClienteEmpresa(
             Usuario usuario, Integer idEmpresa, Integer idCliente, ClienteDtos.ClienteUpdate datos) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        empresaAccess.requirePermiso(usuario, idEmpresa,"client:update");
         Cliente cliente = clienteRepository.findById(idCliente)
                 .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
 
-        boolean pertenecePorCategoria = cliente.getCategoriaCliente() != null
-                && idEmpresa.equals(cliente.getCategoriaCliente().getIdEmpresa());
-        boolean pertenecePorRol = usuarioRolRepository.existsByUsuario_IdUsuarioAndIdEmpresaAndActivoTrue(
-                cliente.getIdUsuario(), idEmpresa);
-
-        if (!pertenecePorCategoria && !pertenecePorRol) {
-            throw ApiException.notFound("Cliente no encontrado para esta empresa.");
-        }
-
+        if (!idEmpresa.equals(cliente.getIdEmpresa())) throw ApiException.notFound("Cliente no encontrado para esta empresa.");
+        validateCredit(datos.getSaldoCredito(),datos.getLimiteCredito(),cliente.getSaldoCredito());
         if (datos.getIdCategoriaCliente() != null) {
             CategoriaCliente categoria = categoriaRepository.findByIdCategoriaClienteAndIdEmpresa(
                     datos.getIdCategoriaCliente(), idEmpresa)
@@ -181,31 +179,22 @@ public class ClienteService {
         return toCliente(clienteRepository.save(cliente));
     }
 
+    private void validateCategory(BigDecimal discount,Integer days,BigDecimal limit) {
+        if(discount!=null && (discount.signum()<0 || discount.compareTo(new BigDecimal("100"))>0 || discount.scale()>2)) throw ApiException.badRequest("El descuento base debe estar entre 0 y 100.");
+        if(days!=null && days<0) throw ApiException.badRequest("El plazo no puede ser negativo.");
+        if(limit!=null) com.pos.ventas.service.SalePricing.money(limit,"límite de crédito");
+    }
+
+    private void validateCredit(BigDecimal balance,BigDecimal limit,BigDecimal current) {
+        if(balance!=null && balance.compareTo(nvl(current))!=0) throw ApiException.badRequest("El saldo se calcula desde las operaciones de venta y cobro.");
+        if(limit!=null) com.pos.ventas.service.SalePricing.money(limit,"límite de crédito");
+    }
+
     private void requireMismaCuenta(Usuario usuario, Integer idUsuario) {
         if (usuario.esSuperAdmin() || usuario.getIdUsuario().equals(idUsuario)) {
             return;
         }
         throw ApiException.forbidden("No puedes consultar clientes de otra cuenta.");
-    }
-
-    private void applyUpdate(Cliente cliente, ClienteDtos.ClienteUpdate datos) {
-        if (datos.getIdCategoriaCliente() != null) {
-            CategoriaCliente categoria = categoriaRepository.findById(datos.getIdCategoriaCliente())
-                    .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
-            cliente.setCategoriaCliente(categoria);
-        }
-        if (datos.getCodigoCliente() != null) {
-            cliente.setCodigoCliente(datos.getCodigoCliente());
-        }
-        if (datos.getSaldoCredito() != null) {
-            cliente.setSaldoCredito(datos.getSaldoCredito());
-        }
-        if (datos.getLimiteCredito() != null) {
-            cliente.setLimiteCredito(datos.getLimiteCredito());
-        }
-        if (datos.getActivo() != null) {
-            cliente.setActivo(datos.getActivo());
-        }
     }
 
     private ClienteDtos.CategoriaResponse toCategoria(CategoriaCliente categoria) {

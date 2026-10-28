@@ -1,3 +1,5 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
+import { CompanyPermissionsService } from '../../../../../core/services/company-permissions.service';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { MoneyPipe } from '../../../../../shared/pipes/money.pipe';
 import { ActivatedRoute } from '@angular/router';
@@ -32,6 +34,8 @@ interface ResendInvoiceResponse {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class InvoicesReport implements OnInit {
+  protected readonly permissions=inject(CompanyPermissionsService);
+  private readonly readSnapshot=watchReadPermissions(() => { this.invoices=[];this.cdr.markForCheck(); });
   private readonly route = inject(ActivatedRoute);
   private readonly apiService = inject(ApiService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -67,14 +71,12 @@ export class InvoicesReport implements OnInit {
     }).format(Number(value) || 0);
   }
 
-  protected fileUrl(path: string): string {
-    if (/^https?:\/\//i.test(path)) {
-      return path;
-    }
-
-    const baseUrl = this.apiService.getBaseUrl().replace(/\/+$/, '');
-    const normalizedPath = path.replace(/\\/g, '/').replace(/^\/+/, '');
-    return `${baseUrl}/${normalizedPath}`;
+  protected downloadInvoice(invoice:CompanyInvoice, format:'xml'|'pdf'):void {
+    if(!this.permissions.hasPermission('invoice:reprint')) return;
+    this.apiService.getBlob(`/api/facturas/${invoice.id_factura}/${format}`).subscribe({
+      next:(blob) => {const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`factura-${invoice.id_factura}.${format}`;link.click();setTimeout(() => URL.revokeObjectURL(url),1000);},
+      error:(error) => {this.error=error?.error?.detail??'No se pudo descargar la factura.';this.cdr.detectChanges();}
+    });
   }
 
   protected trackInvoice(_index: number, invoice: CompanyInvoice): number {

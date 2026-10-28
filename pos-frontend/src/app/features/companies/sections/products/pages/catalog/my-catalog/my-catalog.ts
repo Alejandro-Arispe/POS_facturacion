@@ -1,3 +1,4 @@
+import { SecureSrc } from '../../../../../../../shared/directives/secure-src';
 import { ChangeDetectorRef, Component, HostListener, OnInit, inject } from '@angular/core';
 import { MoneyPipe } from '../../../../../../../shared/pipes/money.pipe';
 import { FormsModule } from '@angular/forms';
@@ -21,6 +22,14 @@ import {
 import { Navbar } from '../../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../../shared/components/sidebar/sidebar';
 import { environments } from '../../../../../../../environments/environments';
+import { ProductFieldEditor } from '../../../../../../../shared/components/product-field-editor/product-field-editor';
+import {
+  ProductField,
+  ProductValues,
+  productPayload,
+  missingCreationFields,
+  redactProduct,
+} from '../../../../../../../core/services/product-fields';
 import { Icon } from '../../../../../../../shared/components/icon/icon';
 import {
   CatalogColumn,
@@ -32,12 +41,12 @@ import {
 } from './catalog-table';
 
 type ProductoConCosto = Producto & { costo?: number | null };
-type ProductoAlta = CrearProductoRequest & { costo: number | null };
+type ProductoAlta = ProductValues;
 
 @Component({
   selector: 'app-productos-catalog',
   standalone: true,
-  imports: [MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon],
+  imports: [SecureSrc, MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon, ProductFieldEditor],
   templateUrl: './my-catalog.html',
   styleUrl: './my-catalog.css',
 })
@@ -78,6 +87,7 @@ export class ProductosPanel implements OnInit {
   protected imagenProductoSeleccionada: File | null = null;
 
   protected cargandoProductos = false;
+  protected exporting = false;
   protected errorCargaProductos = '';
   protected search = '';
   protected status: CatalogQuery['status'] = 'all';
@@ -118,7 +128,8 @@ export class ProductosPanel implements OnInit {
   protected get availableColumns(): CatalogColumn[] {
     return this.columns.filter(
       (column) =>
-        (column.key !== 'precio' && column.key !== 'costo') || this.mostrarCampo(column.key),
+        column.key === 'id_producto' ||
+        this.canRead(column.key === 'subcategoria' ? 'id_subcategoria' : column.key),
     );
   }
 
@@ -127,11 +138,13 @@ export class ProductosPanel implements OnInit {
   }
 
   protected get filteredProducts(): ProductoConCosto[] {
-    return queryProducts(this.productos, {
+    if (!this.hasPermission('product:read')) return [];
+    const products = this.productos.map((p) => redactProduct(p, (f) => this.canRead(f)));
+    return queryProducts(products, {
       search: this.search,
-      status: this.status,
-      subcategory: this.subcategory,
-      sort: this.sortKey,
+      status: this.canRead('activo') ? this.status : 'all',
+      subcategory: this.canRead('id_subcategoria') ? this.subcategory : '',
+      sort: this.visibleColumns.some((c) => c.key === this.sortKey) ? this.sortKey : 'id_producto',
       direction: this.sortDirection,
     });
   }
@@ -283,17 +296,33 @@ export class ProductosPanel implements OnInit {
       (product) => !this.selectedIds.size || this.selectedIds.has(product.id_producto),
     );
     if (!rows.length) return;
-    const blob = new Blob([catalogCsv(rows, this.visibleColumns)], {
-      type: 'text/csv;charset=utf-8',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'productos-empresa-' + this.companyId + '.csv';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (this.exporting) return;
+    this.exporting = true;
+    this.productService
+      .exportarProductos(
+        this.companyId,
+        this.visibleColumns.map((c) => c.key),
+        rows.map((p) => p.id_producto),
+      )
+      .subscribe({
+        next: (csv) => {
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'productos-empresa-' + this.companyId + '.csv';
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          this.exporting = false;
+          this.cdr.detectChanges();
+        },
+        error: (e) => {
+          this.exporting = false;
+          this.errorCargaProductos =
+            e?.error?.detail ?? 'No se pudo exportar el catálogo. Comprueba tus permisos.';
+          this.cdr.detectChanges();
+        },
+      });
   }
 
   protected reloadProducts(): void {
@@ -306,8 +335,26 @@ export class ProductosPanel implements OnInit {
     this.cargarDatos();
   }
 
+  protected canRead(field: ProductField): boolean {
+    return this.companyPermissionsService.hasField('product', 'read', field);
+  }
+  protected get missingCreate(): string[] {
+    return missingCreationFields((a, f) =>
+      this.companyPermissionsService.hasField('product', a, f),
+    );
+  }
+  protected changeCreate(event: { field: ProductField; value: string | number | boolean | null }) {
+    this.productoForm[event.field] = event.value;
+  }
+
   protected estadoCampo(campo: CampoProducto): EstadoCampoProducto {
-    return this.camposProducto[campo];
+    if (campo === 'editar') return this.hasPermission('product:update') ? 'EDITABLE' : 'OCULTO';
+    if (campo === 'eliminar') return this.hasPermission('product:delete') ? 'EDITABLE' : 'OCULTO';
+    return !this.canRead(campo)
+      ? 'OCULTO'
+      : this.companyPermissionsService.hasField('product', 'update', campo)
+        ? 'EDITABLE'
+        : 'SOLO_LECTURA';
   }
 
   protected mostrarCampo(campo: CampoProducto): boolean {
@@ -319,7 +366,7 @@ export class ProductosPanel implements OnInit {
   }
 
   protected setActiveTab(tab: 'register' | 'list'): void {
-    if (tab === 'register' && !this.hasPermission('PRODUCTO_CREAR')) {
+    if (tab === 'register' && !this.hasPermission('product:create')) {
       return;
     }
 
@@ -337,7 +384,7 @@ export class ProductosPanel implements OnInit {
     event.preventDefault();
     this.limpiarMensajes();
 
-    if (!this.hasPermission('PRODUCTO_CREAR')) {
+    if (!this.hasPermission('product:create')) {
       this.errorGeneral = 'No tienes permiso para registrar productos.';
       return;
     }
@@ -347,37 +394,37 @@ export class ProductosPanel implements OnInit {
       return;
     }
 
-    const payload: ProductoAlta = {
-      id_subcategoria: Number(this.productoForm.id_subcategoria),
-      codigo_barra: this.productoForm.codigo_barra?.trim() || '',
-      nombre: this.productoForm.nombre.trim(),
-      descripcion: this.productoForm.descripcion?.trim() || '',
-      unidad_medida: this.productoForm.unidad_medida.trim(),
-      precio:
-        this.estadoCampo('precio') === 'EDITABLE'
-          ? Math.round(Number(this.productoForm.precio) * 100) / 100
-          : 0,
-      costo:
-        this.estadoCampo('costo') === 'EDITABLE'
-          ? this.normalizarCosto(this.productoForm.costo)
-          : null,
-      activo: true,
-    };
-
-    if (!payload.id_subcategoria || !payload.nombre || !payload.unidad_medida) {
-      this.errorGeneral = 'Completa subcategoria, nombre y unidad de medida del producto.';
+    if (this.missingCreate.length) {
+      this.errorGeneral = 'Faltan permisos para: ' + this.missingCreate.join(', ');
       return;
     }
-
+    const payload = productPayload(this.productoForm, new Set(), 'create', (a, f) =>
+      this.companyPermissionsService.hasField('product', a, f),
+    );
+    if (
+      !payload.nombre ||
+      !payload.id_subcategoria ||
+      !payload.unidad_medida ||
+      payload.precio == null
+    ) {
+      this.errorGeneral = 'Completa los campos obligatorios.';
+      return;
+    }
+    if (
+      this.imagenProductoSeleccionada &&
+      !this.companyPermissionsService.hasField('product', 'create', 'imagen')
+    ) {
+      this.errorGeneral = 'No tienes permiso para establecer la imagen.';
+      return;
+    }
     this.guardandoProducto = true;
-
     const request$ = this.imagenProductoSeleccionada
-      ? this.apiService.post<ProductoConCosto, FormData>(
-          `/api/empresas/${this.companyId}/productos/con-imagen`,
-          this.construirFormDataProducto(payload, this.imagenProductoSeleccionada),
+      ? this.productService.crearProductoConImagen(
+          this.companyId,
+          payload,
+          this.imagenProductoSeleccionada,
         )
       : this.productService.crearProducto(this.companyId, payload);
-
     request$.subscribe({
       next: () => {
         this.guardandoProducto = false;
@@ -387,9 +434,9 @@ export class ProductosPanel implements OnInit {
         this.activeTab = 'list';
         this.cargarProductos();
       },
-      error: () => {
+      error: (error) => {
         this.guardandoProducto = false;
-        this.errorGeneral = 'No se pudo registrar el producto.';
+        this.errorGeneral = error?.error?.detail ?? 'No se pudo registrar el producto.';
         this.cdr.detectChanges();
       },
     });
@@ -438,24 +485,7 @@ export class ProductosPanel implements OnInit {
   }
 
   private cargarCamposProducto(): void {
-    if (!this.companyId) {
-      this.camposProducto = camposProductoPorDefecto();
-      this.camposCargados = true;
-      return;
-    }
-
-    this.companyPermissionsService.obtenerMisCamposProducto(this.companyId).subscribe({
-      next: (campos) => {
-        this.camposProducto = campos;
-        this.camposCargados = true;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.camposProducto = camposProductoPorDefecto();
-        this.camposCargados = true;
-        this.cdr.detectChanges();
-      },
-    });
+    this.camposCargados = true;
   }
 
   private cargarNombreEmpresa(): void {
@@ -557,39 +587,8 @@ export class ProductosPanel implements OnInit {
     this.mensajeGeneral = '';
   }
 
-  private construirFormDataProducto(payload: ProductoAlta, imagen: File): FormData {
-    const formData = new FormData();
-    formData.append('id_subcategoria', String(payload.id_subcategoria));
-    formData.append('codigo_barra', payload.codigo_barra ?? '');
-    formData.append('nombre', payload.nombre);
-    formData.append('descripcion', payload.descripcion ?? '');
-    formData.append('unidad_medida', payload.unidad_medida);
-    formData.append(
-      'precio',
-      String(this.estadoCampo('precio') === 'EDITABLE' ? payload.precio : 0),
-    );
-    if (this.estadoCampo('costo') === 'EDITABLE' && payload.costo != null) {
-      formData.append('costo', String(payload.costo));
-    }
-    formData.append('activo', 'true');
-    formData.append('imagen', imagen);
-    return formData;
-  }
-
-  private normalizarCosto(valor: number | null | undefined): number | null {
-    if (valor == null || Number.isNaN(Number(valor))) {
-      return null;
-    }
-
-    return Math.round(Number(valor) * 100) / 100;
-  }
-
-  protected hasPermission(permission: CompanyPermissionCode): boolean {
+  protected hasPermission(permission: string): boolean {
     const permissions = this.companyPermissionsService.permissions();
-    const codes = this.companyPermissionsService.getPermissionCodes();
-    if (codes.length === 0) {
-      return true;
-    }
     return permissions[permission] === true;
   }
 }

@@ -89,6 +89,7 @@ public class ReportesService {
               and """ + " " + VENTA_VALIDA_JPQL + "\n";
 
     private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
     private final EmpresaRepository empresaRepository;
     private final SucursalRepository sucursalRepository;
     private final ProductoRepository productoRepository;
@@ -99,13 +100,13 @@ public class ReportesService {
     private EntityManager entityManager;
 
     public ReportesService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy,
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
             ProductoRepository productoRepository,
             GeminiClient geminiClient,
             PlatformTransactionManager transactionManager) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
         this.productoRepository = productoRepository;
@@ -173,7 +174,7 @@ public class ReportesService {
     /** Resumen de ventas de un dia. Incluido en el plan gratuito (reportes diarios), por eso no exige plan. */
     @Transactional(readOnly = true)
     public Map<String, Object> resumenVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        empresaAccess.requireEmpresa(usuario, empresaId);
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, Object[]> totales = totalesPorSucursal(empresaId, dia, dia);
 
@@ -201,11 +202,41 @@ public class ReportesService {
         int totalVentas = 0;
         double montoVendido = 0;
         int productosVendidos = 0;
-        for (Sucursal sucursal : sucursales(empresaId)) {
-            Object[] vals = totales.get(sucursal.getIdSucursal());
-            int cantidad = vals == null ? 0 : aInt(vals[1]);
-            double monto = vals == null ? 0 : aDouble(vals[2]);
-            int unidades = unidadesPorSucursal.getOrDefault(sucursal.getIdSucursal(), 0);
+        for (Sucursal sucursal : sucursales) {
+            List<Venta> ventas = ventasDeSucursal(sucursal.getIdSucursal(), desde, hasta);
+            int cantidad = ventas.size();
+            double monto = ventas.stream().map(Venta::getTotal).mapToDouble(v -> v == null ? 0 : v.doubleValue()).sum();
+            int unidades = 0;
+            Map<Integer, Integer> top = new LinkedHashMap<>();
+            Map<Integer, String> nombres = new LinkedHashMap<>();
+            for (Venta venta : ventas) {
+                for (DetalleVenta detalle : detalles(venta.getIdVenta())) {
+                    unidades += detalle.getCantidad() == null ? 0 : detalle.getCantidad();
+                    top.merge(detalle.getIdProducto(), detalle.getCantidad(), Integer::sum);
+                    productoRepository.findById(detalle.getIdProducto())
+                            .ifPresent(p -> nombres.put(p.getIdProducto(), p.getNombre()));
+                }
+            }
+            List<Map<String, Object>> topProductos = top.entrySet().stream()
+                    .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed())
+                    .limit(5)
+                    .map(e -> {
+                        Map<String, Object> row = new LinkedHashMap<>();
+                        row.put("posicion", 0);
+                        row.put("id_producto", e.getKey());
+                        row.put("producto", nombres.getOrDefault(e.getKey(), "Producto " + e.getKey()));
+                        row.put("unidades", e.getValue());
+                        return row;
+                    })
+                    .toList();
+            for (int i = 0; i < topProductos.size(); i++) {
+                topProductos.get(i).put("posicion", i + 1);
+            }
+            Map<String, Object> ventasDia = new LinkedHashMap<>();
+            ventasDia.put("total_ventas", cantidad);
+            ventasDia.put("monto_vendido", round(monto));
+            ventasDia.put("ticket_promedio", cantidad == 0 ? 0 : round(monto / cantidad));
+            ventasDia.put("productos_vendidos", unidades);
             Map<String, Object> sucursalDto = new LinkedHashMap<>();
             sucursalDto.put("id_sucursal", sucursal.getIdSucursal());
             sucursalDto.put("sucursal", sucursal.getNombre());
@@ -227,7 +258,7 @@ public class ReportesService {
     /** Detalle de ventas de un dia. Incluido en el plan gratuito (reportes diarios), por eso no exige plan. */
     @Transactional(readOnly = true)
     public Map<String, Object> detalleVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        empresaAccess.requireEmpresa(usuario, empresaId);
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> porSucursal = new HashMap<>();
         for (Object[] row : ventasConSucursal(empresaId, dia, dia)) {
@@ -268,8 +299,8 @@ public class ReportesService {
     /** Estado actual del stock por sucursal. */
     @Transactional(readOnly = true)
     public Map<String, Object> estadoInventario(Usuario usuario, Integer empresaId) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(filasStock(empresaId, false));
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
         List<Map<String, Object>> sucursalDtos = new ArrayList<>();
         Map<String, Object> total = resumenStock(List.of());
         for (Sucursal sucursal : sucursales(empresaId)) {
@@ -293,13 +324,11 @@ public class ReportesService {
 
     /** Movimientos de inventario del rango (por defecto, los ultimos 7 dias). */
     @Transactional(readOnly = true)
-    public Map<String, Object> movimientosInventario(Usuario usuario, Integer empresaId, LocalDate desde, LocalDate hasta) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        LocalDate fin = hasta == null ? LocalDate.now() : hasta;
-        LocalDate inicio = desde == null ? fin.minusDays(6) : desde;
-        validarRango(inicio, fin);
-        Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(
-                filasMovimientosInventario(empresaId, inicio, fin, null, null, null, null));
+    public Map<String, Object> movimientosInventario(Usuario usuario, Integer empresaId) {
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        LocalDate fin = LocalDate.now();
+        LocalDate inicio = fin.minusDays(29);
         List<Map<String, Object>> sucursalDtos = new ArrayList<>();
         int totalEntradas = 0;
         int totalSalidas = 0;
@@ -326,43 +355,63 @@ public class ReportesService {
 
     /** Cajas que estuvieron abiertas durante el dia y el flujo de efectivo de ese dia. */
     @Transactional(readOnly = true)
-    public Map<String, Object> resumenCajas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        LocalDate dia = fecha == null ? LocalDate.now() : fecha;
-        Map<Integer, List<Map<String, Object>>> sesionesPorSucursal = agruparPorSucursal(
-                filasSesionesCaja(empresaId, dia, dia, null, null, null));
-        Map<Integer, List<Map<String, Object>>> movsPorSucursal = agruparPorSucursal(
-                filasMovimientosCaja(empresaId, dia, dia, null, null, null, null));
-
-        List<Map<String, Object>> sucursalDtos = new ArrayList<>();
-        Map<String, Object> total = resumenCajasDe(List.of(), List.of());
-        for (Sucursal sucursal : sucursales(empresaId)) {
-            List<Map<String, Object>> sesiones = sesionesPorSucursal.getOrDefault(sucursal.getIdSucursal(), List.of());
-            List<Map<String, Object>> movimientos = movsPorSucursal.getOrDefault(sucursal.getIdSucursal(), List.of());
-            List<Map<String, Object>> cajas = new ArrayList<>();
-            for (Map<String, Object> sesion : sesiones) {
-                Map<String, Object> caja = new LinkedHashMap<>();
-                caja.put("id_caja", sesion.get("id_caja"));
-                caja.put("id_caja_sesion", sesion.get("id_caja_sesion"));
-                caja.put("caja", sesion.get("caja"));
-                caja.put("estado", sesion.get("estado"));
-                caja.put("apertura", sesion.get("apertura"));
-                caja.put("cierre", sesion.get("cierre"));
-                cajas.add(caja);
+    public Map<String, Object> resumenCajas(Usuario usuario, Integer empresaId) {
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        List<?> rows = entityManager.createQuery("""
+                select s.idSucursal, s.nombre, c.idCaja, c.nombre, cs.idCajaSesion, cs.estado, cs.fechaApertura, cs.fechaCierre
+                from CajaSesion cs
+                join cs.caja c
+                join c.sucursal s
+                where s.empresa.idEmpresa = :idEmpresa
+                order by s.nombre, c.nombre
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .getResultList();
+        Map<Integer, Map<String, Object>> porSucursal = new LinkedHashMap<>();
+        int totalCajas = 0;
+        int abiertas = 0;
+        int cerradas = 0;
+        for (Object raw : rows) {
+            Object[] row = (Object[]) raw;
+            Integer idSucursal = (Integer) row[0];
+            Map<String, Object> sucursalDto = porSucursal.computeIfAbsent(idSucursal, id -> {
+                Map<String, Object> map = new LinkedHashMap<>();
+                map.put("id_sucursal", id);
+                map.put("sucursal", row[1]);
+                map.put("cajas", new ArrayList<Map<String, Object>>());
+                return map;
+            });
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> cajas = (List<Map<String, Object>>) sucursalDto.get("cajas");
+            Map<String, Object> caja = new LinkedHashMap<>();
+            caja.put("id_caja", row[2]);
+            caja.put("id_caja_sesion", row[4]);
+            caja.put("caja", row[3]);
+            caja.put("estado", row[5]);
+            caja.put("apertura", row[6] == null ? "" : row[6].toString());
+            caja.put("cierre", row[7] == null ? null : row[7].toString());
+            cajas.add(caja);
+            totalCajas++;
+            if ("Abierto".equalsIgnoreCase(String.valueOf(row[5]))) {
+                abiertas++;
+            } else {
+                cerradas++;
             }
-            Map<String, Object> resumen = resumenCajasDe(sesiones, movimientos);
-            Map<String, Object> sucursalDto = new LinkedHashMap<>();
-            sucursalDto.put("id_sucursal", sucursal.getIdSucursal());
-            sucursalDto.put("sucursal", sucursal.getNombre());
-            sucursalDto.put("cajas", cajas);
-            sucursalDto.put("resumen_sucursal", resumen);
-            sucursalDtos.add(sucursalDto);
-            for (String clave : List.of("total_cajas", "cajas_abiertas", "cajas_cerradas", "total_sesiones")) {
-                total.put(clave, aInt(total.get(clave)) + aInt(resumen.get(clave)));
-            }
-            for (String clave : List.of("ingresos", "egresos", "flujo_neto")) {
-                total.put(clave, round(aDouble(total.get(clave)) + aDouble(resumen.get(clave))));
-            }
+        }
+        List<Map<String, Object>> sucursales = new ArrayList<>();
+        for (Map<String, Object> sucursalDto : porSucursal.values()) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> cajas = (List<Map<String, Object>>) sucursalDto.get("cajas");
+            long abiertasLocal = cajas.stream().filter(c -> "Abierto".equalsIgnoreCase(String.valueOf(c.get("estado")))).count();
+            sucursalDto.put("resumen_sucursal", Map.of(
+                    "total_cajas", cajas.size(),
+                    "cajas_abiertas", abiertasLocal,
+                    "cajas_cerradas", cajas.size() - abiertasLocal,
+                    "ingresos", 0,
+                    "egresos", 0,
+                    "flujo_neto", 0));
+            sucursales.add(sucursalDto);
         }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id_empresa", empresaId);
@@ -374,12 +423,22 @@ public class ReportesService {
 
     /** Movimientos de caja de un dia. */
     @Transactional(readOnly = true)
-    public Map<String, Object> movimientosCaja(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        LocalDate dia = fecha == null ? LocalDate.now() : fecha;
-        Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(
-                filasMovimientosCaja(empresaId, dia, dia, null, null, null, null));
-        List<Map<String, Object>> sucursalDtos = new ArrayList<>();
+    public Map<String, Object> movimientosCaja(Usuario usuario, Integer empresaId) {
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        List<?> rows = entityManager.createQuery("""
+                select s.idSucursal, s.nombre, mc.idMovimientoCaja, mc.fecha, c.nombre, t.nombre, mc.concepto, mc.monto, c.idCaja, t.idTipoMovimientoCaja, cs.estado
+                from MovimientoCaja mc
+                join mc.cajaSesion cs
+                join cs.caja c
+                join c.sucursal s
+                join mc.tipoMovimientoCaja t
+                where s.empresa.idEmpresa = :idEmpresa
+                order by mc.fecha desc
+                """)
+                .setParameter("idEmpresa", empresaId)
+                .getResultList();
+        Map<Integer, Map<String, Object>> porSucursal = new LinkedHashMap<>();
         int totalMovs = 0;
         double ingresos = 0;
         double egresos = 0;
@@ -404,16 +463,9 @@ public class ReportesService {
         return response;
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Reportes dinamicos (lenguaje natural)
-    // ---------------------------------------------------------------------------------------------
-
-    public ReporteDtos.RespuestaInterpretacion interpretar(Usuario usuario, Integer empresaId, String prompt) {
-        requireReporte(usuario, empresaId, "reportes_avanzados");
-        return interpretarPedido(prompt);
-    }
-
-    private ReporteDtos.RespuestaInterpretacion interpretarPedido(String prompt) {
+    public ReporteDtos.RespuestaInterpretacion interpretar(Integer empresaId, String prompt) {
+        empresaAccess.requirePlanFeature(com.pos.common.security.SecurityUtils.currentUser(), empresaId, "reportes_avanzados");
+        empresaRepository.findById(empresaId).orElseThrow(() -> ApiException.notFound("La empresa no existe."));
         ReporteDtos.RespuestaInterpretacion conIa = interpretarConIa(prompt);
         if (conIa != null) {
             return conIa;
@@ -555,16 +607,17 @@ public class ReportesService {
      * una transaccion de solo lectura, para no retener una conexion a la base mientras responde la IA.
      */
     public ReporteDtos.RespuestaReporte ejecutar(Usuario usuario, Integer empresaId, String prompt) {
-        requireReporte(usuario, empresaId, "reportes_avanzados");
-        ReporteDtos.RespuestaInterpretacion interpretacion = interpretarPedido(prompt);
-        return lectura.execute(status -> construirReporte(empresaId, interpretacion));
-    }
-
-    private ReporteDtos.RespuestaReporte construirReporte(Integer empresaId, ReporteDtos.RespuestaInterpretacion interpretacion) {
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_avanzados");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        ReporteDtos.RespuestaInterpretacion interpretacion = interpretar(empresaId, prompt);
         String id = interpretacion.getEspecificacion().getIdentificadorPlantilla();
         if (id == null || id.isBlank()) {
             id = "resumen_ventas";
         }
+        String source=id.contains("inventario")?"inventory_movement:read":id.equals("alertas_stock")?"inventory:read":id.equals("movimientos_caja")?"cash_movement:read":"sale:read";
+        requireReport(usuario,empresaId,source);
+        if(id.contains("producto")) dataPolicy.productFields(dataPolicy.require(usuario,empresaId,null,"product:read"),"nombre","id_subcategoria");
+        if(id.equals("ventas_detalle")) dataPolicy.require(usuario,empresaId,null,"client:read");
         Map<String, Object> filtros = interpretacion.getEspecificacion().getFiltros();
         LocalDate[] rango = rangoPeriodo(filtros);
         LocalDate desde = rango[0];
@@ -729,29 +782,32 @@ public class ReportesService {
         }
         Sucursal sucursal = sucursalRepository.findById(idSucursal)
                 .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
-        Integer idEmpresa = sucursal.getEmpresa().getIdEmpresa();
-        requireReporte(usuario, idEmpresa, "predicciones");
-        LocalDate hoy = LocalDate.now();
-        Map<String, Object> params = paramsRango(idEmpresa, hoy.minusDays(29), hoy);
-        params.put("idSucursal", idSucursal);
-        Map<Integer, Integer> vendidos = new HashMap<>();
-        for (Object[] row : consulta("select d.idProducto, sum(d.cantidad)" + FROM_LINEAS
-                + " and s.idSucursal = :idSucursal group by d.idProducto", Object[].class, params).getResultList()) {
-            vendidos.put(aInt(row[0]), aInt(row[1]));
-        }
-        List<Stock> stocks = entityManager.createQuery("""
-                select st from Stock st
-                join fetch st.producto p
-                where st.idSucursal = :idSucursal
-                order by p.nombre
-                """, Stock.class)
-                .setParameter("idSucursal", idSucursal)
-                .getResultList();
+        empresaAccess.requireEmpresa(usuario, sucursal.getEmpresa().getIdEmpresa());
+        empresaAccess.requirePlanFeature(usuario, sucursal.getEmpresa().getIdEmpresa(), "predicciones");
+        LocalDateTime desde = LocalDate.now().minusDays(30).atStartOfDay();
         List<ReporteDtos.ProductoAbastecimiento> result = new ArrayList<>();
-        for (Stock stock : stocks) {
+        for (Stock stock : stockRepository.findByIdSucursal(idSucursal)) {
             Producto producto = stock.getProducto();
-            int vendido30 = vendidos.getOrDefault(producto.getIdProducto(), 0);
-            int actual = stock.getCantidad() == null ? 0 : stock.getCantidad();
+            if (producto == null) {
+                continue;
+            }
+            Number vendido = (Number) entityManager.createQuery("""
+                    select coalesce(sum(d.cantidad), 0)
+                    from DetalleVenta d, Venta v, CajaSesion cs
+                    join cs.caja c
+                    join c.sucursal s
+                    where d.venta = v
+                      and v.idCajaSesion = cs.idCajaSesion
+                      and s.idSucursal = :idSucursal
+                      and d.idProducto = :idProducto
+                      and v.fecha >= :desde
+                      and v.estado <> 'ANULADA'
+                    """)
+                    .setParameter("idSucursal", idSucursal)
+                    .setParameter("idProducto", producto.getIdProducto())
+                    .setParameter("desde", desde)
+                    .getSingleResult();
+            int vendido30 = vendido == null ? 0 : vendido.intValue();
             double promedio = vendido30 / 30.0;
             int prediccion = (int) Math.ceil(promedio * 30);
             ReporteDtos.ProductoAbastecimiento dto = new ReporteDtos.ProductoAbastecimiento();
@@ -778,6 +834,9 @@ public class ReportesService {
             throw ApiException.notFound("Productos no encontrados.");
         }
         Integer idEmpresa = origen.get(0).getIdEmpresa();
+        if(origen.size()!=new java.util.HashSet<>(ids).size() || origen.stream().anyMatch(p -> !java.util.Objects.equals(idEmpresa,p.getIdEmpresa()))) throw ApiException.notFound("Productos no encontrados en una misma empresa.");
+        var scope=dataPolicy.require(usuario,idEmpresa,null,"product:read","inventory:read");
+        dataPolicy.productFields(scope,"nombre","precio","unidad_medida","codigo_barra","id_subcategoria");
         empresaAccess.requirePlanFeature(usuario, idEmpresa, "predicciones");
         Integer idSub = origen.get(0).getSubcategoria() == null ? null : origen.get(0).getSubcategoria().getIdSubcategoria();
         List<Producto> candidatos = idSub == null
@@ -832,11 +891,20 @@ public class ReportesService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> ventasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.VentasParamRequest filtros) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        Empresa empresa = requireEmpresaExistente(empresaId);
-        LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
-        Map<String, Object> params = paramsRango(empresaId, rango[0], rango[1]);
-        StringBuilder jpql = new StringBuilder("select v").append(FROM_VENTAS);
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
+        LocalDateTime desde = (filtros.getFechaInicial() == null ? LocalDate.now().minusDays(30) : filtros.getFechaInicial()).atStartOfDay();
+        LocalDateTime hasta = (filtros.getFechaFinal() == null ? LocalDate.now() : filtros.getFechaFinal()).atTime(LocalTime.MAX);
+        String jpql = """
+                select v from Venta v, CajaSesion cs
+                join cs.caja c
+                join c.sucursal s
+                where v.idCajaSesion = cs.idCajaSesion
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and v.fecha between :desde and :hasta
+                  and v.estado <> 'ANULADA'
+                """;
         if (filtros.getIdSucursal() != null) {
             jpql.append(" and s.idSucursal = :idSucursal");
             params.put("idSucursal", filtros.getIdSucursal());
@@ -902,127 +970,165 @@ public class ReportesService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> inventarioParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.InventarioParamRequest filtros) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        Empresa empresa = requireEmpresaExistente(empresaId);
-        LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
-        List<Map<String, Object>> movimientos = filasMovimientosInventario(empresaId, rango[0], rango[1],
-                filtros.getIdSucursal(), filtros.getIdTipoMovimiento(), filtros.getIdProducto(), filtros.getIdCategoriaProducto());
-        List<Map<String, Object>> detalle = new ArrayList<>();
-        for (Map<String, Object> mov : movimientos) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("numero_movimiento", mov.get("id_movimiento_inventario"));
-            row.put("fecha_hora", mov.get("fecha_hora"));
-            row.put("sucursal", mov.get("sucursal"));
-            row.put("producto", mov.get("producto"));
-            row.put("categoria", mov.get("categoria"));
-            row.put("tipo", mov.get("tipo_movimiento"));
-            row.put("direccion", mov.get("direccion"));
-            row.put("cantidad", mov.get("cantidad"));
-            detalle.add(row);
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
+        Map<String, Object> inventario = movimientosInventario(usuario, empresaId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sucursales = inventario.get("sucursales") instanceof List<?> lista
+                ? (List<Map<String, Object>>) lista
+                : new ArrayList<>();
+        List<Map<String, Object>> sucursalesFiltradas = new ArrayList<>();
+        int movimientosRestantes = 0;
+        for (Map<String, Object> sucursal : sucursales) {
+            if (!mismoId(sucursal.get("id_sucursal"), filtros.getIdSucursal())) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> movimientos = sucursal.get("movimientos") instanceof List<?> listaMovs
+                    ? (List<Map<String, Object>>) listaMovs
+                    : new ArrayList<>();
+            List<Map<String, Object>> filtrados = new ArrayList<>();
+            int entradas = 0;
+            int salidas = 0;
+            for (Map<String, Object> mov : movimientos) {
+                if (!fechaDentro(mov.get("fecha"), filtros.getFechaInicial(), filtros.getFechaFinal())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_producto"), filtros.getIdProducto())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_tipo_movimiento"), filtros.getIdTipoMovimiento())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_categoria"), filtros.getIdCategoriaProducto())) {
+                    continue;
+                }
+                filtrados.add(mov);
+                int cantidad = aInt(mov.get("cantidad"));
+                if ("ENTRADA".equalsIgnoreCase(String.valueOf(mov.get("direccion")))) {
+                    entradas += cantidad;
+                } else {
+                    salidas += cantidad;
+                }
+            }
+            sucursal.put("movimientos", filtrados);
+            sucursal.put("resumen_sucursal", Map.of("total_entradas", entradas, "total_salidas", salidas));
+            sucursalesFiltradas.add(sucursal);
+            movimientosRestantes += filtrados.size();
         }
-        int[] es = entradasSalidas(movimientos);
-        // El stock es una foto del momento: respeta sucursal, producto y categoria, no el periodo.
-        Map<String, Object> stock = resumenStock(filasStockFiltrado(empresaId,
-                filtros.getIdSucursal(), filtros.getIdProducto(), filtros.getIdCategoriaProducto()));
-
-        Map<String, Object> aplicados = new LinkedHashMap<>();
-        aplicados.put("periodo", rango[0] + " / " + rango[1]);
-        aplicados.put("sucursal", textoFiltro(filtros.getIdSucursal(), "todas"));
-        aplicados.put("tipo_movimiento", textoFiltro(filtros.getIdTipoMovimiento(), "todos"));
-        aplicados.put("producto", textoFiltro(filtros.getIdProducto(), "todos"));
-        aplicados.put("categoria", textoFiltro(filtros.getIdCategoriaProducto(), "todas"));
-        return respuestaParametrizada(empresa, aplicados, List.of(
-                indicador("total_movimientos", "Total de movimientos", detalle.size()),
-                indicador("total_entradas", "Unidades que entraron", es[0]),
-                indicador("total_salidas", "Unidades que salieron", es[1]),
-                indicador("stock_disponible", "Stock disponible actual", stock.get("stock_disponible")),
-                indicador("productos_bajo_stock", "Productos con stock bajo", stock.get("productos_bajo_stock")),
-                indicador("productos_agotados", "Productos agotados", stock.get("productos_agotados"))),
-                detalle);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id_empresa", empresaId);
+        response.put("empresa", empresa.getNombre());
+        response.put("fecha_generacion", LocalDateTime.now().toString());
+        response.put("filtros_aplicados", Map.of(
+                "periodo", String.valueOf(filtros.getFechaInicial()) + " / " + filtros.getFechaFinal(),
+                "sucursal", filtros.getIdSucursal() == null ? "todas" : String.valueOf(filtros.getIdSucursal()),
+                "tipo_movimiento", filtros.getIdTipoMovimiento() == null ? "todos" : String.valueOf(filtros.getIdTipoMovimiento()),
+                "producto", filtros.getIdProducto() == null ? "todos" : String.valueOf(filtros.getIdProducto()),
+                "categoria", filtros.getIdCategoriaProducto() == null ? "todas" : String.valueOf(filtros.getIdCategoriaProducto())));
+        response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", movimientosRestantes)));
+        response.put("detalle_analitico", sucursalesFiltradas);
+        return response;
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> cajasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.CajasParamRequest filtros) {
-        requireReporte(usuario, empresaId, "reportes_estandar");
-        Empresa empresa = requireEmpresaExistente(empresaId);
-        LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
-        String estado = filtros.getEstadoSesion() == null || filtros.getEstadoSesion().isBlank()
-                ? null
-                : filtros.getEstadoSesion().trim();
-
-        List<Map<String, Object>> movimientos = filasMovimientosCaja(empresaId, rango[0], rango[1],
-                filtros.getIdSucursal(), filtros.getIdCaja(), filtros.getIdTipoMovimientoCaja(), estado);
-        List<Map<String, Object>> detalle = new ArrayList<>();
-        for (Map<String, Object> mov : movimientos) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("numero_movimiento", mov.get("id_movimiento_caja"));
-            row.put("fecha_hora", mov.get("fecha_hora"));
-            row.put("sucursal", mov.get("sucursal"));
-            row.put("caja", mov.get("caja"));
-            row.put("tipo", mov.get("tipo"));
-            row.put("concepto", mov.get("concepto"));
-            row.put("monto", mov.get("monto"));
-            detalle.add(row);
-        }
-        double[] ie = ingresosEgresos(movimientos);
-
-        List<Map<String, Object>> sesiones = filasSesionesCaja(empresaId, rango[0], rango[1],
-                filtros.getIdSucursal(), filtros.getIdCaja(), estado);
-        int abiertas = 0;
-        double aperturas = 0;
-        double esperado = 0;
-        double declarado = 0;
-        double diferencia = 0;
-        for (Map<String, Object> sesion : sesiones) {
-            if (esAbierta(sesion.get("estado"))) {
-                abiertas++;
+        empresaAccess.requirePlanFeature(usuario, empresaId, "reportes_estandar");
+        empresaAccess.requireEmpresa(usuario, empresaId);
+        Empresa empresa = empresaRepository.findById(empresaId).orElseThrow();
+        Map<String, Object> data = movimientosCaja(usuario, empresaId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sucursales = data.get("sucursales") instanceof List<?> lista
+                ? (List<Map<String, Object>>) lista
+                : new ArrayList<>();
+        List<Map<String, Object>> sucursalesFiltradas = new ArrayList<>();
+        int totalMovs = 0;
+        double ingresos = 0;
+        double egresos = 0;
+        String estadoPedido = filtros.getEstadoSesion() == null ? "" : filtros.getEstadoSesion().trim();
+        for (Map<String, Object> sucursal : sucursales) {
+            if (!mismoId(sucursal.get("id_sucursal"), filtros.getIdSucursal())) {
+                continue;
             }
-            aperturas += aDouble(sesion.get("monto_inicial"));
-            esperado += aDouble(sesion.get("monto_esperado"));
-            declarado += aDouble(sesion.get("monto_declarado"));
-            diferencia += aDouble(sesion.get("diferencia"));
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> movimientos = sucursal.get("movimientos") instanceof List<?> listaMovs
+                    ? (List<Map<String, Object>>) listaMovs
+                    : new ArrayList<>();
+            List<Map<String, Object>> filtrados = new ArrayList<>();
+            double ing = 0;
+            double egr = 0;
+            for (Map<String, Object> mov : movimientos) {
+                if (!mismoId(mov.get("id_caja"), filtros.getIdCaja())) {
+                    continue;
+                }
+                if (!mismoId(mov.get("id_tipo_movimiento_caja"), filtros.getIdTipoMovimientoCaja())) {
+                    continue;
+                }
+                if (!estadoPedido.isEmpty()) {
+                    String estado = mov.get("estado_sesion") == null ? "" : String.valueOf(mov.get("estado_sesion")).trim();
+                    if (!estadoPedido.equalsIgnoreCase(estado)) {
+                        continue;
+                    }
+                }
+                if (!fechaDentro(mov.get("hora"), filtros.getFechaInicial(), filtros.getFechaFinal())) {
+                    continue;
+                }
+                filtrados.add(mov);
+                double monto = aDouble(mov.get("monto"));
+                if (String.valueOf(mov.get("tipo")).toUpperCase(Locale.ROOT).contains("INGRESO")) {
+                    ing += monto;
+                } else {
+                    egr += monto;
+                }
+            }
+            sucursal.put("movimientos", filtrados);
+            sucursal.put("resumen_sucursal", Map.of(
+                    "total_movimientos", filtrados.size(),
+                    "total_ingresos", round(ing),
+                    "total_egresos", round(egr)));
+            sucursalesFiltradas.add(sucursal);
+            totalMovs += filtrados.size();
+            ingresos += ing;
+            egresos += egr;
         }
-
-        Map<String, Object> aplicados = new LinkedHashMap<>();
-        aplicados.put("periodo", rango[0] + " / " + rango[1]);
-        aplicados.put("sucursal", textoFiltro(filtros.getIdSucursal(), "todas"));
-        aplicados.put("caja", textoFiltro(filtros.getIdCaja(), "todas"));
-        aplicados.put("tipo_movimiento", textoFiltro(filtros.getIdTipoMovimientoCaja(), "todos"));
-        aplicados.put("estado_sesion", estado == null ? "todos" : estado);
-        return respuestaParametrizada(empresa, aplicados, List.of(
-                indicador("total_sesiones", "Sesiones de caja", sesiones.size()),
-                indicador("sesiones_abiertas", "Sesiones abiertas", abiertas),
-                indicador("sesiones_cerradas", "Sesiones cerradas", sesiones.size() - abiertas),
-                indicador("monto_aperturas", "Monto total de aperturas", round(aperturas)),
-                indicador("monto_esperado", "Monto esperado al cierre", round(esperado)),
-                indicador("monto_declarado", "Monto declarado al cierre", round(declarado)),
-                indicador("diferencia", "Diferencia de cierre", round(diferencia)),
-                indicador("total_movimientos", "Movimientos de caja", detalle.size()),
-                indicador("total_ingresos", "Ingresos", round(ie[0])),
-                indicador("total_egresos", "Egresos", round(ie[1])),
-                indicador("flujo_neto", "Flujo neto", round(ie[0] - ie[1]))),
-                detalle);
+        Map<String, Object> totales = new LinkedHashMap<>();
+        totales.put("total_movimientos", totalMovs);
+        totales.put("total_ingresos", round(ingresos));
+        totales.put("total_egresos", round(egresos));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id_empresa", empresaId);
+        response.put("empresa", empresa.getNombre());
+        response.put("fecha_generacion", LocalDateTime.now().toString());
+        response.put("filtros_aplicados", Map.of(
+                "periodo", String.valueOf(filtros.getFechaInicial()) + " / " + filtros.getFechaFinal(),
+                "sucursal", filtros.getIdSucursal() == null ? "todas" : String.valueOf(filtros.getIdSucursal()),
+                "caja", filtros.getIdCaja() == null ? "todas" : String.valueOf(filtros.getIdCaja()),
+                "tipo_movimiento", filtros.getIdTipoMovimientoCaja() == null ? "todos" : String.valueOf(filtros.getIdTipoMovimientoCaja()),
+                "estado_sesion", filtros.getEstadoSesion() == null ? "todos" : filtros.getEstadoSesion()));
+        response.put("resumen_gerencial", List.of(Map.of("indicador", "movimientos", "valor", totales)));
+        response.put("detalle_analitico", sucursalesFiltradas);
+        return response;
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Consultas compartidas
-    // ---------------------------------------------------------------------------------------------
-
-    private List<Object[]> ventasConSucursal(Integer empresaId, LocalDate desde, LocalDate hasta) {
-        return consulta("select v, s.idSucursal, s.nombre" + FROM_VENTAS + " order by v.fecha, v.idVenta",
-                Object[].class, paramsRango(empresaId, desde, hasta)).getResultList();
+    private List<Venta> ventasDeSucursal(Integer idSucursal, LocalDateTime desde, LocalDateTime hasta) {
+        return entityManager.createQuery("""
+                select v from Venta v, CajaSesion cs
+                join cs.caja c
+                where v.idCajaSesion = cs.idCajaSesion
+                  and c.sucursal.idSucursal = :idSucursal
+                  and v.fecha between :desde and :hasta
+                  and v.estado <> 'ANULADA'
+                """, Venta.class)
+                .setParameter("idSucursal", idSucursal)
+                .setParameter("desde", desde)
+                .setParameter("hasta", hasta)
+                .getResultList();
     }
 
-    /** Stock de la empresa con su estado calculado con la regla comun. */
-    private List<Map<String, Object>> filasStock(Integer empresaId, boolean soloAlertas) {
-        Map<Integer, String> nombresSucursal = nombresSucursales(empresaId);
-        List<Stock> stocks = entityManager.createQuery("""
-                select st from Stock st
-                join fetch st.producto p
-                where p.idEmpresa = :idEmpresa
-                order by p.nombre
-                """, Stock.class)
-                .setParameter("idEmpresa", empresaId)
+    private List<DetalleVenta> detalles(Integer idVenta) {
+        return entityManager.createQuery("select d from DetalleVenta d where d.venta.idVenta = :id", DetalleVenta.class)
+                .setParameter("id", idVenta)
                 .getResultList();
         List<Map<String, Object>> filas = new ArrayList<>();
         for (Stock stock : stocks) {

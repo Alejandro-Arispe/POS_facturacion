@@ -1,95 +1,93 @@
 <div class="page-container view-product-page">
   <app-navbar />
-
   <main class="view-product-layout">
     <app-sidebar context="company" [companyId]="companyId" />
-
     <section class="view-product-content">
-      <section class="view-product-panel panel">
-        <a class="back-link" [routerLink]="['/company', companyId, 'products']">Volver a Productos</a>
-
-        <header class="view-product-header">
-          <p class="badge badge-success">Producto {{ productId }}</p>
-          <h1 class="title-xl">Detalle de Producto</h1>
-          <p class="text-muted">Consulta los datos registrados de este producto.</p>
+      <section class="panel p-5 sm:p-7">
+        <a
+          class="text-sm font-medium text-brand hover:underline"
+          [routerLink]="['/company', companyId, 'products']"
+          >← Volver a productos</a
+        >
+        <header class="mb-6 mt-5">
+          <p class="text-xs font-semibold uppercase tracking-wider text-muted">
+            Producto #{{ productId }}
+          </p>
+          <h1 class="mt-2 text-2xl font-bold">Detalle del producto</h1>
         </header>
-
-        @if (cargandoProducto) {
-          <p class="feedback feedback-info">Cargando datos del producto...</p>
-        } @else if (errorProducto) {
-          <p class="feedback feedback-error">{{ errorProducto }}</p>
-        } @else if (producto) {
-          <dl class="product-detail">
-            <div>
-              <dt>Nombre</dt>
-              <dd>{{ producto.nombre }}</dd>
-            </div>
-            <div>
-              <dt>Descripcion</dt>
-              <dd>{{ producto.descripcion || 'Sin descripcion' }}</dd>
-            </div>
-            <div>
-              <dt>Subcategoria</dt>
-              <dd>{{ producto.subcategoria?.nombre || 'Sin subcategoria' }}</dd>
-            </div>
-            <div>
-              <dt>Codigo de barras</dt>
-              <dd>{{ producto.codigo_barra || 'Sin codigo de barras' }}</dd>
-            </div>
-            <div>
-              <dt>Unidad de medida</dt>
-              <dd>{{ producto.unidad_medida }}</dd>
-            </div>
-            @if (mostrarCampo('precio')) {
-              <div>
-                <dt>Precio</dt>
-                <dd>{{ producto.precio | money }}</dd>
-              </div>
+        @if (loading) {
+          <p role="status">Cargando producto…</p>
+        } @else if (error) {
+          <p class="feedback feedback-error" role="alert">{{ error }}</p>
+        }
+        @if (!permissions.hasPermission('product:read')) {
+          <p role="alert" class="feedback feedback-error">
+            No tienes permiso para consultar este producto.
+          </p>
+        } @else if (product) {
+          <dl class="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+            @for (field of fields; track field.key) {
+              @if (canRead(field.key)) {
+                <div class="border-b border-line pb-4">
+                  <dt class="text-xs font-semibold text-muted">{{ field.label }}</dt>
+                  <dd class="mt-2 break-words text-sm text-ink">
+                    @switch (field.key) {
+                      @case ('precio') {
+                        {{ product.precio == null ? '—' : (product.precio | money) }}
+                      }
+                      @case ('costo') {
+                        {{
+                          product.costo == null ? 'Sin costo registrado' : (product.costo | money)
+                        }}
+                      }
+                      @case ('id_subcategoria') {
+                        {{ product.subcategoria?.nombre ?? 'Sin subcategoría' }}
+                      }
+                      @case ('activo') {
+                        {{ product.activo == null ? '—' : product.activo ? 'Activo' : 'Inactivo' }}
+                      }
+                      @case ('imagen') {
+                        @if (product.imagen) {
+                          <img
+                            class="max-h-48 max-w-full rounded-lg border border-line object-contain"
+                            [secureSrc]="imageUrl(product.imagen)"
+                            [alt]="
+                              canRead('nombre')
+                                ? (product.nombre ?? 'Imagen del producto')
+                                : 'Imagen del producto'
+                            "
+                          />
+                        } @else {
+                          Sin imagen
+                        }
+                      }
+                      @default {
+                        {{ value(field.key) ?? '—' }}
+                      }
+                    }
+                  </dd>
+                </div>
+              }
             }
-            @if (mostrarCampo('costo')) {
-              <div>
-                <dt>Costo</dt>
-                <dd>{{ producto.costo == null ? 'Sin costo' : (producto.costo | money) }}</dd>
-              </div>
-            }
-            <div>
-              <dt>Estado</dt>
-              <dd>{{ producto.activo ? 'Activo' : 'Inactivo' }}</dd>
-            </div>
-            <div>
-              <dt>Imagen</dt>
-              <dd>
-                @if (producto.imagen) {
-                  <img class="product-image" [src]="producto.imagen.startsWith('http') ? producto.imagen : apiBaseUrl + producto.imagen" [alt]="producto.nombre" loading="lazy" />
-                } @else {
-                  <span>Sin imagen</span>
-                }
-              </dd>
-            </div>
           </dl>
         }
-
-        <div class="view-actions">
+        <div class="mt-6 flex flex-wrap gap-3">
           <a class="btn btn-secondary" [routerLink]="['/company', companyId, 'products']">Cerrar</a>
-          @if (mostrarCampo('editar') && hasPermission('PRODUCTO_EDITAR')) {
-            @if (soloLectura('editar')) {
-              <button class="btn btn-primary" type="button" disabled>Editar</button>
-            } @else {
-              <a
-                class="btn btn-primary"
-                [routerLink]="['/company', companyId, 'product', productId, 'edit-product']"
-                >Editar</a
-              >
-            }
-          }
-          @if (mostrarCampo('eliminar')) {
-            <button
-              class="btn btn-secondary"
-              type="button"
-              [disabled]="soloLectura('eliminar') || eliminando"
-              (click)="eliminarProducto()"
+          @if (permissions.hasPermission('product:update')) {
+            <a
+              class="btn btn-primary"
+              [routerLink]="['/company', companyId, 'product', productId, 'edit-product']"
+              >Editar producto</a
             >
-              {{ eliminando ? 'Eliminando...' : 'Eliminar' }}
+          }
+          @if (permissions.hasPermission('product:delete')) {
+            <button
+              type="button"
+              class="btn btn-secondary"
+              [disabled]="deleting"
+              (click)="remove()"
+            >
+              {{ deleting ? 'Eliminando…' : 'Eliminar' }}
             </button>
           }
         </div>
@@ -97,4 +95,3 @@
     </section>
   </main>
 </div>
-

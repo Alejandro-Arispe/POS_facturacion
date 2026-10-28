@@ -1,3 +1,4 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -43,6 +44,7 @@ const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   styleUrl: './analytics.css',
 })
 export class AnalyticsDashboard implements OnInit {
+  private readonly readSnapshot=watchReadPermissions(() => { this.data=null;this.points=[];this.cdr.markForCheck(); });
   private readonly route = inject(ActivatedRoute);
   private readonly analyticsService = inject(AnalyticsService);
   private readonly companyService = inject(CompanyService);

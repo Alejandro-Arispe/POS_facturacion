@@ -15,7 +15,7 @@
 
       <section class="tabs-panel panel">
         <div class="tabs" role="tablist" aria-label="Secciones de sucursales">
-          @if (hasPermission('SUCURSAL_CREAR')) {
+          @if (hasPermission('branch:create')) {
             <button
               class="tab-button"
               [class.active]="activeTab === 'register'"
@@ -155,7 +155,7 @@
                         ]"
                         >Ver</a
                       >
-                      @if (hasPermission('SUCURSAL_EDITAR')) {
+                      @if (hasPermission('branch:update')) {
                         <a
                           class="btn btn-secondary"
                           [routerLink]="[

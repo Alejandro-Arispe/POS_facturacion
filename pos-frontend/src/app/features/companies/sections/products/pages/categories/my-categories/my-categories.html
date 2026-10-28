@@ -25,7 +25,7 @@
     >
       Lista de categorias
     </button>
-    @if (hasPermission('CATEGORIA_CREAR')) {
+    @if (hasPermission('client_category:create')) {
       <button
         class="tab-button"
         [class.active]="activeTab === 'register'"
@@ -71,7 +71,7 @@
                   [routerLink]="['/company', companyId, 'category', categoria.id_categoria_producto, 'view-category']"
                   >Ver</a
                 >
-                @if (hasPermission('CATEGORIA_EDITAR')) {
+                @if (hasPermission('client_category:update')) {
                   <a
                     class="btn btn-primary"
                     [routerLink]="['/company', companyId, 'category', categoria.id_categoria_producto, 'edit-category']"

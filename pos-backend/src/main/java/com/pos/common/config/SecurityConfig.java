@@ -34,6 +34,11 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable())
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .cors(Customizer.withDefaults())
+                .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, error) -> {
+                    response.setStatus(401);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"detail\":\"Se requiere una sesion valida.\"}");
+                }))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
@@ -45,7 +50,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/empresas/tipos-movimiento-caja").permitAll()
                         .requestMatchers("/api/pagos/webhook").permitAll()
                         .requestMatchers("/api/invitaciones/**").permitAll()
-                        .requestMatchers("/ws/**", "/media/**", "/XMLS/**", "/h2-console/**").permitAll()
+                        .requestMatchers("/h2-console/**").denyAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

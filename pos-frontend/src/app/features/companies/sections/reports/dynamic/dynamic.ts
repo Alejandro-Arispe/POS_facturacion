@@ -1,3 +1,5 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
+import { firstValueFrom } from 'rxjs';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -19,6 +21,7 @@ import { Sidebar } from '../../../../../shared/components/sidebar/sidebar';
   styleUrl: './dynamic.css',
 })
 export class DynamicReports {
+  private readonly readSnapshot=watchReadPermissions(() => { this.report.set(null); });
   private readonly route = inject(ActivatedRoute);
   private readonly reportService = inject(DynamicReportService);
   private readonly companyPermissionsService = inject(CompanyPermissionsService);
@@ -29,6 +32,7 @@ export class DynamicReports {
     validators: [Validators.required, Validators.minLength(3)],
   });
 
+  private lastPrompt='';
   protected readonly report = signal<DynamicReportResponse | null>(null);
   protected readonly loading = signal(false);
   protected readonly exportingFormat = signal<ReportExportFormat | null>(null);
@@ -198,6 +202,7 @@ export class DynamicReports {
 
     this.reportService.run(this.companyId, prompt).subscribe({
       next: (response) => {
+        this.lastPrompt=prompt;
         this.report.set(response);
         this.loading.set(false);
         if (this.speakNextReport) {
@@ -212,10 +217,10 @@ export class DynamicReports {
       },
     });
   }
-  protected exportReport(format: ReportExportFormat): void {
-    const report = this.report();
+  protected async exportReport(format: ReportExportFormat): Promise<void> {
+    let report = this.report();
 
-    if (!this.hasPermission('REPORTE_EXPORTAR')) {
+    if (!this.hasPermission('report:export')) {
       this.errorMessage.set('No tienes permiso para exportar reportes.');
       return;
     }
@@ -233,12 +238,16 @@ export class DynamicReports {
     this.errorMessage.set(null);
 
     try {
+      report=await firstValueFrom(this.reportService.run(this.companyId,this.lastPrompt,true));
+      this.report.set(report);
+      if(!this.hasPermission('report:export')) return;
       if (format === 'excel') {
         this.exportExcelReport();
       } else {
         this.exportPdfReport(report);
       }
     } catch (error: unknown) {
+      this.report.set(null);
       this.errorMessage.set(this.getErrorMessage(error));
     } finally {
       this.exportingFormat.set(null);
@@ -483,6 +492,7 @@ export class DynamicReports {
   }
 
   private escapeHtml(value: string): string {
+    if(/^[\s\x00-\x1f]*[=+\-@]/.test(value)) value="\'"+value;
     return value
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

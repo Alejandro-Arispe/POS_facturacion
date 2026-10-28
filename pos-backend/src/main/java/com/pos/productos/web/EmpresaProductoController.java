@@ -30,19 +30,20 @@ import com.pos.ventas.service.VentaService;
 public class EmpresaProductoController {
 
     private final ProductoService productoService;
-    private final ProductImageStorage imageStorage;
+    private final com.pos.ventas.service.InvoiceReadService invoiceRead;
+    private final ProductPayloads payloads;
     private final ClienteService clienteService;
     private final VentaService ventaService;
     private final FacturaRepository facturaRepository;
 
     public EmpresaProductoController(
-            ProductoService productoService,
-            ProductImageStorage imageStorage,
+            ProductoService productoService, com.pos.ventas.service.InvoiceReadService invoiceRead,
+            ProductPayloads payloads,
             ClienteService clienteService,
             VentaService ventaService,
             FacturaRepository facturaRepository) {
-        this.productoService = productoService;
-        this.imageStorage = imageStorage;
+        this.productoService = productoService; this.invoiceRead=invoiceRead;
+        this.payloads = payloads;
         this.clienteService = clienteService;
         this.ventaService = ventaService;
         this.facturaRepository = facturaRepository;
@@ -55,42 +56,31 @@ public class EmpresaProductoController {
     }
 
     @GetMapping("/{idEmpresa}/productos")
-    public List<ProductoDtos.ProductoResponse> listarProductos(@PathVariable Integer idEmpresa) {
+    public List<java.util.Map<String,Object>> listarProductos(@PathVariable Integer idEmpresa) {
         return productoService.listarPorEmpresa(SecurityUtils.currentUser(), idEmpresa);
     }
 
     @PostMapping("/{idEmpresa}/productos")
-    public ProductoDtos.ProductoResponse crearProducto(
+    public java.util.Map<String,Object> crearProducto(
             @PathVariable Integer idEmpresa, @RequestBody ProductoDtos.ProductoCreate datos) {
         return productoService.crearProducto(SecurityUtils.currentUser(), idEmpresa, datos, null);
     }
 
+    public record ProductExport(java.util.List<String> columnas,java.util.List<Integer> ids) { }
+
+    @PostMapping("/{idEmpresa}/productos/exportar")
+    public org.springframework.http.ResponseEntity<String> exportar(@PathVariable Integer idEmpresa,@RequestBody ProductExport request) {
+        String csv=productoService.exportar(SecurityUtils.currentUser(),idEmpresa,request.columnas(),request.ids());
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Disposition","attachment; filename=productos.csv")
+                .contentType(new org.springframework.http.MediaType("text","csv",java.nio.charset.StandardCharsets.UTF_8)).body(csv);
+    }
+
     @PostMapping("/{idEmpresa}/productos/con-imagen")
-    public ProductoDtos.ProductoResponse crearConImagen(
-            @PathVariable Integer idEmpresa,
-            @RequestParam("id_subcategoria") Integer idSubcategoria,
-            @RequestParam("nombre") String nombre,
-            @RequestParam(value = "codigo_barra", required = false) String codigoBarra,
-            @RequestParam(value = "descripcion", required = false) String descripcion,
-            @RequestParam("unidad_medida") String unidadMedida,
-            @RequestParam(value = "precio", required = false) BigDecimal precio,
-            @RequestParam(value = "costo", required = false) BigDecimal costo,
-            @RequestParam(value = "activo", required = false, defaultValue = "true") Boolean activo,
-            @RequestParam(value = "imagen", required = false) MultipartFile imagen) {
-        String path = null;
-        if (imagen != null && !imagen.isEmpty()) {
-            path = imageStorage.save(imagen);
-        }
-        ProductoDtos.ProductoCreate payload = new ProductoDtos.ProductoCreate();
-        payload.setIdSubcategoria(idSubcategoria);
-        payload.setNombre(nombre);
-        payload.setCodigoBarra(codigoBarra);
-        payload.setDescripcion(descripcion);
-        payload.setUnidadMedida(unidadMedida);
-        payload.setPrecio(precio == null ? BigDecimal.ZERO : precio);
-        payload.setCosto(costo);
-        payload.setActivo(activo);
-        return productoService.crearProducto(SecurityUtils.currentUser(), idEmpresa, payload, path);
+    public java.util.Map<String,Object> crearConImagen(@PathVariable Integer idEmpresa,
+            org.springframework.web.multipart.MultipartHttpServletRequest request) {
+        return productoService.crearProducto(SecurityUtils.currentUser(),idEmpresa,
+                payloads.parse(request,ProductoDtos.ProductoCreate.class),request.getFile("imagen"));
     }
 
     @GetMapping("/{idEmpresa}/subcategorias")
@@ -104,27 +94,9 @@ public class EmpresaProductoController {
     }
 
     @GetMapping("/{idEmpresa}/facturas")
-    public List<VentaDtos.FacturaResponse> facturas(@PathVariable Integer idEmpresa) {
-        List<VentaDtos.FacturaResponse> result = new ArrayList<>();
-        for (Factura factura : facturaRepository.findByIdEmpresa(idEmpresa)) {
-            VentaDtos.FacturaResponse dto = new VentaDtos.FacturaResponse();
-            dto.setIdFactura(factura.getIdFactura());
-            dto.setIdVenta(factura.getVenta().getIdVenta());
-            dto.setNitEmisor(factura.getNitEmisor());
-            dto.setNumeroFactura(factura.getNumeroFactura());
-            dto.setFechaEmision(factura.getFechaEmision());
-            dto.setNitCliente(factura.getNitCliente());
-            dto.setMontoTotal(factura.getMontoTotal());
-            dto.setIva(factura.getIva());
-            dto.setCufd(factura.getCufd());
-            dto.setCuf(factura.getCuf());
-            dto.setXmlGenerado(factura.getXmlGenerado());
-            dto.setPdfGenerado(factura.getPdfGenerado());
-            result.add(dto);
-        }
-        return result;
+    public List<java.util.Map<String,Object>> facturas(@PathVariable Integer idEmpresa) {
+        return invoiceRead.list(idEmpresa);
     }
-
     @GetMapping("/{idEmpresa}/categorias-cliente")
     public List<ClienteDtos.CategoriaResponse> categoriasCliente(@PathVariable Integer idEmpresa) {
         return clienteService.listarCategorias(SecurityUtils.currentUser(), idEmpresa);

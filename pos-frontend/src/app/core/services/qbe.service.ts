@@ -57,7 +57,7 @@ export class QbeService {
     return this.api.get<QbeSource[]>(`/api/reportes/${companyId}/qbe/fuentes`);
   }
 
-  run(companyId: string | number, query: QbeQuery): Observable<QbeResult> {
-    return this.api.post<QbeResult, QbeQuery>(`/api/reportes/${companyId}/qbe/ejecutar`, query);
+  run(companyId: string | number, query: QbeQuery, exporting=false): Observable<QbeResult> {
+    return exporting ? this.api.postExport<QbeResult,QbeQuery>(`/api/reportes/${companyId}/qbe/ejecutar`,query) : this.api.post<QbeResult, QbeQuery>(`/api/reportes/${companyId}/qbe/ejecutar`, query);
   }
 }

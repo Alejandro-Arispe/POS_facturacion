@@ -11,6 +11,24 @@ export class ApiService {
 
   constructor(private readonly http: HttpClient) {}
 
+  postText(endpoint: string, body: unknown): Observable<string> {
+    return this.http.post(this.buildUrl(endpoint), body, { responseType: 'text' });
+  }
+
+  getBlob(endpoint: string): Observable<Blob> {
+    return this.http.get(this.buildUrl(endpoint), { responseType: 'blob' });
+  }
+  getExport<TResponse>(endpoint: string): Observable<TResponse> {
+    return this.http.get<TResponse>(this.buildUrl(endpoint), {
+      headers: { 'X-Report-Export': 'true' },
+    });
+  }
+  postExport<TResponse, TBody>(endpoint: string, body: TBody): Observable<TResponse> {
+    return this.http.post<TResponse>(this.buildUrl(endpoint), body, {
+      headers: { 'X-Report-Export': 'true' },
+    });
+  }
+
   get<TResponse>(endpoint: string): Observable<TResponse> {
     return this.http.get<TResponse>(this.buildUrl(endpoint));
   }
@@ -26,7 +44,6 @@ export class ApiService {
   patch<TResponse, TBody = any>(endpoint: string, body: TBody): Observable<TResponse> {
     return this.http.patch<TResponse>(this.buildUrl(endpoint), body);
   }
-
 
   delete<TResponse>(endpoint: string): Observable<TResponse> {
     return this.http.delete<TResponse>(this.buildUrl(endpoint));

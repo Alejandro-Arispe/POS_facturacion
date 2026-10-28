@@ -64,8 +64,10 @@ public class PedidoService {
     @Transactional
     public PedidoDtos.PedidoResponse crear(Usuario usuario, Integer idEmpresa, PedidoDtos.PedidoCreate payload) {
         empresaAccess.requireSucursal(usuario, idEmpresa, payload.getIdSucursal());
-        Cliente cliente = clienteRepository.findFirstByIdUsuarioOrderByIdClienteAsc(usuario.getIdUsuario())
+        empresaAccess.requirePlanFeature(usuario,idEmpresa,"pedidos");
+        Cliente cliente = clienteRepository.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(usuario.getIdUsuario(),idEmpresa)
                 .orElseThrow(() -> ApiException.badRequest("No se encontró perfil de cliente para este usuario."));
+        if(!Boolean.TRUE.equals(cliente.getActivo())) throw ApiException.forbidden("Tu perfil de cliente está inactivo.");
         BigDecimal descuentoPct = BigDecimal.ZERO;
         if (cliente.getCategoriaCliente() != null && cliente.getCategoriaCliente().getDescuentoBase() != null) {
             descuentoPct = cliente.getCategoriaCliente().getDescuentoBase()
@@ -111,7 +113,7 @@ public class PedidoService {
             }
             BigDecimal precio = producto.getPrecio() == null ? BigDecimal.ZERO : producto.getPrecio();
             BigDecimal subtotalItem = precio.multiply(BigDecimal.valueOf(item.getCantidad()));
-            BigDecimal descItem = subtotalItem.multiply(descuentoPct);
+            BigDecimal descItem = subtotalItem.multiply(descuentoPct).setScale(2,RoundingMode.HALF_UP);
             PedidoClienteDetalle detalle = new PedidoClienteDetalle();
             detalle.setPedido(pedido);
             detalle.setIdProducto(item.getIdProducto());
@@ -131,26 +133,23 @@ public class PedidoService {
 
     @Transactional(readOnly = true)
     public List<PedidoDtos.PedidoResponse> misPedidos(Usuario usuario) {
-        return clienteRepository.findFirstByIdUsuarioOrderByIdClienteAsc(usuario.getIdUsuario())
-                .map(cliente -> pedidoRepository.findByIdClienteOrderByFechaCreacionDesc(cliente.getIdCliente())
-                        .stream().map(this::toResponse).toList())
-                .orElse(List.of());
+        empresaAccess.requireUsuarioActivo(usuario);
+        return clienteRepository.findByIdUsuario(usuario.getIdUsuario()).stream().filter(c -> Boolean.TRUE.equals(c.getActivo()))
+            .flatMap(c -> pedidoRepository.findByIdClienteOrderByFechaCreacionDesc(c.getIdCliente()).stream())
+            .filter(p -> ownOrderAllowed(usuario,p)).map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
     public PedidoDtos.PedidoResponse miPedido(Usuario usuario, Integer idPedido) {
-        Cliente cliente = clienteRepository.findFirstByIdUsuarioOrderByIdClienteAsc(usuario.getIdUsuario())
-                .orElseThrow(() -> ApiException.notFound("No se encontro perfil de cliente."));
-        PedidoCliente pedido = pedidoRepository.findById(idPedido)
-                .orElseThrow(() -> ApiException.notFound("Pedido no encontrado o no pertenece a este cliente."));
-        if (!cliente.getIdCliente().equals(pedido.getIdCliente())) {
-            throw ApiException.notFound("Pedido no encontrado o no pertenece a este cliente.");
-        }
+        empresaAccess.requireUsuarioActivo(usuario);
+        PedidoCliente pedido=pedidoRepository.findById(idPedido).orElseThrow(() -> ApiException.notFound("Pedido no encontrado."));
+        if(!ownOrderAllowed(usuario,pedido)) throw ApiException.notFound("Pedido no encontrado para este cliente.");
         return toResponse(pedido);
     }
 
     @Transactional
     public PedidoDtos.PedidoResponse cancelar(Usuario usuario, Integer idPedido) {
+        pedidoRepository.findForUpdate(idPedido).orElseThrow(() -> ApiException.notFound("Pedido no encontrado."));
         PedidoDtos.PedidoResponse actual = miPedido(usuario, idPedido);
         PedidoCliente pedido = pedidoRepository.findById(actual.getIdPedido()).orElseThrow();
         validarTransicion(pedido.getEstado(), "cancelado");
@@ -162,7 +161,9 @@ public class PedidoService {
     @Transactional(readOnly = true)
     public List<PedidoDtos.PedidoResponse> pedidosEmpresa(
             Usuario usuario, Integer idEmpresa, Integer idSucursal, String estado) {
-        empresaAccess.requirePermiso(usuario, idEmpresa, "PEDIDO_VER");
+        empresaAccess.requirePlanFeature(usuario,idEmpresa,"pedidos");
+        if(idSucursal!=null) empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"order:read");
+        else empresaAccess.requirePermiso(usuario,idEmpresa,"order:read");
         List<PedidoCliente> pedidos;
         if (idSucursal != null && estado != null) {
             pedidos = pedidoRepository.findByIdEmpresaAndIdSucursalAndEstado(idEmpresa, idSucursal, estado);
@@ -173,32 +174,33 @@ public class PedidoService {
         } else {
             pedidos = pedidoRepository.findByIdEmpresaOrderByFechaCreacionDesc(idEmpresa);
         }
-        return pedidos.stream().map(this::toResponse).toList();
+        return pedidos.stream().filter(p -> branchAllowed(usuario,p,"order:read")).map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
     public PedidoDtos.PedidoResponse pedidoEmpresa(Usuario usuario, Integer idEmpresa, Integer idPedido) {
-        empresaAccess.requirePermiso(usuario, idEmpresa, "PEDIDO_VER");
+        empresaAccess.requireEmpresa(usuario,idEmpresa);
         PedidoCliente pedido = pedidoRepository.findById(idPedido)
                 .orElseThrow(() -> ApiException.notFound("Pedido no encontrado."));
         if (!idEmpresa.equals(pedido.getIdEmpresa())) {
             throw ApiException.notFound("Pedido no encontrado.");
         }
+        empresaAccess.requirePermiso(usuario,idEmpresa,pedido.getIdSucursal(),"order:read");
         return toResponse(pedido);
     }
 
     @Transactional
     public PedidoDtos.PedidoResponse actualizarEstado(
             Usuario usuario, Integer idEmpresa, Integer idPedido, PedidoDtos.EstadoUpdate payload) {
-        empresaAccess.requirePermiso(usuario, idEmpresa, "PEDIDO_GESTIONAR");
-        PedidoCliente pedido = pedidoRepository.findById(idPedido)
+        empresaAccess.requireEmpresa(usuario,idEmpresa);
+        PedidoCliente pedido = pedidoRepository.findForUpdate(idPedido)
                 .orElseThrow(() -> ApiException.notFound("Pedido no encontrado."));
         if (!idEmpresa.equals(pedido.getIdEmpresa())) {
             throw ApiException.notFound("Pedido no encontrado.");
         }
-        if ("convertido_en_venta".equals(payload.getEstado()) && pedido.getIdVenta() != null) {
-            throw ApiException.badRequest("El pedido ya fue convertido en venta.");
-        }
+        empresaAccess.requirePermiso(usuario,idEmpresa,pedido.getIdSucursal(),"order:manage");
+        if("convertido_en_venta".equals(payload.getEstado())) throw ApiException.badRequest("El pedido se convierte al registrar su venta en caja.");
+        if("entregado".equals(payload.getEstado()) && pedido.getIdVenta()==null) throw ApiException.badRequest("El pedido no tiene una venta registrada.");
         validarTransicion(pedido.getEstado(), payload.getEstado());
         pedido.setEstado(payload.getEstado());
         if (payload.getObservacionEmpresa() != null) {
@@ -214,6 +216,15 @@ public class PedidoService {
             }
         }
         return toResponse(pedidoRepository.save(pedido));
+    }
+
+    private boolean branchAllowed(Usuario user,PedidoCliente order,String action) {
+        return empresaAccess.canPermiso(user,order.getIdEmpresa(),order.getIdSucursal(),action);
+    }
+    private boolean ownOrderAllowed(Usuario user,PedidoCliente order) {
+        var client=clienteRepository.findById(order.getIdCliente()).orElse(null);
+        return client!=null && user.getIdUsuario().equals(client.getIdUsuario()) && Boolean.TRUE.equals(client.getActivo())
+            && order.getIdEmpresa().equals(client.getIdEmpresa()) && empresaAccess.canAccess(user,order.getIdEmpresa(),order.getIdSucursal(),"pedidos");
     }
 
     private void validarTransicion(String actual, String nuevo) {

@@ -1,102 +1,57 @@
 package com.pos.websocket;
 
-import java.io.IOException;
-import java.net.URI;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-
+import java.util.*;
+import java.util.concurrent.*;
 import org.springframework.stereotype.Component;
-import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class AdministradorWebSocketHandler extends TextWebSocketHandler {
-
-    private final ObjectMapper objectMapper;
-    private final AdminDashboardService dashboardService;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
-    private final ConcurrentHashMap<String, ScheduledFuture<?>> tasks = new ConcurrentHashMap<>();
-
-    public AdministradorWebSocketHandler(ObjectMapper objectMapper, AdminDashboardService dashboardService) {
-        this.objectMapper = objectMapper;
-        this.dashboardService = dashboardService;
+    private final ObjectMapper json;
+    private final AdminDashboardService dashboard;
+    private final SocketIdentity identity;
+    private final ScheduledExecutorService scheduler=Executors.newScheduledThreadPool(2);
+    private final Map<String,ScheduledFuture<?>> tasks=new ConcurrentHashMap<>();
+    public AdministradorWebSocketHandler(ObjectMapper json,AdminDashboardService dashboard,SocketIdentity identity) {
+        this.json=json;this.dashboard=dashboard;this.identity=identity;
     }
-
-    @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        Integer idEmpresa = lastInt(session.getUri());
-        session.getAttributes().put("idEmpresa", idEmpresa);
-        sendDashboard(session, idEmpresa, null);
-        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(() -> {
-            if (!session.isOpen()) {
-                return;
+    @Override public void afterConnectionEstablished(WebSocketSession session) {
+        session.setTextMessageSizeLimit(8192);
+        tasks.put(session.getId(),scheduler.schedule(() -> close(session),10,TimeUnit.SECONDS));
+    }
+    @Override protected void handleTextMessage(WebSocketSession session,TextMessage message) throws Exception {
+        try {
+            var node=json.readTree(message.getPayload());
+            if(!session.getAttributes().containsKey("accessToken")) {
+                if(!"autenticar".equals(node.path("tipo").asText())) {close(session);return;}
+                String token=node.path("token").asText(); identity.verify(token);
+                Integer company=Integer.valueOf(session.getUri().getPath().substring(session.getUri().getPath().lastIndexOf('/')+1));
+                session.getAttributes().put("accessToken",token);session.getAttributes().put("idEmpresa",company);
+                if(node.hasNonNull("id_sucursal")) session.getAttributes().put("idSucursal",node.get("id_sucursal").asInt());
+                send(session);
+                var old=tasks.remove(session.getId());if(old!=null) old.cancel(false);
+                tasks.put(session.getId(),scheduler.scheduleAtFixedRate(() -> {try {send(session);} catch(Exception ex){close(session);}},5,5,TimeUnit.SECONDS));
+            } else if("dashboard".equals(node.path("tipo").asText())) {
+                Integer branch=null;
+                if(node.hasNonNull("id_sucursal")) branch=node.get("id_sucursal").asInt();
+                else if(node.path("datos").isArray() && node.path("datos").size()>0 && node.path("datos").get(0).hasNonNull("id_sucursal")) branch=node.path("datos").get(0).get("id_sucursal").asInt();
+                if(branch==null || branch==0) session.getAttributes().remove("idSucursal");else session.getAttributes().put("idSucursal",branch);
+                send(session);
             }
-            Integer sucursal = (Integer) session.getAttributes().get("idSucursal");
-            try {
-                sendDashboard(session, idEmpresa, sucursal);
-            } catch (Exception ignored) {
-            }
-        }, 5, 5, TimeUnit.SECONDS);
-        tasks.put(session.getId(), future);
+        } catch(Exception ex) {close(session);}
     }
-
-    @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        JsonNode node = objectMapper.readTree(message.getPayload());
-        Integer idEmpresa = (Integer) session.getAttributes().get("idEmpresa");
-        if (node.has("tipo") && "dashboard".equals(node.get("tipo").asText())) {
-            Integer idSucursal = null;
-            JsonNode datos = node.get("datos");
-            if (datos != null && datos.isArray() && datos.size() > 0 && datos.get(0).has("id_sucursal")) {
-                idSucursal = datos.get(0).get("id_sucursal").asInt();
-            } else if (node.has("id_sucursal")) {
-                idSucursal = node.get("id_sucursal").asInt();
-            }
-            if (idSucursal != null && idSucursal == 0) {
-                idSucursal = null;
-            }
-            session.getAttributes().put("idSucursal", idSucursal);
-            sendDashboard(session, idEmpresa, idSucursal);
-        } else {
-            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                    Map.of("tipo", "error", "datos", List.of(Map.of("mensaje", "Tipo de mensaje no soportado."))))));
-        }
+    private void send(WebSocketSession session) throws Exception {
+        if(!session.isOpen()) return;
+        var user=identity.current(session);
+        var data=dashboard.calcular(user,(Integer)session.getAttributes().get("idEmpresa"),(Integer)session.getAttributes().get("idSucursal"));
+        synchronized(session) {if(session.isOpen()) session.sendMessage(new TextMessage(json.writeValueAsString(Map.of("tipo","dashboard","datos",List.of(data)))));}
     }
-
-    @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        ScheduledFuture<?> future = tasks.remove(session.getId());
-        if (future != null) {
-            future.cancel(true);
-        }
+    private void close(WebSocketSession session) {
+        var future=tasks.remove(session.getId());if(future!=null) future.cancel(false);
+        try {session.close(CloseStatus.POLICY_VIOLATION);}catch(Exception ignored) {}
     }
-
-    private void sendDashboard(WebSocketSession session, Integer idEmpresa, Integer idSucursal) throws IOException {
-        Map<String, Object> dashboard = dashboardService.calcular(idEmpresa, idSucursal);
-        Map<String, Object> payload = Map.of("tipo", "dashboard", "datos", List.of(dashboard));
-        synchronized (session) {
-            if (session.isOpen()) {
-                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(payload)));
-            }
-        }
-    }
-
-    private Integer lastInt(URI uri) {
-        if (uri == null) {
-            return 0;
-        }
-        String path = uri.getPath();
-        int idx = path.lastIndexOf('/');
-        return Integer.valueOf(path.substring(idx + 1));
-    }
+    @Override public void afterConnectionClosed(WebSocketSession session,CloseStatus status) {var future=tasks.remove(session.getId());if(future!=null)future.cancel(false);session.getAttributes().remove("accessToken");}
+    @jakarta.annotation.PreDestroy public void stop() {scheduler.shutdownNow();}
 }

@@ -1,3 +1,4 @@
+import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -25,6 +26,7 @@ interface SupplyPrediction {
   styleUrl: './prediction.css',
 })
 export class SalesPrediction implements OnInit {
+  private readonly readSnapshot=watchReadPermissions(() => { this.predictionResults=null; });
   private readonly route = inject(ActivatedRoute);
   private readonly companyService = inject(CompanyService);
   private readonly apiService = inject(ApiService);

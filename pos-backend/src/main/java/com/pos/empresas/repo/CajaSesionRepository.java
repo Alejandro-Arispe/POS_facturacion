@@ -41,4 +41,7 @@ public interface CajaSesionRepository extends JpaRepository<CajaSesion, Integer>
 			where cs.idCajaSesion = :id
 			""")
 	Optional<CajaSesion> findWithCajaSucursalEmpresa(@Param("id") Integer id);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select e from CajaSesion e where e.idCajaSesion = :id")
+    java.util.Optional<CajaSesion> lockById(@org.springframework.data.repository.query.Param("id") Integer id);
 }

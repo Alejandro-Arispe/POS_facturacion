@@ -71,6 +71,9 @@ public class RespaldoService {
             "historial_suscripcion.id_historial_suscripcion");
 
     private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
+    private final com.pos.common.access.RoleAdministrationPolicy rolePolicy;
+    private final com.pos.common.access.RbacAudit rbacAudit;
     private final EmpresaRepository empresaRepository;
     private final SucursalRepository sucursalRepository;
     private final CategoriaProductoRepository categoriaProductoRepository;
@@ -87,7 +90,7 @@ public class RespaldoService {
     private final EntityManager entityManager;
 
     public RespaldoService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy, com.pos.common.access.RoleAdministrationPolicy rolePolicy, com.pos.common.access.RbacAudit rbacAudit,
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
             CategoriaProductoRepository categoriaProductoRepository,
@@ -102,7 +105,7 @@ public class RespaldoService {
             RespaldoAlmacen almacen,
             ObjectMapper objectMapper,
             EntityManager entityManager) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;this.rolePolicy=rolePolicy;this.rbacAudit=rbacAudit;
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
         this.categoriaProductoRepository = categoriaProductoRepository;
@@ -121,7 +124,7 @@ public class RespaldoService {
 
     @Transactional(readOnly = true)
     public RespaldoRespuestas.Generado crear(Integer idEmpresa, Usuario usuario) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        requireOwner(usuario,idEmpresa);
         return guardar(idEmpresa);
     }
 
@@ -134,19 +137,39 @@ public class RespaldoService {
     }
 
     public List<RespaldoRespuestas.Resumen> listar(Integer idEmpresa, Usuario usuario) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        requireOwner(usuario,idEmpresa);
         return almacen.listar(idEmpresa);
     }
 
     public byte[] descargar(Integer idEmpresa, Usuario usuario, String archivo) {
-        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        requireOwner(usuario,idEmpresa);
         return almacen.leer(idEmpresa, archivo);
     }
 
     @Transactional
     public RespaldoRespuestas.Restaurado restaurar(Integer idEmpresa, Usuario usuario, String archivo) {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
+        rolePolicy.lock(idEmpresa);
+        var capabilities=rolePolicy.companyManager(usuario,idEmpresa,"update");
+        if(capabilities.assignments().stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
+            throw ApiException.forbidden("Restaurar un respaldo requiere al administrador propietario.");
+        var creation=rolePolicy.companyManager(usuario,idEmpresa,"create");
+        for(String attribute:List.of("nombre","descripcion","activo","permissions")) {
+            rolePolicy.field(capabilities,"update",attribute);rolePolicy.field(creation,"create",attribute);
+        }
+        for(Rol role:rolRepository.findByIdEmpresa(idEmpresa)) rolePolicy.manageable(capabilities,role);
+        var productGrants=dataPolicy.require(usuario,idEmpresa,null,"product:create","product:update","product:delete","company:update","branch:create","branch:update");
+        for(String field:com.pos.common.access.ProductFields.ALL) for(String action:List.of("create","update"))
+            if(!productGrants.allows("product:"+action+":"+field)) throw ApiException.forbidden("Restaurar un respaldo completo requiere poder establecer todos los campos de producto.");
         RespaldoDocumento documento = parsear(almacen.leer(idEmpresa, archivo));
+        rolePolicy.grants(capabilities,lista(documento.rolPermisos()).stream().filter(g->bool(g.activo(),true)).map(RolPermisoDatos::idPermiso).toList(),lista(documento.rolPermisos()).stream().filter(g->bool(g.activo(),true) && bool(g.puedeDelegar(),false)).map(RolPermisoDatos::idPermiso).toList());
+        Set<String> normalizedNames=new HashSet<>();
+        for(RolDatos role:lista(documento.roles())) {
+            String name=requerido(role.nombre(),"nombre del rol").strip().toUpperCase(Locale.ROOT);
+            if(Set.of("ADMINISTRADOR","SUPERADMIN","SUPER_ADMIN","SUPERADMINISTRADOR","CLIENTE","EMPLEADO").contains(name) || !normalizedNames.add(name))
+                throw ApiException.badRequest("Nombre de rol reservado o repetido en el respaldo.");
+        }
+        rbacAudit.record(usuario,idEmpresa,"ROL_RESTAURAR_RESPALDO","roles="+lista(documento.roles()).size());
         if (documento.idEmpresa() == null || !idEmpresa.equals(documento.idEmpresa())) {
             throw ApiException.badRequest("El id_empresa del respaldo no coincide con la empresa de la URL.");
         }
@@ -154,11 +177,7 @@ public class RespaldoService {
             aplicar(idEmpresa, documento);
             entityManager.flush();
         } catch (DataIntegrityViolationException ex) {
-            String causa = ex.getMostSpecificCause() == null ? null : ex.getMostSpecificCause().getMessage();
-            if (causa == null || causa.isBlank()) {
-                causa = "conflicto con datos existentes";
-            }
-            throw ApiException.badRequest("No se pudo restaurar la empresa. " + causa);
+            throw ApiException.badRequest("No se pudo restaurar la empresa por un conflicto con datos existentes.");
         }
         return new RespaldoRespuestas.Restaurado(
                 archivo,
@@ -166,6 +185,14 @@ public class RespaldoService {
                 RespaldoDocumento.TABLAS,
                 RespaldoDocumento.INCLUYE_VENTAS,
                 RespaldoDocumento.MENSAJE_VENTAS);
+    }
+
+    private void requireOwner(Usuario usuario,Integer company) {
+        dataPolicy.productFields(dataPolicy.require(usuario,company,null,"product:read","role:read","role:read:permissions"),com.pos.common.access.ProductFields.ALL.toArray(String[]::new));
+        empresaAccess.requireEmpresa(usuario,company);
+        var capabilities=rolePolicy.companyScope(usuario,company);
+        if(capabilities.assignments().stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
+            throw ApiException.forbidden("Los respaldos completos requieren al administrador propietario.");
     }
 
     private RespaldoRespuestas.Generado guardar(Integer idEmpresa) {
@@ -213,7 +240,7 @@ public class RespaldoService {
                         enlace.getIdRolPermiso(),
                         rol.getIdRol(),
                         enlace.getPermiso().getIdPermiso(),
-                        enlace.getActivo()));
+                        enlace.getActivo(),enlace.getPuedeDelegar()));
             }
         }
         ConfiguracionDatos configuracion = configuracionSistemaRepository.findByEmpresa_IdEmpresa(idEmpresa)
@@ -657,11 +684,12 @@ public class RespaldoService {
         }
         soltar();
         for (RolPermisoDatos fila : permisos) {
-            insertar("INSERT INTO rol_permiso (id_rol_permiso, id_rol, id_permiso, activo) VALUES (?, ?, ?, ?)", ps -> {
+            insertar("INSERT INTO rol_permiso (id_rol_permiso, id_rol, id_permiso, activo,puede_delegar) VALUES (?, ?, ?, ?,?)", ps -> {
                 entero(ps, 1, fila.idRolPermiso());
                 entero(ps, 2, fila.idRol());
                 entero(ps, 3, fila.idPermiso());
                 ps.setBoolean(4, bool(fila.activo(), true));
+                ps.setBoolean(5,bool(fila.puedeDelegar(),false));
             });
         }
     }
@@ -675,13 +703,15 @@ public class RespaldoService {
         String nombre = requerido(datos.nombre(), "el nombre del rol");
         if (rol == null) {
             String descripcionFinal = descripcion;
-            insertar("INSERT INTO rol (id_rol, nombre, id_empresa, tipo, descripcion, activo) VALUES (?, ?, ?, 'CUSTOM', ?, ?)",
+            insertar("INSERT INTO rol (id_rol, nombre, id_empresa, tipo, descripcion, activo,ambito,nombre_normalizado,protegido) VALUES (?, ?, ?, 'CUSTOM', ?, ?,?,?,false)",
                     ps -> {
                         entero(ps, 1, datos.idRol());
                         texto(ps, 2, nombre);
                         entero(ps, 3, idEmpresa);
                         texto(ps, 4, descripcionFinal);
                         ps.setBoolean(5, bool(datos.activo(), true));
+                        texto(ps,6,"EMPRESA:"+idEmpresa);
+                        texto(ps,7,nombre.strip().toUpperCase(Locale.ROOT));
                     });
             return;
         }

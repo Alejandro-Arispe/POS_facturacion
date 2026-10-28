@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import com.pos.usuarios.domain.Permiso;
 
 public interface PermisoRepository extends JpaRepository<Permiso, Integer> {
+    java.util.Optional<Permiso> findFirstByCodigo(String codigo);
+    java.util.Optional<Permiso> findByCodigoCanonico(String codigoCanonico);
 
 	List<Permiso> findByModulo_IdModulo(Integer idModulo);
 

@@ -27,4 +27,7 @@ public interface PedidoClienteRepository extends JpaRepository<PedidoCliente, In
     List<PedidoCliente> findByIdEmpresaAndIdSucursalOrderByFechaCreacionDesc(Integer idEmpresa, Integer idSucursal);
 
     List<PedidoCliente> findByIdEmpresaAndEstadoOrderByFechaCreacionDesc(Integer idEmpresa, String estado);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select e from PedidoCliente e where e.idPedido = :id")
+    java.util.Optional<PedidoCliente> findForUpdate(@org.springframework.data.repository.query.Param("id") Integer id);
 }

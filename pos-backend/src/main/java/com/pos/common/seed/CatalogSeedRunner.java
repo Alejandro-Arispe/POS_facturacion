@@ -33,6 +33,7 @@ import com.pos.ventas.repo.TipoVentaRepository;
 @Component
 public class CatalogSeedRunner implements ApplicationRunner {
 
+    private final com.pos.common.access.RbacMigration rbacMigration;
     private final RolRepository rolRepository;
     private final ModuloRepository moduloRepository;
     private final PermisoRepository permisoRepository;
@@ -45,7 +46,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
     private final PlanModuloRepository planModuloRepository;
 
     public CatalogSeedRunner(
-            RolRepository rolRepository,
+            com.pos.common.access.RbacMigration rbacMigration, RolRepository rolRepository,
             ModuloRepository moduloRepository,
             PermisoRepository permisoRepository,
             RolPermisoRepository rolPermisoRepository,
@@ -55,6 +56,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
             MetodoPagoRepository metodoPagoRepository,
             PlanRepository planRepository,
             PlanModuloRepository planModuloRepository) {
+        this.rbacMigration = rbacMigration;
         this.rolRepository = rolRepository;
         this.moduloRepository = moduloRepository;
         this.permisoRepository = permisoRepository;
@@ -70,9 +72,13 @@ public class CatalogSeedRunner implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        rbacMigration.lockCatalog();
+        boolean freshAdmin=rolRepository.findByNombreIgnoreCase("ADMINISTRADOR").isEmpty();
+        boolean freshEmployee=rolRepository.findByNombreIgnoreCase("EMPLEADO").isEmpty();
         seedRoles();
         seedModulos();
-        seedPermisos();
+        seedPermisos(freshAdmin, freshEmployee);
+        rbacMigration.migrate();
         seedTiposMovimientoCaja();
         seedTiposMovimiento();
         seedTiposVenta();
@@ -86,6 +92,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
                 Rol rol = new Rol();
                 rol.setNombre(nombre);
                 rol.setTipo("SISTEMA");
+                rol.setProtegido(true);
                 rol.setDescripcion(nombre);
                 rol.setActivo(true);
                 rolRepository.save(rol);
@@ -114,7 +121,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
         });
     }
 
-    private void seedPermisos() {
+    private void seedPermisos(boolean freshAdmin, boolean freshEmployee) {
         record PermisoSeed(String codigo, String nombre, String moduloCodigo) {}
         List<PermisoSeed> permisos = List.of(
                 new PermisoSeed("VENTA_VER", "Ver ventas", "VENTAS"),
@@ -161,7 +168,11 @@ public class CatalogSeedRunner implements ApplicationRunner {
         );
 
         for (PermisoSeed ps : permisos) {
-            if (!permisoRepository.existsByCodigo(ps.codigo())) {
+            String canonical=com.pos.common.access.PermissionCodes.canonical(ps.codigo());
+            // Upgraded databases may store the canonical code instead of its historical alias.
+            if (!permisoRepository.existsByCodigo(ps.codigo())
+                    && !permisoRepository.existsByCodigo(canonical)
+                    && permisoRepository.findByCodigoCanonico(canonical).isEmpty()) {
                 moduloRepository.findByCodigoIgnoreCase(ps.moduloCodigo()).ifPresent(modulo -> {
                     Permiso p = new Permiso();
                     p.setCodigo(ps.codigo());
@@ -172,7 +183,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
             }
         }
 
-        rolRepository.findByNombreIgnoreCase("ADMINISTRADOR").ifPresent(adminRol -> {
+        if(freshAdmin) rolRepository.findByNombreIgnoreCase("ADMINISTRADOR").ifPresent(adminRol -> {
             List<Permiso> todosLosPermisos = permisoRepository.findAll();
             java.util.Set<Integer> permisosAsignados = rolPermisoRepository.findByRol_IdRol(adminRol.getIdRol()).stream()
                     .filter(rp -> rp.getPermiso() != null)
@@ -189,7 +200,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
             }
         });
 
-        rolRepository.findByNombreIgnoreCase("EMPLEADO").ifPresent(empleadoRol -> {
+        if(freshEmployee) rolRepository.findByNombreIgnoreCase("EMPLEADO").ifPresent(empleadoRol -> {
             java.util.Set<String> codigosEmpleado = java.util.Set.of(
                     "CAJA_VER", "CAJA_ABRIR", "CAJA_CERRAR",
                     "VENTA_VER", "VENTA_CREAR", "VENTA_DESCUENTO",
@@ -203,7 +214,10 @@ public class CatalogSeedRunner implements ApplicationRunner {
                     .map(rp -> rp.getPermiso().getIdPermiso())
                     .collect(java.util.stream.Collectors.toSet());
             for (Permiso p : permisoRepository.findAll()) {
-                if (codigosEmpleado.contains(p.getCodigo()) && !permisosAsignados.contains(p.getIdPermiso())) {
+                String canonical=com.pos.common.access.PermissionCodes.canonical(p.getCodigo());
+                boolean employeePermission=codigosEmpleado.stream().anyMatch(code ->
+                        com.pos.common.access.PermissionCodes.canonical(code).equals(canonical));
+                if (employeePermission && !permisosAsignados.contains(p.getIdPermiso())) {
                     RolPermiso rp = new RolPermiso();
                     rp.setRol(empleadoRol);
                     rp.setPermiso(p);

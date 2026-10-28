@@ -47,7 +47,7 @@ public class AnaliticaService {
 			  join producto p on p.id_producto = d.id_producto
 			  left join subcategoria_producto sp on sp.id_subcategoria = p.id_subcategoria
 			  left join categoria_producto cp on cp.id_categoria_producto = sp.id_categoria_producto
-			 where s.id_empresa = :idEmpresa
+			 where s.id_empresa = :idEmpresa and p.id_empresa=:idEmpresa
 			   and v.fecha >= :desde
 			   and v.fecha < :hasta
 			   and upper(coalesce(v.estado, '')) not in ('ANULADA', 'CANCELADA')
@@ -73,23 +73,24 @@ public class AnaliticaService {
 			  from stock st
 			  join producto p on p.id_producto = st.id_producto
 			  join sucursal s on s.id_sucursal = st.id_sucursal
-			 where p.id_empresa = :idEmpresa
+			 where p.id_empresa = :idEmpresa and s.id_empresa=:idEmpresa
 			""";
 
 	private final NamedParameterJdbcTemplate jdbc;
 	private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
 	private final ConfiguracionSistemaRepository configuracionRepository;
 	private final RestClient restClient;
 	private final String apiKey;
 
 	public AnaliticaService(
 			NamedParameterJdbcTemplate jdbc,
-			EmpresaAccess empresaAccess,
+			EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy,
 			ConfiguracionSistemaRepository configuracionRepository,
 			@Value("${app.analytics.url:http://localhost:8001}") String analyticsUrl,
 			@Value("${app.analytics.api-key:}") String apiKey) {
 		this.jdbc = jdbc;
-		this.empresaAccess = empresaAccess;
+		this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;
 		this.configuracionRepository = configuracionRepository;
 		this.apiKey = apiKey;
 		SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -100,7 +101,9 @@ public class AnaliticaService {
 
 	@Transactional(readOnly = true)
 	public Map<String, Object> analizar(Integer idEmpresa, Integer dias, Integer idSucursal) {
-		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa, "DASHBOARD_VER");
+		var scope=dataPolicy.require(SecurityUtils.currentUser(),idEmpresa,idSucursal,"dashboard:read","sale:read","inventory:read");
+        dataPolicy.productFields(scope,"nombre","id_subcategoria");
+        empresaAccess.requirePlanFeature(SecurityUtils.currentUser(),idEmpresa,"reportes_avanzados");
 		Empresa empresa = empresaAccess.requireEmpresa(SecurityUtils.currentUser(), idEmpresa);
 		int periodo = dias == null || dias <= 0 ? 30 : Math.min(dias, 365);
 		LocalDate fin = LocalDate.now();

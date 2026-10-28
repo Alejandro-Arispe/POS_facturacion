@@ -60,7 +60,7 @@ public final class VentaDtos {
         private Boolean facturaLinea = Boolean.FALSE;
         private List<PagoCreate> pagos;
         private BigDecimal subtotal;
-        private BigDecimal descuentoTotal = BigDecimal.ZERO;
+        private BigDecimal descuentoTotal;
         private BigDecimal total;
         private String estado;
         private List<DetalleCreate> detalles = new ArrayList<>();
@@ -84,6 +84,7 @@ public final class VentaDtos {
     @Getter
     @Setter
     @NoArgsConstructor
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     public static class ProductoSimple {
         private Integer idProducto;
         private String nombre;

@@ -65,8 +65,8 @@ public class EmpresaController {
 	}
 
 	@GetMapping("/{idEmpresa}/mis-permisos")
-	public MisPermisosEmpresaResponse misPermisos(@PathVariable Integer idEmpresa) {
-		return empresaService.misPermisos(idEmpresa);
+	public MisPermisosEmpresaResponse misPermisos(@PathVariable Integer idEmpresa, @org.springframework.web.bind.annotation.RequestParam(name="id_sucursal",required=false) Integer idSucursal) {
+		return empresaService.misPermisos(idEmpresa,idSucursal);
 	}
 
 	@GetMapping("/{idEmpresa}")

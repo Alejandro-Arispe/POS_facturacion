@@ -1,3 +1,4 @@
+import { CompanyPermissionsService } from '../../../../../../core/services/company-permissions.service';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, inject } from '@angular/core';
 import { CurrencySymbolPipe, MoneyPipe } from '../../../../../../shared/pipes/money.pipe';
@@ -44,6 +45,7 @@ export class CloseCashRegister {
 
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  protected readonly permissions = inject(CompanyPermissionsService);
   private readonly cashRegisterService = inject(CashRegisterService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroyRef = inject(DestroyRef);
@@ -164,6 +166,7 @@ export class CloseCashRegister {
   }
 
   protected cerrarCaja(): void {
+    if (!this.permissions.hasPermission('cash_register:close')) { this.resumenError='Ya no tienes permiso para esta operación.'; return; }
     if (this.cerrandoCaja) {
       return;
     }

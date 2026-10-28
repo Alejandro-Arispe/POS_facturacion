@@ -54,6 +54,9 @@ import com.pos.ventas.repo.VentaRepository;
 public class VentaService {
 
     private final EmpresaAccess empresaAccess;
+    private final SalePricing pricing;
+    private final com.pos.ventas.repo.PedidoClienteDetalleRepository orderDetails;
+    private final com.pos.common.access.RbacResolver rbac;
     private final TipoVentaRepository tipoVentaRepository;
     private final MetodoPagoRepository metodoPagoRepository;
     private final CajaSesionRepository cajaSesionRepository;
@@ -73,7 +76,7 @@ public class VentaService {
     private final UsuarioRolRepository usuarioRolRepository;
 
     public VentaService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, SalePricing pricing, com.pos.common.access.RbacResolver rbac, com.pos.ventas.repo.PedidoClienteDetalleRepository orderDetails,
             TipoVentaRepository tipoVentaRepository,
             MetodoPagoRepository metodoPagoRepository,
             CajaSesionRepository cajaSesionRepository,
@@ -91,7 +94,7 @@ public class VentaService {
             InventarioService inventarioService,
             NotificationService notificationService,
             UsuarioRolRepository usuarioRolRepository) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.pricing=pricing; this.rbac=rbac; this.orderDetails=orderDetails;
         this.tipoVentaRepository = tipoVentaRepository;
         this.metodoPagoRepository = metodoPagoRepository;
         this.cajaSesionRepository = cajaSesionRepository;
@@ -142,6 +145,9 @@ public class VentaService {
         CajaSesion sesion = requireSesionAbierta(usuario, idCajaSesion);
         Integer idEmpresa = sesion.getCaja().getSucursal().getEmpresa().getIdEmpresa();
         Integer idSucursal = sesion.getCaja().getSucursal().getIdSucursal();
+        empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"sale:create");
+        if (Boolean.TRUE.equals(payload.getFacturaLinea())) empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"invoice:issue");
+        SalePricing.Quote quote = pricing.calculate(idEmpresa,payload,rbac.resolve(usuario,idEmpresa,idSucursal));
 
         TipoVenta tipoVenta = tipoVentaRepository.findById(payload.getIdTipoVenta())
                 .orElseThrow(() -> ApiException.notFound("Tipo de venta no encontrado."));
@@ -152,7 +158,7 @@ public class VentaService {
         if (pagosPayload.isEmpty() && payload.getIdMetodoPago() != null) {
             VentaDtos.PagoCreate unico = new VentaDtos.PagoCreate();
             unico.setIdMetodoPago(payload.getIdMetodoPago());
-            unico.setMonto(payload.getTotal());
+            unico.setMonto(quote.total());
             pagosPayload.add(unico);
         }
         if (esCredito && !pagosPayload.isEmpty()) {
@@ -162,6 +168,8 @@ public class VentaService {
         Set<Integer> idsMetodos = new HashSet<>();
         BigDecimal totalPagado = BigDecimal.ZERO;
         for (VentaDtos.PagoCreate pago : pagosPayload) {
+            if (pago == null) throw ApiException.badRequest("Pago inválido.");
+            SalePricing.money(pago.getMonto(),"pago");
             if (pago.getIdMetodoPago() == null || pago.getIdMetodoPago() <= 0) {
                 throw ApiException.badRequest("Metodo de pago invalido.");
             }
@@ -175,10 +183,11 @@ public class VentaService {
                     .orElseThrow(() -> ApiException.notFound("Metodo de pago " + pago.getIdMetodoPago() + " no encontrado."));
             totalPagado = totalPagado.add(pago.getMonto());
         }
-        if (!pagosPayload.isEmpty() && payload.getTotal() != null && totalPagado.compareTo(payload.getTotal()) != 0) {
+        if (!pagosPayload.isEmpty() && totalPagado.compareTo(quote.total()) != 0) {
             throw ApiException.badRequest("La suma de los pagos debe ser igual al total de la venta.");
         }
 
+        if (!esCredito && pagosPayload.isEmpty() && quote.total().signum()>0) throw ApiException.badRequest("Una venta al contado debe incluir sus pagos.");
         Cliente cliente = null;
         if (payload.getIdCliente() != null) {
             if (payload.getIdCliente() <= 0) {
@@ -186,19 +195,26 @@ public class VentaService {
             }
             cliente = clienteRepository.findById(payload.getIdCliente())
                     .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
+            if (!Boolean.TRUE.equals(cliente.getActivo()) || !belongsToCompany(cliente,idEmpresa))
+                throw ApiException.notFound("Cliente no encontrado en esta empresa.");
         }
         if (esCredito) {
             if (cliente == null) {
                 throw ApiException.badRequest("Una venta a credito debe tener cliente.");
             }
+            clienteRepository.lockById(cliente.getIdCliente()).orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
             if (cliente.getCategoriaCliente() == null) {
                 throw ApiException.badRequest("El cliente no tiene categoria asociada para calcular el plazo de credito.");
             }
+            BigDecimal limit=cliente.getLimiteCredito()!=null && cliente.getLimiteCredito().signum()>0 ? cliente.getLimiteCredito() : nvl(cliente.getCategoriaCliente().getLimiteCredito());
+            if(cuentaPorCobrarRepository.sumSaldoPendienteByCliente(cliente.getIdCliente()).add(quote.total()).compareTo(limit)>0)
+                throw ApiException.badRequest("La venta supera el límite de crédito disponible del cliente.");
         }
 
         PedidoCliente pedido = null;
         if (payload.getIdPedido() != null) {
-            pedido = pedidoRepository.findById(payload.getIdPedido())
+            empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"order:manage");
+            pedido = pedidoRepository.findForUpdate(payload.getIdPedido())
                     .orElseThrow(() -> ApiException.notFound("Pedido no encontrado."));
             if (!idEmpresa.equals(pedido.getIdEmpresa())) {
                 throw ApiException.badRequest("El pedido no pertenece a la empresa de esta caja.");
@@ -206,12 +222,18 @@ public class VentaService {
             if (!idSucursal.equals(pedido.getIdSucursal())) {
                 throw ApiException.badRequest("El pedido no pertenece a la sucursal de esta caja.");
             }
+            if (!java.util.Objects.equals(pedido.getIdCliente(),payload.getIdCliente())) throw ApiException.badRequest("El cliente debe coincidir con el pedido.");
             if (pedido.getIdVenta() != null) {
                 throw ApiException.conflict("El pedido ya fue convertido en venta.", "El pedido ya fue convertido en venta.");
             }
             if (!"listo_para_recoger".equals(pedido.getEstado())) {
                 throw ApiException.badRequest("El pedido debe estar 'listo_para_recoger' para ser facturado. Estado actual: " + pedido.getEstado());
             }
+            Map<Integer,Integer> expected=new java.util.LinkedHashMap<>();
+            for(var row:orderDetails.findByPedido_IdPedido(pedido.getIdPedido())) expected.merge(row.getIdProducto(),row.getCantidad(),Math::addExact);
+            Map<Integer,Integer> actual=new java.util.LinkedHashMap<>();
+            for(var line:quote.lines()) actual.put(line.product().getIdProducto(),line.quantity());
+            if(!expected.equals(actual)) throw ApiException.badRequest("Los productos y cantidades deben coincidir con el pedido.");
         }
 
         String estado = esCredito ? "CREDITO" : (!pagosPayload.isEmpty() ? "PAGADA" : "PENDIENTE_COBRO");
@@ -221,9 +243,9 @@ public class VentaService {
         venta.setIdCajaSesion(idCajaSesion);
         venta.setIdUsuario(usuario.getIdUsuario());
         venta.setIdPedido(payload.getIdPedido());
-        venta.setSubtotal(nvl(payload.getSubtotal()));
-        venta.setDescuentoTotal(nvl(payload.getDescuentoTotal()));
-        venta.setTotal(nvl(payload.getTotal()));
+        venta.setSubtotal(quote.subtotal());
+        venta.setDescuentoTotal(quote.discount());
+        venta.setTotal(quote.total());
         venta.setFecha(LocalDateTime.now());
         venta.setEstado(estado);
         venta = ventaRepository.save(venta);
@@ -234,36 +256,18 @@ public class VentaService {
             pedidoRepository.save(pedido);
         }
 
-        TipoMovimiento tipoVentaInv = tipoMovimientoRepository.findByNombreIgnoreCase("Venta")
-                .or(() -> tipoMovimientoRepository.findByNombre("Venta"))
-                .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Tipo de movimiento de inventario \"Venta\" no configurado."));
-
-        if (payload.getDetalles() == null || payload.getDetalles().isEmpty()) {
-            throw ApiException.badRequest("La venta debe tener detalles.");
-        }
-        for (VentaDtos.DetalleCreate d : payload.getDetalles()) {
-            Producto producto = productoRepository.findById(d.getIdProducto())
-                    .orElseThrow(() -> ApiException.notFound("Producto " + d.getIdProducto() + " no encontrado."));
-            if (producto.getIdEmpresa() != null && !producto.getIdEmpresa().equals(idEmpresa)) {
-                throw ApiException.forbidden("El producto " + producto.getIdProducto() + " no pertenece a esta empresa.");
-            }
+        for (SalePricing.Line line : quote.lines().stream().sorted(java.util.Comparator.comparing(l -> l.product().getIdProducto())).toList()) {
             DetalleVenta detalle = new DetalleVenta();
             detalle.setVenta(venta);
-            detalle.setIdProducto(d.getIdProducto());
-            detalle.setCantidad(d.getCantidad());
-            detalle.setPrecioUnitario(d.getPrecioUnitario());
-            detalle.setDescuento(nvl(d.getDescuento()));
-            detalle.setSubtotal(d.getSubtotal());
-            detalle.setTotal(d.getSubtotal());
-            detalle.setDescripcion(d.getDescripcion());
+            detalle.setIdProducto(line.product().getIdProducto());
+            detalle.setCantidad(line.quantity());
+            detalle.setPrecioUnitario(line.price());
+            detalle.setDescuento(line.discount());
+            detalle.setSubtotal(line.net());
+            detalle.setTotal(line.net());
+            detalle.setDescripcion(line.description());
             detalleVentaRepository.save(detalle);
-
-            InventarioDtos.MovimientoCreate mov = new InventarioDtos.MovimientoCreate();
-            mov.setIdProducto(producto.getIdProducto());
-            mov.setIdTipoMovimiento(tipoVentaInv.getIdTipoMovimiento());
-            mov.setCantidad(d.getCantidad());
-            mov.setObservacion("Movimiento de la venta " + venta.getIdVenta());
-            inventarioService.crearMovimiento(usuario, idEmpresa, idSucursal, mov);
+            inventarioService.registrarSalidaVenta(usuario,idEmpresa,idSucursal,line.product().getIdProducto(),line.quantity(),venta.getIdVenta());
         }
 
         CuentaPorCobrar cuenta = null;
@@ -282,7 +286,8 @@ public class VentaService {
             clienteRepository.save(cliente);
         }
 
-        TipoMovimientoCaja tipoIngreso = tipoMovimientoCajaRepository.findByNombreIgnoreCase("INGRESO").orElse(null);
+        TipoMovimientoCaja tipoIngreso = tipoMovimientoCajaRepository.findByNombreIgnoreCase("INGRESO")
+                .orElseThrow(() -> ApiException.badRequest("Tipo de movimiento INGRESO no configurado."));
         if (!esCredito) {
             for (VentaDtos.PagoCreate pago : pagosPayload) {
                 VentaPago ventaPago = new VentaPago();
@@ -329,7 +334,8 @@ public class VentaService {
 
     @Transactional(readOnly = true)
     public List<VentaDtos.VentaResponse> historial(Usuario usuario, Integer idCajaSesion) {
-        requireSesionDelUsuario(usuario, idCajaSesion);
+        CajaSesion session=requireSesionDelUsuario(usuario, idCajaSesion);
+        sessionPermission(usuario,session,"sale:read");
         return ventaRepository.findByIdCajaSesionOrderByFechaDesc(idCajaSesion).stream()
                 .map(this::toVentaResponse)
                 .toList();
@@ -338,8 +344,9 @@ public class VentaService {
     @Transactional
     public VentaDtos.CobroResponse registrarPagoCredito(Usuario usuario, Integer idCajaSesion, VentaDtos.CobroCreate payload) {
         CajaSesion sesion = requireSesionAbierta(usuario, idCajaSesion);
+        sessionPermission(usuario,sesion,"sale:collect");
         Integer idEmpresaSesion = sesion.getCaja().getSucursal().getEmpresa().getIdEmpresa();
-        CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findById(payload.getIdCxc())
+        CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findForUpdate(payload.getIdCxc())
                 .orElseThrow(() -> ApiException.notFound("Cuenta por cobrar no encontrada."));
         CajaSesion sesionVenta = cajaSesionRepository.findWithCajaSucursalEmpresa(cuenta.getVenta().getIdCajaSesion())
                 .orElseThrow(() -> ApiException.notFound("Caja sesion no encontrada."));
@@ -347,6 +354,7 @@ public class VentaService {
         if (!idEmpresaSesion.equals(idEmpresaCuenta)) {
             throw ApiException.badRequest("La cuenta por cobrar no pertenece a la empresa de la caja sesion.");
         }
+        empresaAccess.requireSucursal(usuario,idEmpresaCuenta,sesionVenta.getCaja().getSucursal().getIdSucursal());
         BigDecimal saldoAnterior = nvl(cuenta.getSaldoPendiente());
         if (saldoAnterior.compareTo(BigDecimal.ZERO) <= 0 || "PAGADA".equals(cuenta.getEstado())) {
             throw ApiException.badRequest("La cuenta por cobrar ya se encuentra pagada.");
@@ -359,6 +367,8 @@ public class VentaService {
         BigDecimal totalPagado = BigDecimal.ZERO;
         Set<String> permitidos = Set.of("EFECTIVO", "QR", "TARJETA");
         for (VentaDtos.PagoCreditoItem pago : pagos) {
+            if (pago == null || pago.getIdMetodoPago()==null) throw ApiException.badRequest("Pago inválido.");
+            SalePricing.money(pago.getMontoPagado(),"pago");
             if (!ids.add(pago.getIdMetodoPago())) {
                 throw ApiException.badRequest("No se puede repetir el mismo metodo de pago.");
             }
@@ -456,9 +466,10 @@ public class VentaService {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
         Cliente cliente = clienteRepository.findById(idCliente)
                 .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
-        boolean operador = usuarioRolRepository.existsByUsuario_IdUsuarioAndIdEmpresaAndActivoTrue(
-                usuario.getIdUsuario(), idEmpresa);
-        if (!operador && !cliente.getIdUsuario().equals(usuario.getIdUsuario())) {
+        boolean own = java.util.Objects.equals(cliente.getIdUsuario(),usuario.getIdUsuario());
+        boolean operador = rbac.resolve(usuario,idEmpresa,null).allows("sale:read");
+        if (!belongsToCompany(cliente,idEmpresa)) throw ApiException.notFound("Cliente no encontrado en esta empresa.");
+        if (!operador && !own) {
             throw ApiException.forbidden("No tiene permiso para consultar las cuentas por cobrar de este cliente.");
         }
         List<VentaDtos.CuentaPorCobrarResponse> result = new ArrayList<>();
@@ -468,6 +479,7 @@ public class VentaService {
             if (sesion == null || !idEmpresa.equals(sesion.getCaja().getSucursal().getEmpresa().getIdEmpresa())) {
                 continue;
             }
+            if (!own && !branchAllowed(usuario,idEmpresa,sesion.getCaja().getSucursal().getIdSucursal(),"sale:read")) continue;
             VentaDtos.CuentaPorCobrarResponse dto = new VentaDtos.CuentaPorCobrarResponse();
             dto.setIdCxc(cuenta.getIdCxc());
             dto.setIdVenta(cuenta.getVenta().getIdVenta());
@@ -485,7 +497,9 @@ public class VentaService {
     }
 
     private CajaSesion requireSesionAbierta(Usuario usuario, Integer idCajaSesion) {
+        cajaSesionRepository.lockById(idCajaSesion).orElseThrow(() -> ApiException.notFound("Caja sesion no encontrada."));
         CajaSesion sesion = requireSesionDelUsuario(usuario, idCajaSesion);
+        if (!Boolean.TRUE.equals(sesion.getCaja().getActivo())) throw ApiException.badRequest("La caja está inactiva.");
         if (!"Abierto".equalsIgnoreCase(sesion.getEstado())) {
             throw ApiException.badRequest("La caja sesion debe estar abierta.");
         }
@@ -495,10 +509,22 @@ public class VentaService {
     private CajaSesion requireSesionDelUsuario(Usuario usuario, Integer idCajaSesion) {
         CajaSesion sesion = cajaSesionRepository.findWithCajaSucursalEmpresa(idCajaSesion)
                 .orElseThrow(() -> ApiException.notFound("Caja sesion no encontrada."));
+        empresaAccess.requireSucursal(usuario,sesion.getCaja().getSucursal().getEmpresa().getIdEmpresa(),sesion.getCaja().getSucursal().getIdSucursal());
         if (!usuario.getIdUsuario().equals(sesion.getIdUsuario())) {
             throw ApiException.forbidden("La caja sesion no fue creada por el usuario actual.");
         }
         return sesion;
+    }
+
+    private void sessionPermission(Usuario user,CajaSesion session,String code) {
+        var branch=session.getCaja().getSucursal();
+        empresaAccess.requirePermiso(user,branch.getEmpresa().getIdEmpresa(),branch.getIdSucursal(),code);
+    }
+    private boolean branchAllowed(Usuario user,Integer company,Integer branch,String code) {
+        return empresaAccess.canPermiso(user,company,branch,code);
+    }
+    private boolean belongsToCompany(Cliente client,Integer company) {
+        return company.equals(client.getIdEmpresa());
     }
 
     private VentaDtos.VentaResponse toVentaResponse(Venta venta) {
@@ -528,9 +554,13 @@ public class VentaService {
             productoRepository.findById(detalle.getIdProducto()).ifPresent(producto -> {
                 VentaDtos.ProductoSimple simple = new VentaDtos.ProductoSimple();
                 simple.setIdProducto(producto.getIdProducto());
-                simple.setNombre(producto.getNombre());
-                simple.setCodigoBarra(producto.getCodigoBarra());
-                simple.setUnidadMedida(producto.getUnidadMedida());
+                var actor=com.pos.common.security.SecurityUtils.currentUser();
+                if(empresaAccess.canAccess(actor,producto.getIdEmpresa(),null,"")) {
+                    var scope=rbac.resolve(actor,producto.getIdEmpresa(),null);
+                    if(rbac.field(scope,"product","read","nombre")) simple.setNombre(producto.getNombre());
+                    if(rbac.field(scope,"product","read","codigo_barra")) simple.setCodigoBarra(producto.getCodigoBarra());
+                    if(rbac.field(scope,"product","read","unidad_medida")) simple.setUnidadMedida(producto.getUnidadMedida());
+                }
                 item.setProducto(simple);
             });
             detalles.add(item);

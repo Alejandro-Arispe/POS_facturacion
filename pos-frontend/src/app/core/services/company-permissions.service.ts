@@ -1,54 +1,67 @@
-import { Injectable, inject, signal } from '@angular/core';
-import { Observable, map, tap } from 'rxjs';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import {
+  Observable,
+  Subscription,
+  catchError,
+  exhaustMap,
+  fromEvent,
+  map,
+  merge,
+  of,
+  tap,
+  timer,
+} from 'rxjs';
 
 import { ApiService } from './api.service';
+import { PolicyRevisionService } from './policy-revision.service';
 
 export const COMPANY_PERMISSION_CODES = [
-  'EMPRESA_EDITAR',
-  'SUCURSAL_VER',
-  'SUCURSAL_CREAR',
-  'SUCURSAL_EDITAR',
-  'USUARIO_VER',
-  'USUARIO_CREAR',
-  'USUARIO_EDITAR',
-  'ROL_VER',
-  'ROL_CREAR',
-  'ROL_EDITAR',
-  'CLIENTE_VER',
-  'CLIENTE_CREAR',
-  'CLIENTE_EDITAR',
-  'CATEGORIA_VER',
-  'CATEGORIA_CREAR',
-  'CATEGORIA_EDITAR',
-  'PRODUCTO_VER',
-  'PRODUCTO_CREAR',
-  'PRODUCTO_EDITAR',
-  'STOCK_VER',
-  'STOCK_CONFIGURAR',
-  'MOVIMIENTO_VER',
-  'MOVIMIENTO_REGISTRAR',
-  'ALERTA_VER',
-  'CAJA_VER',
-  'CAJA_EDITAR',
-  'CAJA_CREAR',
-  'CAJA_ABRIR',
-  'CAJA_CERRAR',
-  'PEDIDO_VER',
-  'PEDIDO_GESTIONAR',
-  'VENTA_VER',
-  'VENTA_CREAR',
-  'VENTA_ANULAR',
-  'VENTA_DESCUENTO',
-  'FACTURA_EMITIR',
-  'FACTURA_REIMPRIMIR',
-  'REPORTE_GENERAR',
-  'REPORTE_EXPORTAR',
-  'DASHBOARD_VER',
-  'BITACORA_VER',
+  'company:update',
+  'branch:read',
+  'branch:create',
+  'branch:update',
+  'user:read',
+  'user:create',
+  'user:update',
+  'role:read',
+  'role:create',
+  'role:update',
+  'client:read',
+  'client:create',
+  'client:update',
+  'client_category:read',
+  'client_category:create',
+  'client_category:update',
+  'product:read',
+  'product:create',
+  'product:update',
+  'inventory:read',
+  'inventory:configure',
+  'inventory_movement:read',
+  'inventory_movement:create',
+  'inventory_alert:read',
+  'cash_register:read',
+  'cash_register:update',
+  'cash_register:create',
+  'cash_register:open',
+  'cash_register:close',
+  'order:read',
+  'order:manage',
+  'sale:read',
+  'sale:create',
+  'sale:void',
+  'sale:discount',
+  'invoice:issue',
+  'invoice:reprint',
+  'report:generate',
+  'report:export',
+  'dashboard:read',
+  'audit:read',
 ] as const;
 
 export type CompanyPermissionCode = (typeof COMPANY_PERMISSION_CODES)[number];
-export type CompanyPermissionsByCode = Record<CompanyPermissionCode, boolean>;
+export type CompanyPermissionsByCode = Record<CompanyPermissionCode, boolean> &
+  Record<string, boolean>;
 
 export type EstadoCampoProducto = 'EDITABLE' | 'SOLO_LECTURA' | 'OCULTO';
 export type CampoProducto = 'costo' | 'precio' | 'editar' | 'eliminar';
@@ -63,10 +76,10 @@ export const CAMPOS_PRODUCTO: readonly CampoProducto[] = ['costo', 'precio', 'ed
 
 export function camposProductoPorDefecto(): CamposProducto {
   return {
-    costo: 'EDITABLE',
-    precio: 'EDITABLE',
-    editar: 'EDITABLE',
-    eliminar: 'EDITABLE',
+    costo: 'OCULTO',
+    precio: 'OCULTO',
+    editar: 'OCULTO',
+    eliminar: 'OCULTO',
   };
 }
 
@@ -77,8 +90,10 @@ export interface CompanyPermissionModule {
 }
 
 export interface CompanyPermission {
+  puede_delegar?: boolean;
   id_permiso: number;
   codigo: string;
+  codigo_canonico?: string;
   nombre: string;
   id_modulo: number;
   modulo: CompanyPermissionModule;
@@ -124,60 +139,6 @@ const EMPTY_PLAN_CONFIGURATION: CompanyPlanConfiguration = {
   reportes: '',
 };
 
-const PERMISSION_CODE_ALIASES: Partial<Record<string, CompanyPermissionCode>> = {
-  'empresa.editar': 'EMPRESA_EDITAR',
-  'sucursales.ver': 'SUCURSAL_VER',
-  'sucursales.crear': 'SUCURSAL_CREAR',
-  'sucursales.editar': 'SUCURSAL_EDITAR',
-  'usuarios.ver': 'USUARIO_VER',
-  'usuarios.crear': 'USUARIO_CREAR',
-  'usuarios.editar': 'USUARIO_EDITAR',
-  'roles.ver': 'ROL_VER',
-  'roles.crear': 'ROL_CREAR',
-  'roles.editar': 'ROL_EDITAR',
-  'clientes.ver': 'CLIENTE_VER',
-  'clientes.crear': 'CLIENTE_CREAR',
-  'clientes.editar': 'CLIENTE_EDITAR',
-  'categorias.ver': 'CATEGORIA_VER',
-  'categorias.crear': 'CATEGORIA_CREAR',
-  'categorias.editar': 'CATEGORIA_EDITAR',
-  'productos.ver': 'PRODUCTO_VER',
-  'productos.crear': 'PRODUCTO_CREAR',
-  'productos.editar': 'PRODUCTO_EDITAR',
-  'stock.ver': 'STOCK_VER',
-  'stock.configurar': 'STOCK_CONFIGURAR',
-  'movimientos.ver': 'MOVIMIENTO_VER',
-  'movimientos.registrar': 'MOVIMIENTO_REGISTRAR',
-  alertaver: 'ALERTA_VER',
-  alertastock: 'ALERTA_VER',
-  alerta_stock: 'ALERTA_VER',
-  'alerta.stock': 'ALERTA_VER',
-  alerta_ver: 'ALERTA_VER',
-  'alerta.ver': 'ALERTA_VER',
-  'alertas.ver': 'ALERTA_VER',
-  cajaver: 'CAJA_VER',
-  cajaeditar: 'CAJA_EDITAR',
-  cajaabrir: 'CAJA_ABRIR',
-  cajacerrar: 'CAJA_CERRAR',
-  'caja.ver': 'CAJA_VER',
-  'caja.editar': 'CAJA_EDITAR',
-  'caja.abrir': 'CAJA_ABRIR',
-  'caja.cerrar': 'CAJA_CERRAR',
-  'cajas.ver': 'CAJA_VER',
-  'cajas.editar': 'CAJA_EDITAR',
-  'cajas.abrir': 'CAJA_ABRIR',
-  'cajas.cerrar': 'CAJA_CERRAR',
-  'ventas.ver': 'VENTA_VER',
-  'ventas.crear': 'VENTA_CREAR',
-  'ventas.anular': 'VENTA_ANULAR',
-  'ventas.descuento': 'VENTA_DESCUENTO',
-  'facturas.emitir': 'FACTURA_EMITIR',
-  'facturas.reimprimir': 'FACTURA_REIMPRIMIR',
-  'reportes.generar': 'REPORTE_GENERAR',
-  'reportes.exportar': 'REPORTE_EXPORTAR',
-  'dashboard.ver': 'DASHBOARD_VER',
-};
-
 export const EMPTY_COMPANY_PERMISSIONS: CompanyPermissionsByCode = COMPANY_PERMISSION_CODES.reduce(
   (permissions, code) => {
     permissions[code] = false;
@@ -191,65 +152,100 @@ export const EMPTY_COMPANY_PERMISSIONS: CompanyPermissionsByCode = COMPANY_PERMI
 })
 export class CompanyPermissionsService {
   private readonly apiService = inject(ApiService);
+  private readonly policyRevision = inject(PolicyRevisionService);
+  private readonly destroyRef = inject(DestroyRef);
+  constructor() {
+    this.destroyRef.onDestroy(() => this.contextWatch?.unsubscribe());
+  }
   private readonly permissionsSignal = signal<CompanyPermissionsByCode>(
-    this.readStoredPermissions(),
+    this.createEmptyPermissions(),
   );
   private readonly camposProductoSignal = signal<CamposProducto>(camposProductoPorDefecto());
-  private readonly activeSubscriptionSignal = signal<CompanyActiveSubscription | null>(
-    this.readStoredSubscription(),
-  );
-  private readonly planConfigurationSignal = signal<CompanyPlanConfiguration>(
-    this.readStoredPlanConfiguration(),
-  );
+  private readonly activeSubscriptionSignal = signal<CompanyActiveSubscription | null>(null);
+  private readonly planConfigurationSignal = signal<CompanyPlanConfiguration>({
+    ...EMPTY_PLAN_CONFIGURATION,
+  });
 
   readonly permissions = this.permissionsSignal.asReadonly();
   readonly camposProducto = this.camposProductoSignal.asReadonly();
   readonly activeSubscription = this.activeSubscriptionSignal.asReadonly();
   readonly planConfiguration = this.planConfigurationSignal.asReadonly();
 
-  obtenerMisCamposProducto(idEmpresa: string | number): Observable<CamposProducto> {
-    return this.apiService
-      .get<Partial<CamposProducto>>(`/api/roles/empresa/${idEmpresa}/mis-campos`)
-      .pipe(
-        map((data) => this.normalizarCamposProducto(data)),
-        tap((campos) => this.camposProductoSignal.set(campos)),
-      );
+  private contextWatch?: Subscription;
+  readonly contextError = signal(false);
+  private readonly delegableSignal = signal<ReadonlySet<number>>(new Set());
+  canDelegate(id: number): boolean {
+    return this.delegableSignal().has(id);
   }
 
-  obtenerCamposRol(idRol: string | number, formulario = 'producto'): Observable<CampoPrivilegio[]> {
-    return this.apiService.get<CampoPrivilegio[]>(
-      `/api/roles/${idRol}/campos?formulario=${encodeURIComponent(formulario)}`,
+  hasField(resource: string, action: string, field: string): boolean {
+    return (
+      this.hasPermission(`${resource}:${action}`) &&
+      this.hasPermission(`${resource}:${action}:${field}`)
     );
   }
 
-  guardarCamposRol(
-    idRol: string | number,
-    campos: CampoPrivilegio[],
-  ): Observable<CampoPrivilegio[]> {
-    return this.apiService.put<
-      CampoPrivilegio[],
-      { formulario: string; campos: CampoPrivilegio[] }
-    >(`/api/roles/${idRol}/campos`, { formulario: 'producto', campos });
+  /** Poll only while a company context is open; also refresh when returning to the window. */
+  watchContext(company: string | number, branch?: string | number | null): void {
+    this.contextWatch?.unsubscribe();
+    this.policyRevision.update("scope", `${company}:${branch ?? ""}`);
+    this.contextError.set(false);
+    const url = `/api/empresas/${company}/mis-permisos${branch ? `?id_sucursal=${encodeURIComponent(branch)}` : ''}`;
+    this.contextWatch = merge(timer(30000, 30000), fromEvent(window, 'focus'))
+      .pipe(
+        exhaustMap(() =>
+          this.apiService
+            .get<{
+              permisos: CompanyPermission[];
+              suscripcion_activa: CompanyActiveSubscription | null;
+            }>(url)
+            .pipe(catchError(() => of(null))),
+        ),
+      )
+      .subscribe((response) => {
+        if (
+          !response ||
+          !response.suscripcion_activa ||
+          !['activo', 'activa'].includes(response.suscripcion_activa.estado.toLowerCase())
+        ) {
+          this.savePermissions([]);
+          this.saveActiveSubscription(null);
+          this.delegableSignal.set(new Set());
+          this.camposProductoSignal.set(camposProductoPorDefecto());
+          this.contextError.set(true);
+          return;
+        }
+        this.savePermissions(response.permisos);
+        this.saveActiveSubscription(response.suscripcion_activa);
+        this.contextError.set(false);
+      });
   }
 
-  hasPermission(permission: CompanyPermissionCode): boolean {
+  hasPermission(permission: string): boolean {
     const permissions = this.permissionsSignal();
     return permissions[permission] === true;
   }
 
   savePermissions(permissions: CompanyPermission[]): CompanyPermissionsByCode {
     const permissionsByCode = this.createEmptyPermissions();
+    this.delegableSignal.set(
+      new Set(
+        (permissions ?? [])
+          .filter((p) => p.activo_rol_permiso && p.puede_delegar)
+          .map((p) => p.id_permiso),
+      ),
+    );
 
     if (permissions && permissions.length > 0) {
       for (const permission of permissions) {
-        const permissionCode = this.normalizePermissionCode(permission.codigo);
-
-        if (permissionCode) {
-          permissionsByCode[permissionCode] = permission.activo_rol_permiso === true;
+        const code = permission.codigo_canonico ?? permission.codigo;
+        if (/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*)?$/.test(code)) {
+          permissionsByCode[code] ||= permission.activo_rol_permiso === true;
         }
       }
     }
 
+    this.policyRevision.update("permissions", Object.keys(permissionsByCode).filter((code) => permissionsByCode[code]).sort().join("|"));
     this.permissionsSignal.set(permissionsByCode);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(permissionsByCode));
 
@@ -257,6 +253,7 @@ export class CompanyPermissionsService {
   }
 
   saveActiveSubscription(subscription: CompanyActiveSubscription | null): CompanyPlanConfiguration {
+    this.policyRevision.update("subscription", JSON.stringify(subscription));
     this.activeSubscriptionSignal.set(subscription);
 
     if (subscription) {
@@ -278,6 +275,10 @@ export class CompanyPermissionsService {
   }
 
   clearPermissions(): void {
+    this.policyRevision.reset();
+    this.contextWatch?.unsubscribe();
+    this.contextError.set(false);
+    this.delegableSignal.set(new Set());
     const emptyPermissions = this.createEmptyPermissions();
     this.permissionsSignal.set(emptyPermissions);
     this.activeSubscriptionSignal.set(null);
@@ -288,79 +289,8 @@ export class CompanyPermissionsService {
     localStorage.removeItem(PLAN_CONFIGURATION_STORAGE_KEY);
   }
 
-  private normalizarCamposProducto(
-    data: Partial<CamposProducto> | null | undefined,
-  ): CamposProducto {
-    const campos = camposProductoPorDefecto();
-
-    for (const campo of CAMPOS_PRODUCTO) {
-      const estado = data?.[campo];
-      if (estado === 'EDITABLE' || estado === 'SOLO_LECTURA' || estado === 'OCULTO') {
-        campos[campo] = estado;
-      }
-    }
-
-    return campos;
-  }
-
   private createEmptyPermissions(): CompanyPermissionsByCode {
     return { ...EMPTY_COMPANY_PERMISSIONS };
-  }
-
-  private isCompanyPermissionCode(code: string): code is CompanyPermissionCode {
-    return COMPANY_PERMISSION_CODES.includes(code as CompanyPermissionCode);
-  }
-
-  private normalizePermissionCode(code: string): CompanyPermissionCode | null {
-    if (this.isCompanyPermissionCode(code)) {
-      return code;
-    }
-
-    const normalizedCode = code.trim().toLowerCase();
-    const compactCode = normalizedCode.replace(/[._-]/g, '');
-
-    return PERMISSION_CODE_ALIASES[normalizedCode] ?? PERMISSION_CODE_ALIASES[compactCode] ?? null;
-  }
-
-  private readStoredPermissions(): CompanyPermissionsByCode {
-    const emptyPermissions = this.createEmptyPermissions();
-    const storedPermissions = localStorage.getItem(STORAGE_KEY);
-
-    if (!storedPermissions) {
-      return COMPANY_PERMISSION_CODES.reduce(
-        (permissions, code) => {
-          permissions[code] = true;
-          return permissions;
-        },
-        { ...emptyPermissions },
-      );
-    }
-
-    try {
-      const parsedPermissions = JSON.parse(storedPermissions) as Partial<
-        Record<CompanyPermissionCode, unknown>
-      >;
-      const activeCount = Object.values(parsedPermissions).filter(Boolean).length;
-      if (activeCount === 0) {
-        return COMPANY_PERMISSION_CODES.reduce(
-          (permissions, code) => {
-            permissions[code] = true;
-            return permissions;
-          },
-          { ...emptyPermissions },
-        );
-      }
-
-      return COMPANY_PERMISSION_CODES.reduce(
-        (permissions, code) => {
-          permissions[code] = Boolean(parsedPermissions[code]);
-          return permissions;
-        },
-        { ...emptyPermissions },
-      );
-    } catch {
-      return emptyPermissions;
-    }
   }
 
   private parsePlanConfiguration(

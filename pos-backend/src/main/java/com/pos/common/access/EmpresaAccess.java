@@ -1,6 +1,5 @@
 package com.pos.common.access;
 
-import java.util.List;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,34 +9,23 @@ import com.pos.empresas.domain.Empresa;
 import com.pos.empresas.domain.Sucursal;
 import com.pos.empresas.repo.EmpresaRepository;
 import com.pos.empresas.repo.SucursalRepository;
-import com.pos.usuarios.domain.RolPermiso;
 import com.pos.usuarios.domain.Usuario;
-import com.pos.usuarios.domain.UsuarioRol;
-import com.pos.usuarios.repo.PermisoRepository;
-import com.pos.usuarios.repo.RolPermisoRepository;
-import com.pos.usuarios.repo.UsuarioRolRepository;
 
 @Component
 public class EmpresaAccess {
 
     private final EmpresaRepository empresaRepository;
     private final SucursalRepository sucursalRepository;
-    private final UsuarioRolRepository usuarioRolRepository;
-    private final PermisoRepository permisoRepository;
-    private final RolPermisoRepository rolPermisoRepository;
     private final com.pos.empresas.service.PlanPolicy planPolicy;
+    private final RbacResolver rbac;
 
     public EmpresaAccess(
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
-            UsuarioRolRepository usuarioRolRepository,
-            PermisoRepository permisoRepository,
-            RolPermisoRepository rolPermisoRepository, com.pos.empresas.service.PlanPolicy planPolicy) {
+            com.pos.empresas.service.PlanPolicy planPolicy, RbacResolver rbac) {
+        this.rbac = rbac;
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
-        this.usuarioRolRepository = usuarioRolRepository;
-        this.permisoRepository = permisoRepository;
-        this.rolPermisoRepository = rolPermisoRepository;
         this.planPolicy = planPolicy;
     }
 
@@ -59,11 +47,7 @@ public class EmpresaAccess {
         requireUsuarioActivo(usuario);
         Empresa empresa = empresaRepository.findById(idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
-        boolean pertenece = usuarioRolRepository.existsByUsuario_IdUsuarioAndIdEmpresaAndActivoTrue(
-                usuario.getIdUsuario(), idEmpresa);
-        if (!pertenece) {
-            throw ApiException.notFound("Empresa no encontrada para este usuario.");
-        }
+        rbac.assignments(usuario, idEmpresa, null);
         if (!Boolean.TRUE.equals(empresa.getActivo())) {
             throw ApiException.forbidden("La empresa fue suspendida por el administrador del sistema.");
         }
@@ -90,6 +74,7 @@ public class EmpresaAccess {
     @Transactional(readOnly = true)
     public Sucursal requireSucursal(Usuario usuario, Integer idEmpresa, Integer idSucursal) {
         requireEmpresa(usuario, idEmpresa);
+        rbac.assignments(usuario, idEmpresa, idSucursal);
         return sucursalRepository.findByIdSucursalAndEmpresa_IdEmpresa(idSucursal, idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada para esta empresa."));
     }
@@ -97,20 +82,29 @@ public class EmpresaAccess {
     @Transactional(readOnly = true)
     public void requirePermiso(Usuario usuario, Integer idEmpresa, String codigo) {
         requireEmpresa(usuario, idEmpresa);
-        if (codigo.startsWith("PEDIDO_")) requirePlanFeature(usuario, idEmpresa, "pedidos");
-        if (!permisoRepository.existsByCodigo(codigo)) {
-            return;
-        }
-        List<UsuarioRol> roles = usuarioRolRepository.findByUsuario_IdUsuarioAndIdEmpresaAndActivoTrue(
-                usuario.getIdUsuario(), idEmpresa);
-        for (UsuarioRol ur : roles) {
-            List<RolPermiso> permisos = rolPermisoRepository.findByRol_IdRolAndActivoTrue(ur.getRol().getIdRol());
-            for (RolPermiso rp : permisos) {
-                if (rp.getPermiso() != null && codigo.equals(rp.getPermiso().getCodigo())) {
-                    return;
-                }
-            }
-        }
-        throw ApiException.forbidden("No tienes el permiso '" + codigo + "' requerido para esta accion.");
+        if (codigo.startsWith("order:")) requirePlanFeature(usuario, idEmpresa, "pedidos");
+        rbac.require(usuario, idEmpresa, null, codigo);
+    }
+
+    public void requirePermiso(Usuario usuario, Integer empresa, Integer sucursal, String codigo) {
+        requireSucursal(usuario, empresa, sucursal);
+        if (codigo.startsWith("order:")) requirePlanFeature(usuario, empresa, "pedidos");
+        rbac.require(usuario, empresa, sucursal, codigo);
+    }
+    public boolean canAccess(Usuario user,Integer company,Integer branch,String feature) {
+        return empresaRepository.findById(company).map(e -> Boolean.TRUE.equals(e.getActivo())).orElse(false)
+            && rbac.hasBranchAccess(user,company,branch) && planPolicy.permits(company,feature);
+    }
+    public boolean canPermiso(Usuario user,Integer company,Integer branch,String code) {
+        return canAccess(user,company,branch,code.startsWith("order:")?"pedidos":"")
+            && rbac.allowsInBranch(user,company,branch,code);
+    }
+
+    public boolean canCompanyPermission(Usuario user,Integer company,String code) {
+        return canAccess(user,company,null,"") && rbac.resolveCompany(user,company).allows(code);
+    }
+    public void requireCompanyPermission(Usuario usuario,Integer company,String code) {
+        requireEmpresa(usuario,company);
+        if(!rbac.resolveCompany(usuario,company).allows(code)) throw ApiException.forbidden("Se requiere el permiso de empresa '"+code+"'.");
     }
 }

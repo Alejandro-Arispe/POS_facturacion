@@ -1,3 +1,4 @@
+import { CompanyPermissionsService } from '../../../../../../core/services/company-permissions.service';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -33,6 +34,7 @@ export class OpenCashRegister {
 
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  protected readonly permissions = inject(CompanyPermissionsService);
   private readonly cashRegisterService = inject(CashRegisterService);
   private readonly cdr = inject(ChangeDetectorRef);
 
@@ -50,6 +52,7 @@ export class OpenCashRegister {
   protected abrirCaja(event: SubmitEvent): void {
     event.preventDefault();
     this.mensajeError = '';
+    if (!this.permissions.hasPermission('cash_register:open')) { this.mensajeError='Ya no tienes permiso para esta operación.'; return; }
 
     if (this.initialAmount === null || this.initialAmount === undefined || Number.isNaN(this.initialAmount)) {
       this.mensajeError = 'Ingresa un monto inicial valido.';

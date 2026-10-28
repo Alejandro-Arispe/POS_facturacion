@@ -155,7 +155,7 @@
             </section>
           }
 
-          @if (hasPermission('REPORTE_EXPORTAR')) {
+          @if (hasPermission('report:export')) {
             <div class="export-actions" style="margin-top: var(--space-lg); justify-content: flex-end;" aria-label="Exportar reporte">
               <button class="secondary-action" type="button" (click)="exportReport('excel')" [disabled]="!hasRows() || exportingFormat() !== null">
                 {{ exportingFormat() === 'excel' ? 'Exportando Excel...' : 'Excel' }}

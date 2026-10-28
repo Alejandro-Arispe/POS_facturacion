@@ -55,7 +55,7 @@ export class Inventario implements OnInit {
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
   protected readonly branchId = this.route.snapshot.paramMap.get('branchId') ?? '';
 
-  protected activeTab: InventoryTab = this.hasPermission('STOCK_VER') ? 'stock' : 'movements';
+  protected activeTab: InventoryTab = this.hasPermission('inventory:read') ? 'stock' : 'movements';
   protected showRegisterMovementTab = false;
 
   protected cargandoStock = false;
@@ -91,11 +91,11 @@ export class Inventario implements OnInit {
   }
 
   protected setActiveTab(tab: InventoryTab): void {
-    if (tab === 'stock' && !this.hasPermission('STOCK_VER')) {
+    if (tab === 'stock' && !this.hasPermission('inventory:read')) {
       return;
     }
 
-    if (tab === 'movements' && !this.hasPermission('MOVIMIENTO_VER')) {
+    if (tab === 'movements' && !this.hasPermission('inventory_movement:read')) {
       return;
     }
 
@@ -112,7 +112,7 @@ export class Inventario implements OnInit {
   }
 
   protected openRegisterMovementTab(): void {
-    if (!this.hasPermission('MOVIMIENTO_REGISTRAR')) {
+    if (!this.hasPermission('inventory_movement:create')) {
       this.errorMovimiento = 'No tienes permiso para registrar movimientos.';
       return;
     }
@@ -135,7 +135,7 @@ export class Inventario implements OnInit {
     event.preventDefault();
     this.limpiarMensajesMovimiento();
 
-    if (!this.hasPermission('MOVIMIENTO_REGISTRAR')) {
+    if (!this.hasPermission('inventory_movement:create')) {
       this.errorMovimiento = 'No tienes permiso para registrar movimientos.';
       return;
     }
@@ -180,7 +180,7 @@ export class Inventario implements OnInit {
   }
 
   protected iniciarEdicionStock(item: StockItemRow): void {
-    if (!this.hasPermission('STOCK_CONFIGURAR')) {
+    if (!this.hasPermission('inventory:configure')) {
       this.errorStock = 'No tienes permiso para configurar stock.';
       return;
     }
@@ -205,7 +205,7 @@ export class Inventario implements OnInit {
   protected guardarStock(item: StockItemRow): void {
     this.limpiarMensajesStock();
 
-    if (!this.hasPermission('STOCK_CONFIGURAR')) {
+    if (!this.hasPermission('inventory:configure')) {
       this.errorStock = 'No tienes permiso para configurar stock.';
       return;
     }
@@ -269,11 +269,7 @@ export class Inventario implements OnInit {
 
   protected hasPermission(permission: CompanyPermissionCode): boolean {
     const permissions = this.companyPermissionsService.permissions();
-    const codes = this.companyPermissionsService.getPermissionCodes();
-    if (codes.length === 0) {
-      return true;
-    }
-    return permissions[permission] === true;
+return permissions[permission] === true;
   }
 
   private cargarInventario(): void {
@@ -285,7 +281,8 @@ export class Inventario implements OnInit {
     this.errorTiposMovimiento = '';
 
     this.productService.getTiposMovimiento().subscribe({
-      next: (tiposMovimiento) => {
+      next: (tipos) => {
+        const tiposMovimiento = tipos.filter((tipo) => tipo.nombre.toLowerCase() !== "venta");
         this.movementTypes = tiposMovimiento;
 
         if (tiposMovimiento.length > 0) {
@@ -312,6 +309,7 @@ export class Inventario implements OnInit {
   }
 
   private cargarStock(): void {
+    if (!this.hasPermission("inventory:read")) { this.stockItems=[]; this.productos=[]; return; }
     this.errorStock = '';
     this.mensajeStock = '';
     this.cargandoStock = true;
@@ -330,7 +328,7 @@ export class Inventario implements OnInit {
       next: (stocks: StockSucursalProducto[]) => {
         this.stockItems = stocks.map((stock) => ({
           idProducto: stock.id_producto,
-          nombre: stock.nombre_producto,
+          nombre: stock.nombre_producto ?? `Producto #${stock.id_producto}`,
           cantidad: Number(stock.cantidad ?? 0),
           stockMin: stock.stock_minimo ?? null,
           stockMax: stock.stock_maximo ?? null,
@@ -339,7 +337,7 @@ export class Inventario implements OnInit {
         this.productos = stocks.map((stock) => ({
           id_producto: stock.id_producto,
           id_subcategoria: null,
-          nombre: stock.nombre_producto,
+          nombre: stock.nombre_producto ?? `Producto #${stock.id_producto}`,
           descripcion: null,
           unidad_medida: stock.unidad_medida,
           precio: stock.precio,
@@ -363,6 +361,7 @@ export class Inventario implements OnInit {
   }
 
   private cargarMovimientos(): void {
+    if (!this.hasPermission("inventory_movement:read")) { this.movements=[]; return; }
     this.errorMovimientos = '';
     this.cargandoMovimientos = true;
 

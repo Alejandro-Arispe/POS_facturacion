@@ -108,7 +108,7 @@ export class Dashboard implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.wsService.connection$.subscribe((state) => {
         this.connection = state;
-        if (state === 'error' && !this.data) this.uiState = 'error';
+        if (state === 'error') { this.data=null; this.uiState = 'error'; }
         this.cdr.markForCheck();
       }),
     );
@@ -207,17 +207,17 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   protected get reportLink(): string[] | null {
-    return this.permissions.hasPermission('REPORTE_GENERAR')
+    return this.permissions.hasPermission('report:generate')
       ? ['/company', this.companyId, 'reports', 'static']
       : null;
   }
   protected get branchLink(): string[] | null {
-    return this.permissions.hasPermission('SUCURSAL_VER')
+    return this.permissions.hasPermission('branch:read')
       ? ['/company', this.companyId, 'branches']
       : null;
   }
   protected get productLink(): string[] | null {
-    return this.permissions.hasPermission('PRODUCTO_VER')
+    return this.permissions.hasPermission('product:read')
       ? ['/company', this.companyId, 'products']
       : null;
   }
