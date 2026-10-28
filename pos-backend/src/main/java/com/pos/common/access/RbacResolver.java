@@ -12,7 +12,9 @@ import com.pos.usuarios.repo.*;
 public class RbacResolver {
     public record Grants(Map<String, Permiso> permissions, Set<Integer> delegable, List<UsuarioRol> assignments) {
         public boolean allows(String code) {
-            return permissions.containsKey(code);
+            if (permissions.containsKey(code)) return true;
+            String canon = PermissionCodes.canonical(code);
+            return !canon.isEmpty() && permissions.containsKey(canon);
         }
     }
     private final com.pos.empresas.repo.SucursalRepository branches;
