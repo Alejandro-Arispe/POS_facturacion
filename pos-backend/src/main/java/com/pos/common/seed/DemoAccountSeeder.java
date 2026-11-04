@@ -36,6 +36,7 @@ import com.pos.inventario.domain.TipoMovimiento;
 import com.pos.productos.domain.CategoriaProducto;
 import com.pos.productos.domain.Producto;
 import com.pos.productos.domain.SubcategoriaProducto;
+import com.pos.siat.service.SiatFacturaService;
 import com.pos.usuarios.domain.Persona;
 import com.pos.usuarios.domain.Rol;
 import com.pos.usuarios.domain.Usuario;
@@ -59,10 +60,84 @@ public class DemoAccountSeeder {
     private static final int DAYS = 30;
     private final EntityManager em;
     private final PasswordService passwords;
+    private final SiatFacturaService siat;
 
-    public DemoAccountSeeder(EntityManager em, PasswordService passwords) {
+    public DemoAccountSeeder(EntityManager em, PasswordService passwords, SiatFacturaService siat) {
         this.em = em;
         this.passwords = passwords;
+        this.siat = siat;
+    }
+
+    /** Crea una cuenta activa con contrasena conocida; si el correo ya existe la devuelve sin modificarla. */
+    @Transactional
+    public Usuario ensureUser(String email, String password, String fullName, String document) {
+        Usuario existing = em.createQuery("select u from Usuario u where lower(u.email) = lower(:email)", Usuario.class)
+                .setParameter("email", email.trim()).getResultStream().findFirst().orElse(null);
+        if (existing != null) return existing;
+        Persona person = new Persona();
+        person.setNombreCompleto(fullName);
+        person.setFechaNacimiento(LocalDate.of(1990, 1, 15));
+        person.setGenero("N/E");
+        person.setTelefono("70000000");
+        person.setDocumento(document);
+        save(person);
+        Usuario user = new Usuario();
+        user.setPersona(person);
+        user.setEmail(email.trim());
+        user.setContrasena(passwords.hash(password));
+        user.setFechaCreacion(LocalDate.now(ZONE));
+        user.setActivo(true);
+        return save(user);
+    }
+
+    public record Login(String role, String email, String password, String scope) { }
+
+    /**
+     * Equipo de prueba de la empresa demo: dos cajeros (uno por sucursal, rol EMPLEADO) y un cliente con acceso.
+     * Es idempotente: si el correo ya existe no se vuelve a crear ni se cambia su contrasena.
+     */
+    @Transactional
+    public List<Login> seedTeam(Integer companyId, String password) {
+        Empresa company = em.find(Empresa.class, companyId);
+        List<Sucursal> branches = em.createQuery("select s from Sucursal s where s.empresa = :c order by s.idSucursal",
+                Sucursal.class).setParameter("c", company).getResultList();
+        LocalDate today = LocalDate.now(ZONE);
+        List<Login> logins = new ArrayList<>();
+        String[] cashiers = {"cajero.centro@pos-demo.com", "cajero.sur@pos-demo.com"};
+        String[] cashierNames = {"Rosa Cajera Centro", "Marco Cajero Sur"};
+        for (int i = 0; i < Math.min(cashiers.length, branches.size()); i++) {
+            Usuario user = ensureUser(cashiers[i], password, cashierNames[i], "DEMO-EMP-" + (i + 1));
+            boolean linked = !em.createQuery("select ur from UsuarioRol ur where ur.usuario = :u and ur.idEmpresa = :c",
+                    UsuarioRol.class).setParameter("u", user).setParameter("c", companyId).getResultList().isEmpty();
+            if (!linked) {
+                UsuarioRol link = new UsuarioRol();
+                link.setUsuario(user);
+                link.setRol(catalog(Rol.class, "EMPLEADO"));
+                link.setIdEmpresa(companyId);
+                link.setIdSucursal(branches.get(i).getIdSucursal());
+                link.setFecha(today);
+                save(link);
+            }
+            logins.add(new Login("Empleado (cajero)", cashiers[i], password, branches.get(i).getNombre()));
+        }
+        String clientEmail = "cliente@pos-demo.com";
+        Usuario clientUser = ensureUser(clientEmail, password, "Cliente Demo Mayorista", "DEMO-CLI-1");
+        boolean hasClient = !em.createQuery("select c from Cliente c where c.idUsuario = :u and c.idEmpresa = :e",
+                Cliente.class).setParameter("u", clientUser.getIdUsuario()).setParameter("e", companyId).getResultList().isEmpty();
+        if (!hasClient) {
+            link(clientUser, catalog(Rol.class, "CLIENTE"), company, today);
+            CategoriaCliente category = em.createQuery("select c from CategoriaCliente c where c.idEmpresa = :e and c.nombre = 'Mayorista'",
+                    CategoriaCliente.class).setParameter("e", companyId).getSingleResult();
+            Cliente client = new Cliente();
+            client.setIdUsuario(clientUser.getIdUsuario());
+            client.setIdEmpresa(companyId);
+            client.setCategoriaCliente(category);
+            client.setCodigoCliente("DEMO-LOGIN");
+            client.setLimiteCredito(category.getLimiteCredito());
+            save(client);
+        }
+        logins.add(new Login("Cliente", clientEmail, password, "Pedidos y credito"));
+        return logins;
     }
 
     public record Result(Integer companyId, String companyName, boolean created) { }
@@ -167,6 +242,11 @@ public class DemoAccountSeeder {
                 product.setCodigoBarra("DEMO-" + company.getIdEmpresa() + "-" + (result.size() + 1));
                 product.setDescripcion(MARK + " Producto para pruebas del punto de venta");
                 product.setUnidadMedida("Unidad");
+                // Homologacion SIAT simulada (codigos del catalogo SIN sembrado al arrancar).
+                String productName = names[group][index];
+                product.setCodigoActividad(group == 2 ? "47190" : "47110");
+                product.setCodigoProductoSin(group == 0 ? 99100 : group == 1 ? 24410 : 62111);
+                product.setCodigoUnidadMedidaSin(productName.contains(" kg") ? 22 : productName.contains(" L") ? 47 : 58);
                 product.setPrecio(new BigDecimal(prices[group][index]));
                 product.setCosto(product.getPrecio().multiply(new BigDecimal("0.65")).setScale(2, RoundingMode.HALF_UP));
                 result.add(save(product));
@@ -267,6 +347,8 @@ public class DemoAccountSeeder {
                     detail.setIdProducto(product.getIdProducto());
                     detail.setDescripcion(product.getNombre());
                     detail.setCantidad(quantity);
+                    detail.setCodigoProductoSin(product.getCodigoProductoSin());
+                    detail.setCodigoUnidadMedidaSin(product.getCodigoUnidadMedidaSin());
                     detail.setPrecioUnitario(product.getPrecio());
                     detail.setDescuento(discount);
                     detail.setSubtotal(gross.subtract(discount));
@@ -290,6 +372,10 @@ public class DemoAccountSeeder {
                 cashMovement(session, income, method.getIdMetodoPago(), sale.getTotal(), dateTime,
                         "Venta " + sale.getIdVenta());
                 balances.merge(method.getIdMetodoPago(), sale.getTotal(), BigDecimal::add);
+                // Una de cada tres ventas lleva factura SIAT simulada (CUF, CUFD y QR).
+                if ((day + saleIndex) % 3 == 0) {
+                    siat.emitir(sale, session, client, new SiatFacturaService.Comprador(1, null, null), method.getNombre());
+                }
             }
             session.setMontoFinal(balances.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));
             balances.forEach((method, amount) -> {

@@ -1,0 +1,4 @@
+
+# Secretos de despliegue
+deploy/.env
+deploy/web/
