@@ -58,4 +58,14 @@ public class Producto {
 
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
+
+    // Homologación SIAT (simulada): códigos del catálogo paramétrico del SIN.
+    @Column(name = "codigo_actividad", length = 10)
+    private String codigoActividad;
+
+    @Column(name = "codigo_producto_sin")
+    private Integer codigoProductoSin;
+
+    @Column(name = "codigo_unidad_medida_sin")
+    private Integer codigoUnidadMedidaSin;
 }

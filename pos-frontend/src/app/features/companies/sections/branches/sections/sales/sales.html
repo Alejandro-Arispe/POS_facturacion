@@ -79,7 +79,14 @@
               }
 
               @if (registerMessage) {
-                <p class="feedback feedback-success">{{ registerMessage }}</p>
+                <p class="feedback feedback-success">
+                  {{ registerMessage }}
+                  @if (lastInvoiceId && hasPermission('invoice:reprint')) {
+                    <button class="btn btn-secondary" type="button" (click)="printLastInvoice()">
+                      Imprimir factura
+                    </button>
+                  }
+                </p>
               }
 
               @if (loadingRegisterData) {
@@ -251,6 +258,27 @@
                             </span>
                           </label>
                         </div>
+
+                        @if (onlineInvoice) {
+                          <div class="form-group">
+                            <label class="label" for="invoiceDocType">Tipo de documento (SIN)</label>
+                            <select class="input" id="invoiceDocType" name="invoiceDocType" [(ngModel)]="invoiceDocType">
+                              @for (tipo of tiposDocumento; track tipo.codigo) {
+                                <option [ngValue]="tipo.codigo">{{ tipo.codigo }} - {{ tipo.nombre }}</option>
+                              }
+                            </select>
+                          </div>
+                          <div class="form-group">
+                            <label class="label" for="invoiceDocNumber">Número de documento</label>
+                            <input class="input" id="invoiceDocNumber" name="invoiceDocNumber" maxlength="30"
+                              placeholder="Vacío: documento del cliente" [(ngModel)]="invoiceDocNumber" />
+                          </div>
+                          <div class="form-group">
+                            <label class="label" for="invoiceBusinessName">Nombre o razón social</label>
+                            <input class="input" id="invoiceBusinessName" name="invoiceBusinessName" maxlength="200"
+                              placeholder="Vacío: nombre del cliente" [(ngModel)]="invoiceBusinessName" />
+                          </div>
+                        }
                       </section>
 
                       <section class="sale-summary-panel sale-checkout-panel" aria-label="Detalle de cobro">

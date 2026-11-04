@@ -48,6 +48,8 @@ public class ProductoService {
     private final RbacResolver rbac;
     private final FieldAuthorization fields;
     private final ProductImageStorage images;
+    private final com.pos.siat.repo.SinProductoServicioRepository sinProductos;
+    private final com.pos.siat.repo.SinUnidadMedidaRepository sinUnidades;
 
     public ProductoService(
             EmpresaAccess empresaAccess,
@@ -56,7 +58,9 @@ public class ProductoService {
             ProductoRepository productoRepository,
             InventarioService inventarioService,
             UsuarioRolRepository usuarioRolRepository,
-            RbacResolver rbac, FieldAuthorization fields, ProductImageStorage images) {
+            RbacResolver rbac, FieldAuthorization fields, ProductImageStorage images,
+            com.pos.siat.repo.SinProductoServicioRepository sinProductos,
+            com.pos.siat.repo.SinUnidadMedidaRepository sinUnidades) {
         this.empresaAccess = empresaAccess;
         this.categoriaRepository = categoriaRepository;
         this.subcategoriaRepository = subcategoriaRepository;
@@ -64,6 +68,7 @@ public class ProductoService {
         this.inventarioService = inventarioService;
         this.usuarioRolRepository = usuarioRolRepository;
         this.rbac=rbac; this.fields=fields; this.images=images;
+        this.sinProductos=sinProductos; this.sinUnidades=sinUnidades;
     }
 
     @Transactional(readOnly = true)
@@ -183,6 +188,7 @@ public class ProductoService {
         if (image!=null) supplied.add("imagen");
         fields.require(grants,"product","update",supplied);
         validateValues(datos,false);
+        validateSiat(datos,false);
         SubcategoriaProducto sub=datos.getProvided().contains("id_subcategoria") && datos.getIdSubcategoria()!=null
                 ? requireSubcategoriaEmpresa(datos.getIdSubcategoria(),p.getIdEmpresa()) : null;
         if (!Boolean.TRUE.equals(p.getActivo()) && Boolean.TRUE.equals(datos.getActivo())) empresaAccess.requireProductCapacity(p.getIdEmpresa());
@@ -278,6 +284,7 @@ public class ProductoService {
         fields.require(grants,"product","create",supplied);
         fields.require(grants,"product","create",ProductFields.REQUIRED_CREATE);
         validateValues(data,true);
+        validateSiat(data,true);
         SubcategoriaProducto sub=requireSubcategoriaEmpresa(data.getIdSubcategoria(),company);
         if (!Boolean.FALSE.equals(data.getActivo())) empresaAccess.requireProductCapacity(company);
         String newImage=image==null?null:storeImage(image);
@@ -330,7 +337,30 @@ public class ProductoService {
         if (value==null || value.signum()<0 || value.scale()>2 || value.compareTo(new BigDecimal("9999999999.99"))>0)
             throw ApiException.badRequest("El importe debe ser no negativo y tener hasta dos decimales.");
     }
+    /** Homologación SIAT: en el alta ambos códigos son obligatorios; en la edición se validan si se envían. */
+    private void validateSiat(ProductoDtos.ProductoUpdate d,boolean create) {
+        Set<String> sent=d.getProvidedSiat();
+        if (create && (d.getCodigoProductoSin()==null || d.getCodigoUnidadMedidaSin()==null))
+            throw ApiException.badRequest("Selecciona el código de producto/servicio SIN y la unidad de medida SIN.");
+        if (sent.contains("codigo_producto_sin")) {
+            var sin=sinProductos.findById(d.getCodigoProductoSin()==null?-1:d.getCodigoProductoSin())
+                    .orElseThrow(() -> ApiException.badRequest("Código de producto/servicio SIN no válido."));
+            // La actividad económica sale del catálogo si no se envía explícitamente.
+            if (!sent.contains("codigo_actividad") || d.getCodigoActividad()==null || d.getCodigoActividad().isBlank())
+                d.setCodigoActividad(sin.getCodigoActividad());
+        }
+        if (sent.contains("codigo_unidad_medida_sin") && (d.getCodigoUnidadMedidaSin()==null || !sinUnidades.existsById(d.getCodigoUnidadMedidaSin())))
+            throw ApiException.badRequest("Unidad de medida SIN no válida.");
+        if (sent.contains("codigo_actividad")) text(d.getCodigoActividad(),10,false,"codigo_actividad");
+    }
+
     private void apply(Producto p,ProductoDtos.ProductoUpdate d,SubcategoriaProducto sub) {
+        for (String key:d.getProvidedSiat()) switch (key) {
+            case "codigo_actividad" -> p.setCodigoActividad(d.getCodigoActividad()==null?null:d.getCodigoActividad().strip());
+            case "codigo_producto_sin" -> p.setCodigoProductoSin(d.getCodigoProductoSin());
+            case "codigo_unidad_medida_sin" -> p.setCodigoUnidadMedidaSin(d.getCodigoUnidadMedidaSin());
+            default -> { }
+        }
         for (String key:d.getProvided()) switch (key) {
             case "nombre" -> p.setNombre(d.getNombre().strip());
             case "descripcion" -> p.setDescripcion(d.getDescripcion());
@@ -421,6 +451,9 @@ public class ProductoService {
         fields.project(result,grants,"product","costo",p.getCosto());
         fields.project(result,grants,"product","imagen",p.getImagen());
         fields.project(result,grants,"product","activo",p.getActivo());
+        result.put("codigo_actividad",p.getCodigoActividad());
+        result.put("codigo_producto_sin",p.getCodigoProductoSin());
+        result.put("codigo_unidad_medida_sin",p.getCodigoUnidadMedidaSin());
         if (fields.allows(grants,"product","read","id_subcategoria")) {
             result.put("id_subcategoria",p.getSubcategoria()==null?null:p.getSubcategoria().getIdSubcategoria());
             result.put("subcategoria",p.getSubcategoria()==null?null:toSubcategoria(p.getSubcategoria()));

@@ -583,6 +583,11 @@
                 (fieldChange)="changeCreate($event)"
                 (imageChange)="imagenProductoSeleccionada = $event"
               />
+              <app-siat-homologacion
+                [codes]="siatAlta"
+                [disabled]="guardandoProducto"
+                (codesChange)="siatAlta = $event"
+              />
               @if (imagenProductoSeleccionada) {
                 <p class="text-sm text-muted">
                   Imagen seleccionada: {{ imagenProductoSeleccionada.name }}

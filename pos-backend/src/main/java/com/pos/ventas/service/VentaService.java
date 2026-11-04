@@ -74,6 +74,8 @@ public class VentaService {
     private final InventarioService inventarioService;
     private final NotificationService notificationService;
     private final UsuarioRolRepository usuarioRolRepository;
+    private final com.pos.siat.service.SiatFacturaService siatFacturaService;
+    private final com.pos.ventas.repo.FacturaRepository facturaRepository;
 
     public VentaService(
             EmpresaAccess empresaAccess, SalePricing pricing, com.pos.common.access.RbacResolver rbac, com.pos.ventas.repo.PedidoClienteDetalleRepository orderDetails,
@@ -93,7 +95,9 @@ public class VentaService {
             MovimientoCajaRepository movimientoCajaRepository,
             InventarioService inventarioService,
             NotificationService notificationService,
-            UsuarioRolRepository usuarioRolRepository) {
+            UsuarioRolRepository usuarioRolRepository,
+            com.pos.siat.service.SiatFacturaService siatFacturaService,
+            com.pos.ventas.repo.FacturaRepository facturaRepository) {
         this.empresaAccess = empresaAccess; this.pricing=pricing; this.rbac=rbac; this.orderDetails=orderDetails;
         this.tipoVentaRepository = tipoVentaRepository;
         this.metodoPagoRepository = metodoPagoRepository;
@@ -112,6 +116,8 @@ public class VentaService {
         this.inventarioService = inventarioService;
         this.notificationService = notificationService;
         this.usuarioRolRepository = usuarioRolRepository;
+        this.siatFacturaService = siatFacturaService;
+        this.facturaRepository = facturaRepository;
     }
 
     @Transactional(readOnly = true)
@@ -266,6 +272,8 @@ public class VentaService {
             detalle.setSubtotal(line.net());
             detalle.setTotal(line.net());
             detalle.setDescripcion(line.description());
+            detalle.setCodigoProductoSin(line.product().getCodigoProductoSin());
+            detalle.setCodigoUnidadMedidaSin(line.product().getCodigoUnidadMedidaSin());
             detalleVentaRepository.save(detalle);
             inventarioService.registrarSalidaVenta(usuario,idEmpresa,idSucursal,line.product().getIdProducto(),line.quantity(),venta.getIdVenta());
         }
@@ -309,6 +317,18 @@ public class VentaService {
                     movimientoCajaRepository.save(movimientoCaja);
                 }
             }
+        }
+
+        if (Boolean.TRUE.equals(payload.getFacturaLinea())) {
+            // Facturación en línea SIAT (simulada): el método de pago informado es el de mayor monto.
+            String metodoPrincipal = pagosPayload.stream()
+                    .max(java.util.Comparator.comparing(VentaDtos.PagoCreate::getMonto))
+                    .flatMap(p -> metodoPagoRepository.findById(p.getIdMetodoPago()))
+                    .map(MetodoPago::getNombre).orElse(null);
+            siatFacturaService.emitir(venta, sesion, cliente,
+                    new com.pos.siat.service.SiatFacturaService.Comprador(
+                            payload.getCodigoTipoDocumento(), payload.getNumeroDocumento(), payload.getRazonSocial()),
+                    metodoPrincipal);
         }
 
         if (esCredito && cuenta != null && cliente != null) {
@@ -540,6 +560,11 @@ public class VentaService {
         dto.setFecha(venta.getFecha());
         dto.setEstado(venta.getEstado());
         dto.setTipoVentaNombre(venta.getTipoVenta() == null ? null : venta.getTipoVenta().getNombre());
+        facturaRepository.findByVenta_IdVenta(venta.getIdVenta()).ifPresent(factura -> {
+            dto.setIdFactura(factura.getIdFactura());
+            dto.setCuf(factura.getCuf());
+            dto.setEstadoSiat(factura.getEstadoSiat());
+        });
         List<VentaDtos.DetalleResponse> detalles = new ArrayList<>();
         for (DetalleVenta detalle : detalleVentaRepository.findByVenta_IdVenta(venta.getIdVenta())) {
             VentaDtos.DetalleResponse item = new VentaDtos.DetalleResponse();
