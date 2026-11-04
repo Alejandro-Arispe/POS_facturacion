@@ -28,4 +28,7 @@ public interface FacturaRepository extends JpaRepository<Factura, Integer> {
             order by f.fechaEmision desc
             """)
     List<Factura> findByIdEmpresa(@Param("idEmpresa") Integer idEmpresa);
+
+    @Query("select coalesce(max(f.numeroFactura), 0) from Factura f where f.nitEmisor = :nitEmisor")
+    Integer maxNumeroPorEmisor(@Param("nitEmisor") String nitEmisor);
 }

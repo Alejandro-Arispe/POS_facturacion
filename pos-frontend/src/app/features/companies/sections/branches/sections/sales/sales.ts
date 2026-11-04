@@ -35,6 +35,8 @@ import {
 import { ApiService } from '../../../../../../core/services/api.service';
 import { OrderService, Order } from '../../../../../../core/services/order.service';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
+import { InvoicePrintService } from '../../../../../../core/services/invoice-print.service';
+import { TIPOS_DOCUMENTO_SIN } from '../../../../../../core/services/siat.service';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
 
 type SessionViewMode = 'sales' | 'movements';
@@ -166,6 +168,13 @@ export class Sales implements OnInit {
   protected selectedClientId: number | null = null;
   protected selectedSaleTypeId: number | null = null;
   protected onlineInvoice = false;
+  // Datos del comprador para la factura SIAT; si se dejan vacíos se usan los del cliente.
+  protected readonly tiposDocumento = TIPOS_DOCUMENTO_SIN;
+  protected invoiceDocType = 1;
+  protected invoiceDocNumber = '';
+  protected invoiceBusinessName = '';
+  protected lastInvoiceId: number | null = null;
+  private readonly invoicePrint = inject(InvoicePrintService);
   protected saleDiscount = 0;
   protected movementConcept = '';
   protected movementAmount: number | null = null;
@@ -772,6 +781,7 @@ export class Sales implements OnInit {
       id_cliente: this.selectedClientId,
       id_metodo_pago: null,
       factura_linea: this.onlineInvoice && this.hasPermission("invoice:issue"),
+      ...this.invoiceBuyer(),
       subtotal: this.subtotal,
       descuento_total: this.discountTotal,
       total: this.total,
@@ -784,6 +794,8 @@ export class Sales implements OnInit {
     this.cashRegisterService.registrarVentaSesionCaja(this.cashRegisterSessionId, payload).subscribe({
       next: (response) => {
         this.registerMessage = `Venta a credito registrada correctamente con el ID ${response.id_venta}.`;
+        this.lastInvoiceId = response.id_factura ?? null;
+        if (this.lastInvoiceId) this.registerMessage += ' Factura emitida (SIAT simulado).';
         this.resetSaleForm();
         this.closePaymentTab();
         this.activeTab = 'register';
@@ -877,6 +889,7 @@ export class Sales implements OnInit {
       id_cliente: this.selectedClientId,
       id_metodo_pago: idMetodoPago,
       factura_linea: this.onlineInvoice && this.hasPermission("invoice:issue"),
+      ...this.invoiceBuyer(),
       subtotal: this.subtotal,
       descuento_total: this.discountTotal,
       total: this.total,
@@ -894,6 +907,8 @@ export class Sales implements OnInit {
     this.cashRegisterService.registrarVentaSesionCaja(this.cashRegisterSessionId, payload).subscribe({
       next: (response) => {
         this.registerMessage = `Venta registrada correctamente con el ID ${response.id_venta}.`;
+        this.lastInvoiceId = response.id_factura ?? null;
+        if (this.lastInvoiceId) this.registerMessage += ' Factura emitida (SIAT simulado).';
         this.resetSaleForm();
         this.closePaymentTab();
         this.activeTab = 'register';
@@ -935,8 +950,28 @@ export class Sales implements OnInit {
     this.selectedClientId = null;
     this.selectedSaleTypeId = this.getDefaultAllowedSaleTypeId();
     this.onlineInvoice = false;
+    this.invoiceDocType = 1;
+    this.invoiceDocNumber = '';
+    this.invoiceBusinessName = '';
     this.saleDiscount = 0;
     this.loadedOrderId = null;
+  }
+
+  private invoiceBuyer(): Partial<CreateSaleRequest> {
+    if (!this.onlineInvoice) return {};
+    return {
+      codigo_tipo_documento: this.invoiceDocType,
+      numero_documento: this.invoiceDocNumber.trim() || null,
+      razon_social: this.invoiceBusinessName.trim() || null,
+    };
+  }
+
+  protected printLastInvoice(): void {
+    if (!this.lastInvoiceId) return;
+    this.invoicePrint.print(this.lastInvoiceId).catch((error) => {
+      this.registerError = error?.error?.detail ?? error?.message ?? 'No se pudo generar la factura.';
+      this.cdr.detectChanges();
+    });
   }
 
   private createPaymentRow(id = this.nextPaymentRowId++, monto: number | null = null): SalePaymentRow {

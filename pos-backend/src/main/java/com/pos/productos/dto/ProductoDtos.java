@@ -96,6 +96,15 @@ public final class ProductoDtos {
         private BigDecimal costo;
         private Boolean activo;
         private String imagen;
+        /** Códigos SIAT: no son atributos con permiso propio, los controla el permiso de crear/editar producto. */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        private final java.util.Set<String> providedSiat = new java.util.LinkedHashSet<>();
+        private String codigoActividad;
+        private Integer codigoProductoSin;
+        private Integer codigoUnidadMedidaSin;
+        public void setCodigoActividad(String v) { providedSiat.add("codigo_actividad"); codigoActividad=v; }
+        public void setCodigoProductoSin(Integer v) { providedSiat.add("codigo_producto_sin"); codigoProductoSin=v; }
+        public void setCodigoUnidadMedidaSin(Integer v) { providedSiat.add("codigo_unidad_medida_sin"); codigoUnidadMedidaSin=v; }
         public void setIdSubcategoria(Integer v) { provided.add("id_subcategoria"); idSubcategoria=v; }
         public void setNombre(String v) { provided.add("nombre"); nombre=v; }
         public void setCodigoBarra(String v) { provided.add("codigo_barra"); codigoBarra=v; }

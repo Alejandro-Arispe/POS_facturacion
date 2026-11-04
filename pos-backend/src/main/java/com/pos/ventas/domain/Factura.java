@@ -62,4 +62,32 @@ public class Factura {
 
     @Column(name = "pdf_generado", nullable = false, columnDefinition = "TEXT")
     private String pdfGenerado;
+
+    // Campos de la simulación SIAT. Son nullables para no romper filas anteriores.
+    @Column(name = "cuis", length = 20)
+    private String cuis;
+
+    /** EMITIDA, ANULADA o CONTINGENCIA. */
+    @Column(name = "estado_siat", length = 20)
+    private String estadoSiat;
+
+    @Column(name = "codigo_motivo_anulacion")
+    private Integer codigoMotivoAnulacion;
+
+    @Column(name = "fecha_anulacion")
+    private LocalDateTime fechaAnulacion;
+
+    @Column(name = "qr_code_data", columnDefinition = "TEXT")
+    private String qrCodeData;
+
+    @Column(name = "razon_social_cliente", length = 200)
+    private String razonSocialCliente;
+
+    /** Código SIN del tipo de documento de identidad del cliente (1 CI, 2 CEX, 3 PAS, 4 OD, 5 NIT). */
+    @Column(name = "codigo_tipo_documento")
+    private Integer codigoTipoDocumento;
+
+    /** Código SIN del método de pago (1 efectivo, 2 tarjeta, 7 transferencia/QR). */
+    @Column(name = "codigo_metodo_pago")
+    private Integer codigoMetodoPago;
 }

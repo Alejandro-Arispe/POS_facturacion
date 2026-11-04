@@ -33,6 +33,9 @@ export interface Producto {
   imagen?: string | null;
   activo?: boolean;
   subcategoria?: SubcategoriaProducto | null;
+  codigo_actividad?: string | null;
+  codigo_producto_sin?: number | null;
+  codigo_unidad_medida_sin?: number | null;
 }
 
 export interface CrearCategoriaRequest {
@@ -48,7 +51,8 @@ export interface CrearSubcategoriaRequest {
   activo: boolean;
 }
 
-export type CrearProductoRequest = import('./product-fields').ProductValues;
+export type CrearProductoRequest = import('./product-fields').ProductValues &
+  import('./siat.service').SiatCodes;
 
 export interface ActualizarCategoriaRequest {
   nombre?: string;
@@ -63,7 +67,8 @@ export interface ActualizarSubcategoriaRequest {
   activo?: boolean;
 }
 
-export type ActualizarProductoRequest = import('./product-fields').ProductValues;
+export type ActualizarProductoRequest = import('./product-fields').ProductValues &
+  import('./siat.service').SiatCodes;
 
 export interface StockProducto {
   id_stock: number;

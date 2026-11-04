@@ -145,6 +145,10 @@ export interface CreateSaleRequest {
   id_metodo_pago: number | null;
   id_pedido?: number | null;
   factura_linea: boolean;
+  /** Datos del comprador para la factura SIAT simulada (códigos SIN de tipo de documento). */
+  codigo_tipo_documento?: number;
+  numero_documento?: string | null;
+  razon_social?: string | null;
   subtotal: number;
   descuento_total: number;
   total: number;
@@ -155,6 +159,8 @@ export interface CreateSaleRequest {
 
 export interface CreateSaleResponse {
   id_venta: number;
+  id_factura?: number | null;
+  cuf?: string | null;
   id_usuario: number;
   id_caja_sesion: number;
   subtotal: number;
