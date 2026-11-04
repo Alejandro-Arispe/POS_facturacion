@@ -56,7 +56,6 @@ import jakarta.persistence.LockModeType;
 public class DemoAccountSeeder {
 
     private static final ZoneId ZONE = ZoneId.of("America/La_Paz");
-    private static final String MARK = "[SEED-DEMO]";
     private static final int DAYS = 30;
     private final EntityManager em;
     private final PasswordService passwords;
@@ -93,7 +92,7 @@ public class DemoAccountSeeder {
     public record Login(String role, String email, String password, String scope) { }
 
     /**
-     * Equipo de prueba de la empresa demo: dos cajeros (uno por sucursal, rol EMPLEADO) y un cliente con acceso.
+     * Equipo de la empresa: dos cajeros (uno por sucursal, rol EMPLEADO) y un cliente con acceso.
      * Es idempotente: si el correo ya existe no se vuelve a crear ni se cambia su contrasena.
      */
     @Transactional
@@ -103,10 +102,10 @@ public class DemoAccountSeeder {
                 Sucursal.class).setParameter("c", company).getResultList();
         LocalDate today = LocalDate.now(ZONE);
         List<Login> logins = new ArrayList<>();
-        String[] cashiers = {"cajero.centro@pos-demo.com", "cajero.sur@pos-demo.com"};
-        String[] cashierNames = {"Rosa Cajera Centro", "Marco Cajero Sur"};
+        String[] cashiers = {"cajero.centro@doncarlos.com.bo", "cajero.sur@doncarlos.com.bo"};
+        String[] cashierNames = {"Rosa Quispe Mamani", "Marco Condori Flores"};
         for (int i = 0; i < Math.min(cashiers.length, branches.size()); i++) {
-            Usuario user = ensureUser(cashiers[i], password, cashierNames[i], "DEMO-EMP-" + (i + 1));
+            Usuario user = ensureUser(cashiers[i], password, cashierNames[i], "512345" + (i + 6));
             boolean linked = !em.createQuery("select ur from UsuarioRol ur where ur.usuario = :u and ur.idEmpresa = :c",
                     UsuarioRol.class).setParameter("u", user).setParameter("c", companyId).getResultList().isEmpty();
             if (!linked) {
@@ -120,8 +119,8 @@ public class DemoAccountSeeder {
             }
             logins.add(new Login("Empleado (cajero)", cashiers[i], password, branches.get(i).getNombre()));
         }
-        String clientEmail = "cliente@pos-demo.com";
-        Usuario clientUser = ensureUser(clientEmail, password, "Cliente Demo Mayorista", "DEMO-CLI-1");
+        String clientEmail = "mariela.gutierrez@gmail.com";
+        Usuario clientUser = ensureUser(clientEmail, password, "Mariela Gutierrez Paz", "6012345");
         boolean hasClient = !em.createQuery("select c from Cliente c where c.idUsuario = :u and c.idEmpresa = :e",
                 Cliente.class).setParameter("u", clientUser.getIdUsuario()).setParameter("e", companyId).getResultList().isEmpty();
         if (!hasClient) {
@@ -132,7 +131,7 @@ public class DemoAccountSeeder {
             client.setIdUsuario(clientUser.getIdUsuario());
             client.setIdEmpresa(companyId);
             client.setCategoriaCliente(category);
-            client.setCodigoCliente("DEMO-LOGIN");
+            client.setCodigoCliente("CLI-0100");
             client.setLimiteCredito(category.getLimiteCredito());
             save(client);
         }
@@ -155,7 +154,7 @@ public class DemoAccountSeeder {
         if (!Boolean.TRUE.equals(owner.getActivo())) {
             throw new IllegalStateException("La cuenta debe estar activa antes de cargar datos de prueba.");
         }
-        String nit = "SEED-DEMO-" + owner.getIdUsuario();
+        String nit = String.format("1023456%03d", owner.getIdUsuario());
         Empresa existing = em.createQuery("select e from Empresa e where e.nit = :nit", Empresa.class)
                 .setParameter("nit", nit).getResultStream().findFirst().orElse(null);
         if (existing != null) {
@@ -170,10 +169,10 @@ public class DemoAccountSeeder {
 
         LocalDate today = LocalDate.now(ZONE);
         Empresa company = new Empresa();
-        company.setNombre("Mi tienda demo");
-        company.setRazonSocial("Comercial de Pruebas " + owner.getIdUsuario());
+        company.setNombre("Minimarket Don Carlos");
+        company.setRazonSocial("Comercial Don Carlos S.R.L.");
         company.setNit(nit);
-        company.setCorreo("seed-empresa-" + owner.getIdUsuario() + "@example.invalid");
+        company.setCorreo(owner.getIdUsuario() == 1 ? "contacto@doncarlos.com.bo" : "contacto" + owner.getIdUsuario() + "@doncarlos.com.bo");
         company.setFechaCreacion(today.minusDays(DAYS + 1));
         save(company);
         link(owner, catalog(Rol.class, "ADMINISTRADOR"), company, today);
@@ -196,15 +195,15 @@ public class DemoAccountSeeder {
             Sucursal location = new Sucursal();
             location.setEmpresa(company);
             location.setNombre(branch == 0 ? "Sucursal Centro" : "Sucursal Zona Sur");
-            location.setDireccion(branch == 0 ? "Av. Mariscal Santa Cruz 100 (demo)" : "Av. Ballivian 200 (demo)");
+            location.setDireccion(branch == 0 ? "Av. Camacho 1245, Zona Central" : "Calle 21 de Calacoto 8340, Zona Sur");
             location.setCiudad("La Paz");
-            location.setTelefono("7000000" + branch);
+            location.setTelefono(branch == 0 ? "22201234" : "22795678");
             location.setFechaRegistro(company.getFechaCreacion());
             save(location);
             Caja register = new Caja();
             register.setSucursal(location);
             register.setNombre("Caja principal");
-            register.setCodigo("SEED-" + (branch + 1));
+            register.setCodigo("CAJA-" + company.getIdEmpresa() + "0" + (branch + 1));
             register.setFechaCreacion(company.getFechaCreacion());
             save(register);
             history(owner, register, products, clients, today, branch);
@@ -215,33 +214,41 @@ public class DemoAccountSeeder {
 
     private List<Producto> products(Empresa company) {
         String[][] names = {
-                {"Arroz 1 kg", "Azucar 1 kg", "Aceite 1 L", "Fideos 400 g"},
-                {"Agua 2 L", "Refresco 2 L", "Jugo de naranja 1 L", "Cafe 100 g"},
-                {"Detergente 1 kg", "Lavavajillas 750 ml", "Jabon de tocador", "Papel higienico 4 rollos"}
+                {"Arroz Grano de Oro 1 kg", "Azucar Guabira 1 kg", "Aceite Fino 1 L", "Fideo Lazzaroni 400 g"},
+                {"Agua Vital 2 L", "Coca-Cola 2 L", "Jugo Del Valle Naranja 1 L", "Cafe Nescafe Clasico 100 g"},
+                {"Detergente Ola 1 kg", "Lavavajillas Axion 750 ml", "Jabon de tocador Lux", "Papel higienico Elite 4 rollos"}
+        };
+        String[][] descriptions = {
+                {"Arroz grano largo de primera calidad", "Azucar blanca refinada", "Aceite vegetal comestible", "Fideo tipo tallarin"},
+                {"Agua purificada sin gas", "Bebida gaseosa sabor cola", "Jugo de naranja listo para tomar", "Cafe soluble instantaneo"},
+                {"Detergente en polvo para ropa", "Lavavajillas en crema para vajilla", "Jabon de tocador con aroma", "Papel higienico doble hoja"}
         };
         String[][] prices = {{"9.50", "7.00", "16.50", "6.00"}, {"6.00", "12.00", "10.50", "22.00"},
                 {"19.00", "14.50", "5.00", "18.00"}};
         String[] groups = {"Abarrotes", "Bebidas", "Limpieza"};
+        String[] subgroups = {"Abarrotes basicos", "Bebidas y jugos", "Limpieza del hogar"};
         List<Producto> result = new ArrayList<>();
         for (int group = 0; group < names.length; group++) {
             CategoriaProducto category = new CategoriaProducto();
             category.setIdEmpresa(company.getIdEmpresa());
-            // El esquema actual exige nombres de categoria unicos globalmente.
-            category.setNombre(groups[group] + " (demo " + company.getIdEmpresa() + ")");
-            category.setDescripcion(MARK + " Categoria de prueba");
+            // El esquema actual exige nombres de categoria unicos globalmente: solo se desambigua si ya existe.
+            boolean taken = !em.createQuery("select c.idCategoriaProducto from CategoriaProducto c where c.nombre = :n", Integer.class)
+                    .setParameter("n", groups[group]).getResultList().isEmpty();
+            category.setNombre(taken ? groups[group] + " - " + company.getNombre() + " " + company.getIdEmpresa() : groups[group]);
+            category.setDescripcion("Productos de consumo diario: " + groups[group].toLowerCase());
             save(category);
             SubcategoriaProducto subcategory = new SubcategoriaProducto();
             subcategory.setCategoriaProducto(category);
-            subcategory.setNombre(groups[group] + " general");
+            subcategory.setNombre(subgroups[group]);
             save(subcategory);
             for (int index = 0; index < names[group].length; index++) {
                 Producto product = new Producto();
                 product.setIdEmpresa(company.getIdEmpresa());
                 product.setSubcategoria(subcategory);
                 product.setNombre(names[group][index]);
-                product.setCodigoBarra("DEMO-" + company.getIdEmpresa() + "-" + (result.size() + 1));
-                product.setDescripcion(MARK + " Producto para pruebas del punto de venta");
-                product.setUnidadMedida("Unidad");
+                product.setCodigoBarra(String.format("770%03d%07d", company.getIdEmpresa(), result.size() + 1));
+                product.setDescripcion(descriptions[group][index]);
+                product.setUnidadMedida(names[group][index].contains(" kg") ? "Kilogramo" : names[group][index].contains(" L") ? "Litro" : "Unidad");
                 // Homologacion SIAT simulada (codigos del catalogo SIN sembrado al arrancar).
                 String productName = names[group][index];
                 product.setCodigoActividad(group == 2 ? "47190" : "47110");
@@ -261,27 +268,29 @@ public class DemoAccountSeeder {
             CategoriaCliente category = new CategoriaCliente();
             category.setIdEmpresa(company.getIdEmpresa());
             category.setNombre(name);
-            category.setDescripcion(MARK);
+            category.setDescripcion(name.equals("Mayorista") ? "Compras al por mayor con descuento y credito" : "Clientes de venta al detalle");
             category.setDescuentoBase(new BigDecimal(name.equals("Mayorista") ? "5.00" : "0.00"));
             category.setPlazoCredito(name.equals("Mayorista") ? 30 : 0);
             category.setLimiteCredito(new BigDecimal(name.equals("Mayorista") ? "3000.00" : "0.00"));
             categories.add(save(category));
         }
-        String[] names = {"Ana Perez", "Luis Mamani", "Carla Rojas", "Jose Flores", "Maria Quispe",
-                "Pedro Vargas", "Lucia Torres", "Diego Molina"};
+        String[] names = {"Ana Perez Soliz", "Luis Mamani Choque", "Carla Rojas Vega", "Jose Flores Aliaga", "Maria Quispe Huanca",
+                "Pedro Vargas Lima", "Lucia Torres Cruz", "Diego Molina Paredes"};
+        String[] emails = {"ana.perez", "luis.mamani", "carla.rojas", "jose.flores", "maria.quispe",
+                "pedro.vargas", "lucia.torres", "diego.molina"};
         String hash = passwords.hash(UUID.randomUUID().toString());
         List<Cliente> result = new ArrayList<>();
         for (int i = 0; i < names.length; i++) {
             Persona person = new Persona();
-            person.setNombreCompleto(names[i] + " (demo)");
+            person.setNombreCompleto(names[i]);
             person.setFechaNacimiento(LocalDate.of(1990 + i, 1 + i, 10));
             person.setGenero("N/E");
-            person.setTelefono("7100000" + i);
-            person.setDocumento("DEMO-" + company.getIdEmpresa() + "-C" + i);
+            person.setTelefono("7" + (1000000 + i * 113457));
+            person.setDocumento(String.valueOf(5200000 + company.getIdEmpresa() * 100 + i));
             save(person);
             Usuario user = new Usuario();
             user.setPersona(person);
-            user.setEmail("seed-" + company.getIdEmpresa() + "-cliente-" + i + "@example.invalid");
+            user.setEmail(emails[i] + (company.getIdEmpresa() == 1 ? "" : company.getIdEmpresa()) + "@gmail.com");
             user.setContrasena(hash);
             user.setFechaCreacion(company.getFechaCreacion());
             user.setActivo(true);
@@ -290,7 +299,7 @@ public class DemoAccountSeeder {
             Cliente client = new Cliente();
             client.setIdUsuario(user.getIdUsuario());
             client.setCategoriaCliente(categories.get(i % categories.size()));
-            client.setCodigoCliente("DEMO-C" + (i + 1));
+            client.setCodigoCliente(String.format("CLI-%04d", i + 1));
             client.setLimiteCredito(client.getCategoriaCliente().getLimiteCredito());
             result.add(save(client));
         }
@@ -318,12 +327,12 @@ public class DemoAccountSeeder {
             session.setFechaCierre(utc(date, 20));
             session.setMontoInicial(new BigDecimal("200.00"));
             session.setEstado("Cerrado");
-            session.setNota(MARK);
+            session.setNota("Turno regular");
             save(session);
             Map<Integer, BigDecimal> balances = new LinkedHashMap<>();
             balances.put(methods.get(0).getIdMetodoPago(), session.getMontoInicial());
             cashMovement(session, opening, methods.get(0).getIdMetodoPago(), session.getMontoInicial(),
-                    session.getFechaApertura(), MARK + " Apertura");
+                    session.getFechaApertura(), "Apertura de caja");
             for (int saleIndex = 0; saleIndex < 2; saleIndex++) {
                 LocalDateTime dateTime = utc(date, 10 + saleIndex * 6);
                 Cliente client = clients.get(random.nextInt(clients.size()));
@@ -358,7 +367,7 @@ public class DemoAccountSeeder {
                     sale.setDescuentoTotal(sale.getDescuentoTotal().add(discount));
                     sold.merge(product.getIdProducto(), quantity, Integer::sum);
                     inventoryMovement(owner, register.getSucursal(), product, exit, quantity, dateTime,
-                            MARK + " Venta " + sale.getIdVenta());
+                            "Venta " + sale.getIdVenta());
                 }
                 sale.setTotal(sale.getSubtotal().subtract(sale.getDescuentoTotal()));
                 MetodoPago method = methods.get(random.nextInt(methods.size()));
@@ -384,9 +393,9 @@ public class DemoAccountSeeder {
                 detail.setIdMetodoPago(method);
                 detail.setMontoEsperado(amount);
                 detail.setMontoReal(amount);
-                detail.setObservacion(MARK);
+                detail.setObservacion("Sin diferencias");
                 save(detail);
-                cashMovement(session, closing, method, amount, session.getFechaCierre(), MARK + " Cierre");
+                cashMovement(session, closing, method, amount, session.getFechaCierre(), "Cierre de caja");
             });
         }
         for (int i = 0; i < products.size(); i++) {
@@ -402,7 +411,7 @@ public class DemoAccountSeeder {
             save(stock);
             inventoryMovement(owner, register.getSucursal(), product, entry,
                     remaining + sold.getOrDefault(product.getIdProducto(), 0), utc(today.minusDays(DAYS + 1), 7),
-                    MARK + " Inventario inicial");
+                    "Inventario inicial");
         }
     }
 

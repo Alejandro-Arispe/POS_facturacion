@@ -15,10 +15,10 @@ public class SeedDemoCommand {
         try (var context = new SpringApplicationBuilder(PosBackendSpringApplication.class)
                 .profiles("seed-demo").run(arguments)) {
             var env = context.getEnvironment();
-            String email = env.getProperty("app.demo-seed.email", "admin@pos-demo.com");
-            String password = env.getProperty("app.demo-seed.password", "Demo2026!");
+            String email = env.getProperty("app.demo-seed.email", "admin@doncarlos.com.bo");
+            String password = env.getProperty("app.demo-seed.password", "Tienda2026!");
             var seeder = context.getBean(DemoAccountSeeder.class);
-            seeder.ensureUser(email, password, "Administrador Demo", "DEMO-ADMIN-1");
+            seeder.ensureUser(email, password, "Carlos Mendoza Rojas", "4567890");
             var result = seeder.seed(email);
             var team = seeder.seedTeam(result.companyId(), password);
             System.out.printf("[SEED] %s: %s (id=%d), cuenta %s.%n",
