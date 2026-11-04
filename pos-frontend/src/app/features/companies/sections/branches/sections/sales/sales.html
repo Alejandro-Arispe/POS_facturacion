@@ -456,7 +456,8 @@
                           class="select"
                           [id]="'paymentMethod-' + paymentRow.id"
                           [name]="'paymentMethod-' + paymentRow.id"
-                          [(ngModel)]="paymentRow.metodoPagoId"
+                          [ngModel]="paymentRow.metodoPagoId"
+                          (ngModelChange)="changePaymentMethod(paymentRow, $event)"
                           [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
                         >
                           @for (paymentMethod of paymentMethods; track paymentMethod.id) {
@@ -481,6 +482,24 @@
                           (ngModelChange)="updatePaymentAmount(paymentRow, $event)"
                         />
                       </div>
+
+                      @if (isQrRow(paymentRow)) {
+                        <div class="qr-payment" role="group" aria-label="Pago por QR">
+                          @if (qrImages.get(paymentRow.id); as qr) {
+                            <img class="qr-payment-image" [src]="qr" alt="Codigo QR para pagar" width="220" height="220" />
+                          }
+                          <p class="qr-payment-text">
+                            Escanea el codigo para pagar <strong>Bs {{ formatCurrency(paymentRow.monto ?? 0) }}</strong>
+                          </p>
+                          @if (paymentRow.qrConfirmado) {
+                            <p class="feedback feedback-success">Pago por QR recibido.</p>
+                          } @else {
+                            <button class="btn btn-primary" type="button" (click)="confirmQrPayment(paymentRow)">
+                              Confirmar pago recibido
+                            </button>
+                          }
+                        </div>
+                      }
 
                       @if (salePaymentRows.length > 1) {
                         <button

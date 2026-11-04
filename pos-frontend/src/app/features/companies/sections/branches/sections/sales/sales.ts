@@ -95,6 +95,8 @@ interface SalePaymentRow {
   id: number;
   metodoPagoId: number | null;
   monto: number | null;
+  /** Pago por QR simulado: el cajero confirma que el cliente ya pago. */
+  qrConfirmado?: boolean;
 }
 
 interface CashMovementItem {
@@ -763,6 +765,35 @@ export class Sales implements OnInit {
 
   protected updatePaymentAmount(row: SalePaymentRow, value: number | string | null): void {
     row.monto = this.normalizeMoney(value);
+    row.qrConfirmado = false;
+  }
+
+  // --- Pago por QR (simulado) -------------------------------------------------------------------
+  protected readonly qrImages = new Map<number, string>();
+
+  protected isQrRow(row: SalePaymentRow): boolean {
+    const method = this.paymentMethods.find((m) => m.id === row.metodoPagoId);
+    return method?.nombre.trim().toUpperCase() === 'QR';
+  }
+
+  protected changePaymentMethod(row: SalePaymentRow, methodId: number | null): void {
+    row.metodoPagoId = methodId;
+    row.qrConfirmado = false;
+    if (this.isQrRow(row)) void this.generateQr(row);
+  }
+
+  protected confirmQrPayment(row: SalePaymentRow): void {
+    row.qrConfirmado = true;
+    this.registerError = '';
+  }
+
+  /** Genera un QR cualquiera: no se conecta a ningun banco, solo simula el cobro. */
+  private async generateQr(row: SalePaymentRow): Promise<void> {
+    // qrcode se carga solo cuando se usa para no engordar el paquete inicial.
+    const QRCode = (await import('qrcode')).default;
+    const reference = `POS-PAGO-SIMULADO-${Date.now().toString(36).toUpperCase()}`;
+    this.qrImages.set(row.id, await QRCode.toDataURL(reference, { margin: 1, width: 220 }));
+    this.cdr.markForCheck();
   }
 
   private registrarVentaCredito(): void {
@@ -841,6 +872,11 @@ export class Sales implements OnInit {
 
     if (this.selectedSaleTypeIsCredit && this.exceedsSelectedClientCreditLimit()) {
       this.registerError = `El total de la venta no puede superar el limite de credito de la categoria: Bs ${this.formatCurrency(this.getSelectedClientCreditLimit())}.`;
+      return;
+    }
+
+    if (this.salePaymentRows.some((row) => this.isQrRow(row) && !row.qrConfirmado)) {
+      this.registerError = 'Confirma el pago por QR cuando el cliente haya escaneado el codigo.';
       return;
     }
 

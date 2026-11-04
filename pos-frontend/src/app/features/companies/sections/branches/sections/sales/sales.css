@@ -970,3 +970,25 @@ body.dark-theme .sale-detail-panel td:nth-child(5) { color: #2dd4bf; }
 .readonly-badge {
   font-style: italic;
 }
+
+/* Pago por QR simulado */
+.qr-payment {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed var(--color-border, #cbd5e1);
+  border-radius: 12px;
+}
+
+.qr-payment-image {
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.qr-payment-text {
+  margin: 0;
+  text-align: center;
+}
