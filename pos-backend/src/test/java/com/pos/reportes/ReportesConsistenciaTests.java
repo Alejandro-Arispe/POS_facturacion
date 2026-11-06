@@ -40,7 +40,7 @@ import jakarta.persistence.EntityManager;
         "spring.datasource.url=jdbc:h2:mem:reportes;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa", "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=create-drop", "spring.config.import=",
+        "app.media-dir=target/seed-test-media", "spring.jpa.hibernate.ddl-auto=create-drop", "spring.config.import=",
         "app.superadmin.email=", "app.superadmin.password=", "app.ai.gemini.api-key="
 })
 class ReportesConsistenciaTests {

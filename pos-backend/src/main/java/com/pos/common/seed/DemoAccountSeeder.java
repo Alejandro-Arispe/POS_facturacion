@@ -36,6 +36,7 @@ import com.pos.inventario.domain.TipoMovimiento;
 import com.pos.productos.domain.CategoriaProducto;
 import com.pos.productos.domain.Producto;
 import com.pos.productos.domain.SubcategoriaProducto;
+import com.pos.common.storage.ProductImageStorage;
 import com.pos.siat.service.SiatFacturaService;
 import com.pos.usuarios.domain.Persona;
 import com.pos.usuarios.domain.Rol;
@@ -60,11 +61,28 @@ public class DemoAccountSeeder {
     private final EntityManager em;
     private final PasswordService passwords;
     private final SiatFacturaService siat;
+    private final ProductImageStorage images;
 
-    public DemoAccountSeeder(EntityManager em, PasswordService passwords, SiatFacturaService siat) {
+    /** Ilustraciones del catalogo de ejemplo, en el mismo orden que los nombres de producto de {@link #products}. */
+    private static final String[] PRODUCT_IMAGES = {"arroz", "azucar", "aceite", "fideo", "agua", "cola", "jugo",
+            "cafe", "detergente", "lavavajillas", "jabon", "papel"};
+
+    public DemoAccountSeeder(EntityManager em, PasswordService passwords, SiatFacturaService siat,
+            ProductImageStorage images) {
         this.em = em;
         this.passwords = passwords;
         this.siat = siat;
+        this.images = images;
+    }
+
+    /** Copia al almacenamiento de imagenes la ilustracion del producto; si falta el recurso el producto queda sin imagen. */
+    private String productImage(int position) {
+        if (position >= PRODUCT_IMAGES.length) return null;
+        try (var stream = DemoAccountSeeder.class.getResourceAsStream("/seed/productos/" + PRODUCT_IMAGES[position] + ".png")) {
+            return stream == null ? null : images.save(stream.readAllBytes(), "png");
+        } catch (java.io.IOException ex) {
+            return null;
+        }
     }
 
     /** Crea una cuenta activa con contrasena conocida; si el correo ya existe la devuelve sin modificarla. */
@@ -248,6 +266,7 @@ public class DemoAccountSeeder {
                 product.setNombre(names[group][index]);
                 product.setCodigoBarra(String.format("770%03d%07d", company.getIdEmpresa(), result.size() + 1));
                 product.setDescripcion(descriptions[group][index]);
+                product.setImagen(productImage(result.size()));
                 product.setUnidadMedida(names[group][index].contains(" kg") ? "Kilogramo" : names[group][index].contains(" L") ? "Litro" : "Unidad");
                 // Homologacion SIAT simulada (codigos del catalogo SIN sembrado al arrancar).
                 String productName = names[group][index];

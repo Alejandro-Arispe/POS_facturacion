@@ -24,7 +24,7 @@ import jakarta.persistence.EntityManager;
         "spring.datasource.url=jdbc:h2:mem:demo-seeder;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa", "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=create-drop", "spring.config.import=",
+        "app.media-dir=target/seed-test-media", "spring.jpa.hibernate.ddl-auto=create-drop", "spring.config.import=",
         "app.superadmin.email=", "app.superadmin.password=", "app.ai.gemini.api-key="
 })
 class DemoAccountSeederTests {
@@ -48,6 +48,8 @@ class DemoAccountSeederTests {
         assertThat(count("select count(*) from cliente c join categoria_cliente cc on cc.id_categoria_cliente = c.id_categoria_cliente where cc.id_empresa = ?", id)).isEqualTo(8);
         assertThat(count("select count(*) from venta v join caja_sesion cs on cs.id_caja_sesion = v.id_caja_sesion join caja ca on ca.id_caja = cs.id_caja join sucursal s on s.id_sucursal = ca.id_sucursal where s.id_empresa = ?", id)).isEqualTo(120);
         assertThat(count("select count(*) from stock st join producto p on p.id_producto = st.id_producto where p.id_empresa = ?", id)).isEqualTo(24);
+        // Cada producto del catalogo de ejemplo trae su ilustracion.
+        assertThat(count("select count(*) from producto where id_empresa = ? and imagen like '/media/products/%'", id)).isEqualTo(12);
 
         // Kardex y stock coinciden por producto y sucursal, incluidos los productos agotados.
         assertThat(count("""

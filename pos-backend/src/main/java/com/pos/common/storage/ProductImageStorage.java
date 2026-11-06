@@ -46,6 +46,23 @@ public class ProductImageStorage {
             throw ApiException.badRequest("No se pudo guardar la imagen.");
         }
     }
+    /** Guarda una imagen que ya esta en memoria (por ejemplo, las del catalogo de ejemplo). */
+    public String save(byte[] content, String extension) {
+        String ext = extension == null ? "" : extension.toLowerCase(Locale.ROOT);
+        if (content == null || content.length == 0 || !ALLOWED.contains(ext)) {
+            throw ApiException.badRequest("Imagen no valida.");
+        }
+        try {
+            Path folder = mediaDir.resolve("products");
+            Files.createDirectories(folder);
+            String filename = UUID.randomUUID().toString().replace("-", "") + "." + ext;
+            Files.write(folder.resolve(filename), content);
+            return "/media/products/" + filename;
+        } catch (IOException ex) {
+            throw ApiException.badRequest("No se pudo guardar la imagen.");
+        }
+    }
+
     /** Removes only files created under this storage, for transaction rollback. */
     public void remove(String storedPath) {
         if (storedPath==null || !storedPath.startsWith("/media/products/")) return;
