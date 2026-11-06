@@ -136,7 +136,12 @@
                           <div class="product-results" aria-label="Resultados de productos">
                             @for (product of filteredProducts; track trackProduct($index, product)) {
                               <button class="product-result" type="button" [disabled]="!hasPermission('sale:create')" (click)="addProduct(product)">
-                                <span>
+                                <span class="product-thumb">
+                                  @if (product.imagen) {
+                                    <img [secureSrc]="product.imagen" [alt]="product.nombre" width="52" height="52" loading="lazy" />
+                                  }
+                                </span>
+                                <span class="product-info">
                                   <strong>{{ product.nombre }}</strong>
                                   <small>
                                     Codigo {{ product.codigo || product.idProducto }}
@@ -179,7 +184,12 @@
                           <div class="product-results" aria-label="Productos recomendados">
                             @for (product of visibleRecommendedProducts; track trackProduct($index, product)) {
                               <button class="product-result" type="button" [disabled]="!hasPermission('sale:create')" (click)="addProduct(product)">
-                                <span>
+                                <span class="product-thumb">
+                                  @if (product.imagen) {
+                                    <img [secureSrc]="product.imagen" [alt]="product.nombre" width="52" height="52" loading="lazy" />
+                                  }
+                                </span>
+                                <span class="product-info">
                                   <strong>{{ product.nombre }}</strong>
                                   <small>
                                     Codigo {{ product.codigo || product.idProducto }}
@@ -342,12 +352,17 @@
                           <tbody>
                             @for (item of saleDetails; track trackDetail($index, item)) {
                               <tr>
-                                <td>
+                                <td class="detail-product">
+                                  @if (item.imagen) {
+                                    <img class="detail-thumb" [secureSrc]="item.imagen" [alt]="item.nombre" width="40" height="40" />
+                                  }
+                                  <div>
                                   <strong>{{ item.nombre }}</strong>
                                   <span class="detail-code">Codigo {{ item.codigo || item.idProducto }}</span>
                                   @if (item.codigoBarras) {
                                     <span class="detail-code">Barras {{ item.codigoBarras }}</span>
                                   }
+                                  </div>
                                 </td>
                                 <td>
                                   @if (canSetSalePrice) {
@@ -456,7 +471,8 @@
                           class="select"
                           [id]="'paymentMethod-' + paymentRow.id"
                           [name]="'paymentMethod-' + paymentRow.id"
-                          [(ngModel)]="paymentRow.metodoPagoId"
+                          [ngModel]="paymentRow.metodoPagoId"
+                          (ngModelChange)="changePaymentMethod(paymentRow, $event)"
                           [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
                         >
                           @for (paymentMethod of paymentMethods; track paymentMethod.id) {
@@ -481,6 +497,24 @@
                           (ngModelChange)="updatePaymentAmount(paymentRow, $event)"
                         />
                       </div>
+
+                      @if (isQrRow(paymentRow)) {
+                        <div class="qr-payment" role="group" aria-label="Pago por QR">
+                          @if (qrImages.get(paymentRow.id); as qr) {
+                            <img class="qr-payment-image" [src]="qr" alt="Codigo QR para pagar" width="220" height="220" />
+                          }
+                          <p class="qr-payment-text">
+                            Escanea el codigo para pagar <strong>Bs {{ formatCurrency(paymentRow.monto ?? 0) }}</strong>
+                          </p>
+                          @if (paymentRow.qrConfirmado) {
+                            <p class="feedback feedback-success">Pago por QR recibido.</p>
+                          } @else {
+                            <button class="btn btn-primary" type="button" (click)="confirmQrPayment(paymentRow)">
+                              Confirmar pago recibido
+                            </button>
+                          }
+                        </div>
+                      }
 
                       @if (salePaymentRows.length > 1) {
                         <button

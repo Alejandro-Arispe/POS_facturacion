@@ -35,6 +35,7 @@ import {
 import { ApiService } from '../../../../../../core/services/api.service';
 import { OrderService, Order } from '../../../../../../core/services/order.service';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
+import { SecureSrc } from '../../../../../../shared/directives/secure-src';
 import { InvoicePrintService } from '../../../../../../core/services/invoice-print.service';
 import { TIPOS_DOCUMENTO_SIN } from '../../../../../../core/services/siat.service';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
@@ -52,6 +53,8 @@ interface ProductSearchItem {
   stock: number;
   codigo: string;
   codigoBarras: string;
+  /** Ruta protegida de la imagen del producto (/media/products/...), si el usuario puede verla. */
+  imagen?: string | null;
 }
 
 interface RecommendedProductsResponse {
@@ -95,6 +98,8 @@ interface SalePaymentRow {
   id: number;
   metodoPagoId: number | null;
   monto: number | null;
+  /** Pago por QR simulado: el cajero confirma que el cliente ya pago. */
+  qrConfirmado?: boolean;
 }
 
 interface CashMovementItem {
@@ -135,7 +140,7 @@ type ProductStockRecord = StockSucursalProducto & {
 
 @Component({
   selector: 'app-sales',
-  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar],
+  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar, SecureSrc],
   templateUrl: './sales.html',
   styleUrl: './sales.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -763,6 +768,35 @@ export class Sales implements OnInit {
 
   protected updatePaymentAmount(row: SalePaymentRow, value: number | string | null): void {
     row.monto = this.normalizeMoney(value);
+    row.qrConfirmado = false;
+  }
+
+  // --- Pago por QR (simulado) -------------------------------------------------------------------
+  protected readonly qrImages = new Map<number, string>();
+
+  protected isQrRow(row: SalePaymentRow): boolean {
+    const method = this.paymentMethods.find((m) => m.id === row.metodoPagoId);
+    return method?.nombre.trim().toUpperCase() === 'QR';
+  }
+
+  protected changePaymentMethod(row: SalePaymentRow, methodId: number | null): void {
+    row.metodoPagoId = methodId;
+    row.qrConfirmado = false;
+    if (this.isQrRow(row)) void this.generateQr(row);
+  }
+
+  protected confirmQrPayment(row: SalePaymentRow): void {
+    row.qrConfirmado = true;
+    this.registerError = '';
+  }
+
+  /** Genera un QR cualquiera: no se conecta a ningun banco, solo simula el cobro. */
+  private async generateQr(row: SalePaymentRow): Promise<void> {
+    // qrcode se carga solo cuando se usa para no engordar el paquete inicial.
+    const QRCode = (await import('qrcode')).default;
+    const reference = `POS-PAGO-SIMULADO-${Date.now().toString(36).toUpperCase()}`;
+    this.qrImages.set(row.id, await QRCode.toDataURL(reference, { margin: 1, width: 220 }));
+    this.cdr.markForCheck();
   }
 
   private registrarVentaCredito(): void {
@@ -841,6 +875,11 @@ export class Sales implements OnInit {
 
     if (this.selectedSaleTypeIsCredit && this.exceedsSelectedClientCreditLimit()) {
       this.registerError = `El total de la venta no puede superar el limite de credito de la categoria: Bs ${this.formatCurrency(this.getSelectedClientCreditLimit())}.`;
+      return;
+    }
+
+    if (this.salePaymentRows.some((row) => this.isQrRow(row) && !row.qrConfirmado)) {
+      this.registerError = 'Confirma el pago por QR cuando el cliente haya escaneado el codigo.';
       return;
     }
 
@@ -1316,6 +1355,7 @@ export class Sales implements OnInit {
       stock: Number(item.cantidad ?? 0),
       codigo: this.stringifyOptional(item.codigo ?? item.codigo_producto ?? item.id_producto),
       codigoBarras: this.stringifyOptional(item.codigo_barra),
+      imagen: item.imagen ?? null,
     };
   }
 
@@ -1328,6 +1368,8 @@ export class Sales implements OnInit {
       stock: Number(product.stock ?? 0),
       codigo: this.stringifyOptional(product.codigo ?? product.idProducto),
       codigoBarras: this.stringifyOptional(product.codigoBarras),
+      // Las sugerencias vienen del reporte: se reutiliza la imagen del producto ya cargado en la sucursal.
+      imagen: product.imagen ?? this.products.find((p) => p.idProducto === Number(product.idProducto))?.imagen ?? null,
     };
   }
 

@@ -15,7 +15,15 @@
         <!-- Resumen del Turno: Ventas en efectivo, QR, ingresos, egresos -->
         <div class="turno-summary-section" aria-label="Resumen del turno">
           <h2 class="title-md turno-title">Resumen del Turno</h2>
+          @if (sinVentas) {
+            <p class="sin-ventas" role="status">No se registraron ventas en este turno.</p>
+          }
           <div class="turno-metrics-grid">
+            <div class="metric-card">
+              <span class="metric-label">Monto inicial (apertura)</span>
+              <strong class="metric-value">{{ montoInicial | money }}</strong>
+            </div>
+
             <div class="metric-card metric-efectivo">
               <span class="metric-label">Ventas en Efectivo</span>
               <strong class="metric-value">{{ totalVentasEfectivo | money }}</strong>
@@ -27,7 +35,7 @@
             </div>
 
             <div class="metric-card metric-ingresos">
-              <span class="metric-label">Total Ingresos</span>
+              <span class="metric-label">Otros ingresos</span>
               <strong class="metric-value">{{ totalIngresos | money }}</strong>
             </div>
 
@@ -178,7 +186,11 @@
             <strong>{{ totalVentasQr | money }}</strong>
           </div>
           <div class="recap-row">
-            <span>Total Ingresos:</span>
+            <span>Monto inicial:</span>
+            <strong>{{ montoInicial | money }}</strong>
+          </div>
+          <div class="recap-row">
+            <span>Otros ingresos:</span>
             <strong>{{ totalIngresos | money }}</strong>
           </div>
           <div class="recap-row">
