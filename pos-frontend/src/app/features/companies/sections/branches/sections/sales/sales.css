@@ -992,3 +992,40 @@ body.dark-theme .sale-detail-panel td:nth-child(5) { color: #2dd4bf; }
   margin: 0;
   text-align: center;
 }
+
+/* Imagenes de producto en el POS */
+.product-result .product-thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--color-surface, #fff);
+}
+
+.product-result .product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-result .product-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.detail-product {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}

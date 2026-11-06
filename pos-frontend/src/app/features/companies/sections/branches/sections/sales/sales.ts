@@ -35,6 +35,7 @@ import {
 import { ApiService } from '../../../../../../core/services/api.service';
 import { OrderService, Order } from '../../../../../../core/services/order.service';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
+import { SecureSrc } from '../../../../../../shared/directives/secure-src';
 import { InvoicePrintService } from '../../../../../../core/services/invoice-print.service';
 import { TIPOS_DOCUMENTO_SIN } from '../../../../../../core/services/siat.service';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
@@ -52,6 +53,8 @@ interface ProductSearchItem {
   stock: number;
   codigo: string;
   codigoBarras: string;
+  /** Ruta protegida de la imagen del producto (/media/products/...), si el usuario puede verla. */
+  imagen?: string | null;
 }
 
 interface RecommendedProductsResponse {
@@ -137,7 +140,7 @@ type ProductStockRecord = StockSucursalProducto & {
 
 @Component({
   selector: 'app-sales',
-  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar],
+  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar, SecureSrc],
   templateUrl: './sales.html',
   styleUrl: './sales.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -1352,6 +1355,7 @@ export class Sales implements OnInit {
       stock: Number(item.cantidad ?? 0),
       codigo: this.stringifyOptional(item.codigo ?? item.codigo_producto ?? item.id_producto),
       codigoBarras: this.stringifyOptional(item.codigo_barra),
+      imagen: item.imagen ?? null,
     };
   }
 
@@ -1364,6 +1368,8 @@ export class Sales implements OnInit {
       stock: Number(product.stock ?? 0),
       codigo: this.stringifyOptional(product.codigo ?? product.idProducto),
       codigoBarras: this.stringifyOptional(product.codigoBarras),
+      // Las sugerencias vienen del reporte: se reutiliza la imagen del producto ya cargado en la sucursal.
+      imagen: product.imagen ?? this.products.find((p) => p.idProducto === Number(product.idProducto))?.imagen ?? null,
     };
   }
 

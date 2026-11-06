@@ -7,6 +7,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import {
+  CashRegisterClosingMovementItem,
   CashRegisterClosingRequestItem,
   CashRegisterClosingResponse,
   CashRegisterClosingSummaryResponse,
@@ -112,10 +113,28 @@ export class CloseCashRegister {
     return this.roundCurrency(qr.total_ingresos || 0);
   }
 
-  protected get totalIngresos(): number {
+  /** Monto con el que se abrio la caja (movimientos de tipo APERTURA). */
+  protected get montoInicial(): number {
     return this.roundCurrency(
-      this.cierresMetodoPago.reduce((acc, c) => acc + (c.total_ingresos || 0), 0),
+      this.allMovements().filter((m) => this.isOpening(m)).reduce((acc, m) => acc + (m.monto || 0), 0),
     );
+  }
+
+  /** Ventas del turno en todos los metodos de pago (los movimientos de venta llevan "Venta" en el concepto). */
+  protected get totalVentas(): number {
+    return this.roundCurrency(
+      this.allMovements().filter((m) => this.isSale(m)).reduce((acc, m) => acc + (m.monto || 0), 0),
+    );
+  }
+
+  protected get sinVentas(): boolean {
+    return !this.allMovements().some((m) => this.isSale(m));
+  }
+
+  /** Ingresos distintos de la apertura y de las ventas (por ejemplo, aportes o cobros de credito). */
+  protected get totalIngresos(): number {
+    const ingresos = this.cierresMetodoPago.reduce((acc, c) => acc + (c.total_ingresos || 0), 0);
+    return this.roundCurrency(Math.max(0, ingresos - this.montoInicial - this.totalVentas));
   }
 
   protected get totalEgresos(): number {
@@ -236,7 +255,8 @@ export class CloseCashRegister {
           total_ingresos: Number(metodo.total_ingresos ?? 0),
           total_egresos: Number(metodo.total_egresos ?? 0),
           monto_esperado: Number(metodo.monto_esperado ?? 0),
-          montoReal: null,
+          // Se propone lo esperado; el cajero lo corrige si al contar hay otra cifra.
+          montoReal: Number(metodo.monto_esperado ?? 0),
           observacion: '',
         }));
         this.loadingResumen = false;
@@ -250,6 +270,18 @@ export class CloseCashRegister {
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private allMovements(): CashRegisterClosingMovementItem[] {
+    return (this.resumenCierre?.resumen_por_metodo_pago ?? []).flatMap((m) => m.movimientos ?? []);
+  }
+
+  private isOpening(movement: CashRegisterClosingMovementItem): boolean {
+    return (movement.concepto ?? '').toUpperCase().startsWith('APERTURA');
+  }
+
+  private isSale(movement: CashRegisterClosingMovementItem): boolean {
+    return (movement.concepto ?? '').toUpperCase().startsWith('VENTA');
   }
 
   private sumExpectedFromCards(): number {
