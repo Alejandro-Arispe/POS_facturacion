@@ -52,7 +52,7 @@ import jakarta.persistence.TypedQuery;
 public class ReportesService {
 
     /** Permiso que exige cualquier reporte (el mismo que usa el menu del frontend). */
-    private static final String PERMISO_REPORTES = "REPORTE_GENERAR";
+    private static final String PERMISO_REPORTES = "report:generate";
 
     /** Ventas que no cuentan en ningun reporte; la analitica y el QBE usan la misma lista. */
     public static final String VENTA_VALIDA_JPQL = "upper(v.estado) not in ('ANULADA', 'CANCELADA')";
@@ -206,6 +206,11 @@ public class ReportesService {
             int cantidad = vals == null ? 0 : aInt(vals[1]);
             double monto = vals == null ? 0 : aDouble(vals[2]);
             int unidades = unidadesPorSucursal.getOrDefault(sucursal.getIdSucursal(), 0);
+        for (Sucursal sucursal : sucursales(empresaId)) {
+            Object[] vals = totales.get(sucursal.getIdSucursal());
+            int cantidad = vals == null ? 0 : aInt(vals[1]);
+            double monto = vals == null ? 0 : aDouble(vals[2]);
+            int unidades = unidadesPorSucursal.getOrDefault(sucursal.getIdSucursal(), 0);
             Map<String, Object> sucursalDto = new LinkedHashMap<>();
             sucursalDto.put("id_sucursal", sucursal.getIdSucursal());
             sucursalDto.put("sucursal", sucursal.getNombre());
@@ -269,6 +274,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> estadoInventario(Usuario usuario, Integer empresaId) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "inventory:read", "nombre");
         Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(filasStock(empresaId, false));
         List<Map<String, Object>> sucursalDtos = new ArrayList<>();
         Map<String, Object> total = resumenStock(List.of());
@@ -295,6 +301,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> movimientosInventario(Usuario usuario, Integer empresaId, LocalDate desde, LocalDate hasta) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "inventory_movement:read", "nombre", "id_subcategoria");
         LocalDate fin = hasta == null ? LocalDate.now() : hasta;
         LocalDate inicio = desde == null ? fin.minusDays(6) : desde;
         validarRango(inicio, fin);
@@ -328,6 +335,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> resumenCajas(Usuario usuario, Integer empresaId, LocalDate fecha) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "cash_register:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> sesionesPorSucursal = agruparPorSucursal(
                 filasSesionesCaja(empresaId, dia, dia, null, null, null));
@@ -376,6 +384,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> movimientosCaja(Usuario usuario, Integer empresaId, LocalDate fecha) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "cash_movement:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(
                 filasMovimientosCaja(empresaId, dia, dia, null, null, null, null));
@@ -404,6 +413,16 @@ public class ReportesService {
         return response;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Reportes dinamicos (lenguaje natural)
+    // ---------------------------------------------------------------------------------------------
+
+    public ReporteDtos.RespuestaInterpretacion interpretar(Usuario usuario, Integer empresaId, String prompt) {
+        requireReporte(usuario, empresaId, "reportes_avanzados");
+        return interpretarPedido(prompt);
+    }
+
+    private ReporteDtos.RespuestaInterpretacion interpretarPedido(String prompt) {
     // ---------------------------------------------------------------------------------------------
     // Reportes dinamicos (lenguaje natural)
     // ---------------------------------------------------------------------------------------------
@@ -557,6 +576,13 @@ public class ReportesService {
     public ReporteDtos.RespuestaReporte ejecutar(Usuario usuario, Integer empresaId, String prompt) {
         requireReporte(usuario, empresaId, "reportes_avanzados");
         ReporteDtos.RespuestaInterpretacion interpretacion = interpretarPedido(prompt);
+        String id = interpretacion.getEspecificacion().getIdentificadorPlantilla();
+        if (id == null || id.isBlank()) id = "resumen_ventas";
+        String fuente = id.contains("inventario") ? "inventory_movement:read" : id.equals("alertas_stock") ? "inventory:read"
+                : id.equals("movimientos_caja") ? "cash_movement:read" : "sale:read";
+        requireDatos(usuario, empresaId, fuente);
+        if (id.contains("producto")) dataPolicy.productFields(dataPolicy.require(usuario, empresaId, null, "product:read"), "nombre", "id_subcategoria");
+        if (id.equals("ventas_detalle")) dataPolicy.require(usuario, empresaId, null, "client:read");
         return lectura.execute(status -> construirReporte(empresaId, interpretacion));
     }
 
@@ -731,6 +757,7 @@ public class ReportesService {
                 .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
         Integer idEmpresa = sucursal.getEmpresa().getIdEmpresa();
         requireReporte(usuario, idEmpresa, "predicciones");
+        dataPolicy.productFields(dataPolicy.require(usuario, idEmpresa, idSucursal, PERMISO_REPORTES, "inventory:read", "sale:read"), "nombre");
         LocalDate hoy = LocalDate.now();
         Map<String, Object> params = paramsRango(idEmpresa, hoy.minusDays(29), hoy);
         params.put("idSucursal", idSucursal);
@@ -750,6 +777,9 @@ public class ReportesService {
         List<ReporteDtos.ProductoAbastecimiento> result = new ArrayList<>();
         for (Stock stock : stocks) {
             Producto producto = stock.getProducto();
+            if (producto == null || !idEmpresa.equals(producto.getIdEmpresa())) {
+                continue;
+            }
             int vendido30 = vendidos.getOrDefault(producto.getIdProducto(), 0);
             int actual = stock.getCantidad() == null ? 0 : stock.getCantidad();
             double promedio = vendido30 / 30.0;
@@ -778,6 +808,12 @@ public class ReportesService {
             throw ApiException.notFound("Productos no encontrados.");
         }
         Integer idEmpresa = origen.get(0).getIdEmpresa();
+        if (origen.size() != new java.util.HashSet<>(ids).size()
+                || origen.stream().anyMatch(p -> !java.util.Objects.equals(idEmpresa, p.getIdEmpresa()))) {
+            throw ApiException.notFound("Productos no encontrados en una misma empresa.");
+        }
+        dataPolicy.productFields(dataPolicy.require(usuario, idEmpresa, null, "product:read", "inventory:read"),
+                "nombre", "precio", "unidad_medida", "codigo_barra", "id_subcategoria");
         empresaAccess.requirePlanFeature(usuario, idEmpresa, "predicciones");
         Integer idSub = origen.get(0).getSubcategoria() == null ? null : origen.get(0).getSubcategoria().getIdSubcategoria();
         List<Producto> candidatos = idSub == null
@@ -833,6 +869,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> ventasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.VentasParamRequest filtros) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "sale:read");
         Empresa empresa = requireEmpresaExistente(empresaId);
         LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
         Map<String, Object> params = paramsRango(empresaId, rango[0], rango[1]);
@@ -903,6 +940,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> inventarioParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.InventarioParamRequest filtros) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "inventory_movement:read", "nombre", "id_subcategoria");
         Empresa empresa = requireEmpresaExistente(empresaId);
         LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
         List<Map<String, Object>> movimientos = filasMovimientosInventario(empresaId, rango[0], rango[1],
@@ -944,6 +982,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> cajasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.CajasParamRequest filtros) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "cash_movement:read");
         Empresa empresa = requireEmpresaExistente(empresaId);
         LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
         String estado = filtros.getEstadoSesion() == null || filtros.getEstadoSesion().isBlank()
@@ -1458,8 +1497,14 @@ public class ReportesService {
     // ---------------------------------------------------------------------------------------------
 
     private void requireReporte(Usuario usuario, Integer empresaId, String funcionalidadPlan) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        dataPolicy.require(usuario, empresaId, null, PERMISO_REPORTES);
         empresaAccess.requirePlanFeature(usuario, empresaId, funcionalidadPlan);
+    }
+
+    /** Permiso de lectura del recurso que alimenta el reporte y, si aplica, de los atributos de producto mostrados. */
+    private void requireDatos(Usuario usuario, Integer empresaId, String recurso, String... camposProducto) {
+        var scope = dataPolicy.require(usuario, empresaId, null, PERMISO_REPORTES, recurso);
+        dataPolicy.productFields(scope, camposProducto);
     }
 
     private Empresa requireEmpresaExistente(Integer empresaId) {

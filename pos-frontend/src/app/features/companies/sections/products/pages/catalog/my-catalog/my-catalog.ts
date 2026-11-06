@@ -22,6 +22,8 @@ import {
 import { Navbar } from '../../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../../shared/components/sidebar/sidebar';
 import { environments } from '../../../../../../../environments/environments';
+import { SiatHomologacion } from '../../../../../../../shared/components/siat-homologacion/siat-homologacion';
+import { SiatCodes } from '../../../../../../../core/services/siat.service';
 import { ProductFieldEditor } from '../../../../../../../shared/components/product-field-editor/product-field-editor';
 import {
   ProductField,
@@ -46,7 +48,7 @@ type ProductoAlta = ProductValues;
 @Component({
   selector: 'app-productos-catalog',
   standalone: true,
-  imports: [SecureSrc, MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon, ProductFieldEditor],
+  imports: [SecureSrc, MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon, ProductFieldEditor, SiatHomologacion],
   templateUrl: './my-catalog.html',
   styleUrl: './my-catalog.css',
 })
@@ -74,6 +76,7 @@ export class ProductosPanel implements OnInit {
     activo: true,
   };
 
+  protected siatAlta: SiatCodes = {};
   protected camposProducto: CamposProducto = camposProductoPorDefecto();
   protected camposCargados = false;
   protected productos: ProductoConCosto[] = [];
@@ -410,6 +413,10 @@ export class ProductosPanel implements OnInit {
       this.errorGeneral = 'Completa los campos obligatorios.';
       return;
     }
+    if (!this.siatAlta.codigo_producto_sin || !this.siatAlta.codigo_unidad_medida_sin) {
+      this.errorGeneral = 'Completa la homologación SIAT: código de producto y unidad de medida SIN.';
+      return;
+    }
     if (
       this.imagenProductoSeleccionada &&
       !this.companyPermissionsService.hasField('product', 'create', 'imagen')
@@ -418,13 +425,14 @@ export class ProductosPanel implements OnInit {
       return;
     }
     this.guardandoProducto = true;
+    const datos = { ...payload, ...this.siatAlta };
     const request$ = this.imagenProductoSeleccionada
       ? this.productService.crearProductoConImagen(
           this.companyId,
-          payload,
+          datos,
           this.imagenProductoSeleccionada,
         )
-      : this.productService.crearProducto(this.companyId, payload);
+      : this.productService.crearProducto(this.companyId, datos);
     request$.subscribe({
       next: () => {
         this.guardandoProducto = false;
@@ -579,6 +587,7 @@ export class ProductosPanel implements OnInit {
     this.productoForm.precio = 0;
     this.productoForm.costo = null;
     this.productoForm.activo = true;
+    this.siatAlta = {};
     this.imagenProductoSeleccionada = null;
   }
 

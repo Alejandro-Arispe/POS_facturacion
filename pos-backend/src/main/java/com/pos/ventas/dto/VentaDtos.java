@@ -58,6 +58,10 @@ public final class VentaDtos {
         private Integer idMetodoPago;
         private Integer idPedido;
         private Boolean facturaLinea = Boolean.FALSE;
+        /** Datos del comprador para la factura SIAT simulada (opcionales; se toman del cliente si faltan). */
+        private Integer codigoTipoDocumento;
+        private String numeroDocumento;
+        private String razonSocial;
         private List<PagoCreate> pagos;
         private BigDecimal subtotal;
         private BigDecimal descuentoTotal;
@@ -119,6 +123,9 @@ public final class VentaDtos {
         private Integer idMetodoPago;
         private CatalogoItem metodoPago;
         private String tipoVentaNombre;
+        private Integer idFactura;
+        private String cuf;
+        private String estadoSiat;
         private List<DetalleResponse> detalles = new ArrayList<>();
         private List<PagoResponse> pagos = new ArrayList<>();
     }

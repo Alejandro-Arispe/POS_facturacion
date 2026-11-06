@@ -33,10 +33,12 @@
             <table class="table invoices-table">
               <thead>
                 <tr>
-                  <th>ID Factura</th>
+                  <th>N° Factura</th>
                   <th>ID Venta</th>
                   <th>Fecha emision</th>
                   <th>Cliente</th>
+                  <th>CUF</th>
+                  <th>Estado SIAT</th>
                   <th>Monto total</th>
                   <th class="actions-heading">Acciones</th>
                 </tr>
@@ -44,10 +46,15 @@
               <tbody>
                 @for (invoice of invoices; track trackInvoice($index, invoice)) {
                   <tr>
-                    <td><strong>{{ invoice.id_factura }}</strong></td>
+                    <td><strong>{{ invoice.numero_factura }}</strong></td>
                     <td>{{ invoice.id_venta }}</td>
                     <td>{{ formatDate(invoice.fecha_emision) }}</td>
-                    <td>{{ invoice.nombre_cliente }}</td>
+                    <td>{{ invoice.nombre_cliente }}<br /><small class="text-muted">{{ invoice.nit_cliente }}</small></td>
+                    <td><code [title]="invoice.cuf">{{ shortCuf(invoice.cuf) }}</code></td>
+                    <td>
+                      <span class="badge" [class.badge-success]="invoice.estado_siat === 'EMITIDA'"
+                        [class.badge-danger]="invoice.estado_siat === 'ANULADA'">{{ invoice.estado_siat }}</span>
+                    </td>
                     <td><strong>{{ invoice.monto_total | money }}</strong></td>
                     <td>
                       <div class="file-actions">
@@ -61,16 +68,20 @@
                         >
                           XML
                         </a>
-                        <a
+                        <button
                           class="file-button pdf"
-                          href="#" (click)="$event.preventDefault(); downloadInvoice(invoice, 'pdf')"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Abrir PDF"
-                          aria-label="Abrir PDF de la factura"
+                          type="button"
+                          title="Ver e imprimir la factura"
+                          aria-label="Ver e imprimir la factura"
+                          (click)="printInvoice(invoice)"
                         >
-                          PDF
-                        </a>
+                          Imprimir
+                        </button>
+                        @if (invoice.estado_siat !== 'ANULADA' && permissions.hasPermission('sale:void')) {
+                          <button class="btn btn-secondary" type="button" (click)="openAnnul(invoice)">
+                            Anular
+                          </button>
+                        }
                         <button
                           class="btn btn-primary resend-button"
                           type="button"
@@ -90,4 +101,29 @@
       </section>
     </section>
   </main>
+
+  @if (annulTarget) {
+    <div class="annul-overlay" (click)="closeAnnul()">
+      <section class="annul-modal panel" role="dialog" aria-modal="true" aria-labelledby="annul-title"
+        (click)="$event.stopPropagation()">
+        <h2 class="title-md" id="annul-title">Anular factura N° {{ annulTarget.numero_factura }}</h2>
+        <p class="text-muted">La anulación se registra en la simulación SIAT y no se puede revertir.</p>
+        <label class="form-group">
+          <span class="label">Motivo de anulación SIN</span>
+          <select class="input" name="annulReason" [(ngModel)]="annulReason" [disabled]="annulling">
+            <option [ngValue]="null">Selecciona un motivo</option>
+            @for (motivo of motivos; track motivo.codigo_motivo_sin) {
+              <option [ngValue]="motivo.codigo_motivo_sin">{{ motivo.codigo_motivo_sin }} - {{ motivo.descripcion }}</option>
+            }
+          </select>
+        </label>
+        <div class="annul-actions">
+          <button class="btn btn-secondary" type="button" [disabled]="annulling" (click)="closeAnnul()">Cancelar</button>
+          <button class="btn btn-primary" type="button" [disabled]="!annulReason || annulling" (click)="confirmAnnul()">
+            {{ annulling ? 'Anulando...' : 'Confirmar anulación' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  }
 </div>
