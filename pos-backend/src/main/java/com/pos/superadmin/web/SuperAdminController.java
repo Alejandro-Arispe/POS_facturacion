@@ -100,6 +100,11 @@ public class SuperAdminController {
 		return superAdminService.actualizarPlan(idPlan, datos);
 	}
 
+	@DeleteMapping("/planes/{idPlan}")
+	public void eliminarPlan(@PathVariable Integer idPlan) {
+		superAdminService.eliminarPlan(idPlan);
+	}
+
 	@GetMapping("/usuarios")
 	public List<SuperAdminDtos.UsuarioInfo> usuarios() {
 		return superAdminService.usuarios();

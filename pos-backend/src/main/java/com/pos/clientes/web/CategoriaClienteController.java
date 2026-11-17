@@ -2,6 +2,7 @@ package com.pos.clientes.web;
 
 import java.util.List;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +27,7 @@ public class CategoriaClienteController {
 
     @PostMapping("/{idEmpresa}")
     public ClienteDtos.CategoriaResponse crear(
-            @PathVariable Integer idEmpresa, @RequestBody ClienteDtos.CategoriaCreate datos) {
+            @PathVariable Integer idEmpresa, @jakarta.validation.Valid @RequestBody ClienteDtos.CategoriaCreate datos) {
         return clienteService.crearCategoria(SecurityUtils.currentUser(), idEmpresa, datos);
     }
 
@@ -45,7 +46,12 @@ public class CategoriaClienteController {
     public ClienteDtos.CategoriaResponse actualizar(
             @PathVariable Integer idEmpresa,
             @PathVariable Integer idCategoriaCliente,
-            @RequestBody ClienteDtos.CategoriaUpdate datos) {
+            @jakarta.validation.Valid @RequestBody ClienteDtos.CategoriaUpdate datos) {
         return clienteService.actualizarCategoria(SecurityUtils.currentUser(), idEmpresa, idCategoriaCliente, datos);
+    }
+
+    @DeleteMapping("/{idEmpresa}/{idCategoriaCliente}")
+    public void eliminar(@PathVariable Integer idEmpresa, @PathVariable Integer idCategoriaCliente) {
+        clienteService.eliminarCategoria(SecurityUtils.currentUser(), idEmpresa, idCategoriaCliente);
     }
 }

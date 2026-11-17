@@ -43,9 +43,11 @@ public class ClienteService {
     public ClienteDtos.CategoriaResponse crearCategoria(Usuario usuario, Integer idEmpresa, ClienteDtos.CategoriaCreate datos) {
         empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:create");
         validateCategory(datos.getDescuentoBase(),datos.getPlazoCredito(),datos.getLimiteCredito());
+        if (datos.getNombre() == null || datos.getNombre().isBlank())
+            throw ApiException.badRequest("El nombre de la categoría es obligatorio.");
         CategoriaCliente categoria = new CategoriaCliente();
         categoria.setIdEmpresa(idEmpresa);
-        categoria.setNombre(datos.getNombre());
+        categoria.setNombre(datos.getNombre().trim());
         categoria.setDescripcion(datos.getDescripcion());
         categoria.setPlazoCredito(datos.getPlazoCredito() == null ? 0 : datos.getPlazoCredito());
         categoria.setDescuentoBase(nvl(datos.getDescuentoBase()));
@@ -78,9 +80,9 @@ public class ClienteService {
         validateCategory(datos.getDescuentoBase(),datos.getPlazoCredito(),datos.getLimiteCredito());
         CategoriaCliente categoria = categoriaRepository.findByIdCategoriaClienteAndIdEmpresa(idCategoria, idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
-        if (datos.getNombre() != null) {
-            categoria.setNombre(datos.getNombre());
-        }
+        if (datos.getNombre() == null || datos.getNombre().isBlank())
+            throw ApiException.badRequest("El nombre de la categoría es obligatorio.");
+        categoria.setNombre(datos.getNombre().trim());
         if (datos.getDescripcion() != null) {
             categoria.setDescripcion(datos.getDescripcion());
         }
@@ -97,6 +99,17 @@ public class ClienteService {
             categoria.setActivo(datos.getActivo());
         }
         return toCategoria(categoriaRepository.save(categoria));
+    }
+
+    /** Elimina una categoría de cliente; se bloquea si tiene clientes asignados. */
+    @Transactional
+    public void eliminarCategoria(Usuario usuario, Integer idEmpresa, Integer idCategoria) {
+        empresaAccess.requirePermiso(usuario, idEmpresa, "client_category:update");
+        CategoriaCliente categoria = categoriaRepository.findByIdCategoriaClienteAndIdEmpresa(idCategoria, idEmpresa)
+                .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
+        if (clienteRepository.existsByCategoriaCliente_IdCategoriaCliente(idCategoria))
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT, "No se puede eliminar la categoría: tiene clientes asignados.");
+        categoriaRepository.delete(categoria);
     }
 
     @Transactional

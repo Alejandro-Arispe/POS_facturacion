@@ -115,6 +115,10 @@ export class SuperAdminService {
     return this.api.post<SuperAdminPlan, SuperAdminPlanPayload>('/api/superadmin/planes', payload);
   }
 
+  deletePlan(id: number): Observable<null> {
+    return this.api.delete<null>(`/api/superadmin/planes/${id}`);
+  }
+
   updatePlan(id: number, payload: SuperAdminPlanPayload): Observable<SuperAdminPlan> {
     return this.api.put<SuperAdminPlan, SuperAdminPlanPayload>(`/api/superadmin/planes/${id}`, payload);
   }

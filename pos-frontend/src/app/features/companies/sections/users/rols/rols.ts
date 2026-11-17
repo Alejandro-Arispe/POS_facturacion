@@ -130,6 +130,23 @@ export class Rols implements OnInit {
       },
     });
   }
+  /** HU-30: solo roles personalizados; el backend rechaza los que tienen usuarios asignados. */
+  protected remove(role: RoleListItem) {
+    if (role.protegido || role.tipo === 'SISTEMA') return;
+    if (!confirm(`¿Eliminar el rol ${role.nombre}?`)) return;
+    this.error = '';
+    this.success = '';
+    this.api.eliminarRol(role.id_rol).subscribe({
+      next: () => {
+        this.success = 'Rol eliminado.';
+        this.load();
+      },
+      error: (e) => {
+        this.error = e?.error?.detail ?? 'No se pudo eliminar el rol.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
   protected create() {
     if (!this.canCreate) return;
     this.editingId = null;

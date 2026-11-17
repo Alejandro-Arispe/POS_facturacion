@@ -15,7 +15,8 @@ import { Icon } from '../../../shared/components/icon/icon';
 })
 export class Register {
   protected readonly form = {
-    nombreCompleto: '',
+    nombre: '',
+    apellido: '',
     email: '',
     fechaNacimiento: '',
     documento: '',
@@ -77,10 +78,16 @@ export class Register {
       this.error = 'Las contraseñas no coinciden.';
       return;
     }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/.test(this.form.contrasena)) {
+      this.error =
+        'La contraseña debe tener al menos 6 caracteres e incluir una mayúscula, una minúscula y un número.';
+      return;
+    }
     const payload: RegisterRequest = {
       email: this.form.email.trim(),
       contrasena: this.form.contrasena,
-      nombre_completo: this.form.nombreCompleto.trim(),
+      nombre: this.form.nombre.trim(),
+      apellido: this.form.apellido.trim(),
       fecha_nacimiento: this.form.fechaNacimiento,
       genero: this.form.genero,
       telefono: this.form.telefono.trim(),

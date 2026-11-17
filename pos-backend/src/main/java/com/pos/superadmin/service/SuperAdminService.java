@@ -250,6 +250,23 @@ public class SuperAdminService {
 		return planPorId(idPlan);
 	}
 
+	@Transactional
+	public void eliminarPlan(Integer idPlan) {
+		requireSuperAdmin();
+		Plan plan = planRepository.findById(idPlan)
+				.orElseThrow(() -> ApiException.notFound("Plan no encontrado."));
+		if (historialRepository.existsByPlan_IdPlan(idPlan)) {
+			throw ApiException.badRequest("No se puede eliminar: hay empresas con este plan.");
+		}
+		try {
+			planModuloRepository.deleteAll(planModuloRepository.findByPlan_IdPlan(idPlan));
+			planRepository.delete(plan);
+			planRepository.flush();
+		} catch (org.springframework.dao.DataIntegrityViolationException ex) {
+			throw ApiException.badRequest("No se puede eliminar: el plan tiene compras registradas.");
+		}
+	}
+
 	@Transactional(readOnly = true)
 	public List<SuperAdminDtos.UsuarioInfo> usuarios() {
 		requireSuperAdmin();

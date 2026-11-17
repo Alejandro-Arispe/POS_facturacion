@@ -120,5 +120,11 @@ public final class ProductoDtos {
         }
     }
 
-    public static class ProductoCreate extends ProductoUpdate { }
+    /** HU-04: stock inicial opcional; genera una ENTRADA en la sucursal indicada. */
+    @Getter
+    @Setter
+    public static class ProductoCreate extends ProductoUpdate {
+        private Integer stockInicial;
+        private Integer idSucursal;
+    }
 }

@@ -104,7 +104,7 @@ public class EmpresaProductoController {
 
     @PutMapping("/{idEmpresa}/categorias-cliente")
     public ClienteDtos.CategoriaResponse actualizarCategoriaColeccion(
-            @PathVariable Integer idEmpresa, @RequestBody ClienteDtos.CategoriaUpdate datos) {
+            @PathVariable Integer idEmpresa, @jakarta.validation.Valid @RequestBody ClienteDtos.CategoriaUpdate datos) {
         Integer id = datos.getIdCategoriaCliente();
         return clienteService.actualizarCategoria(SecurityUtils.currentUser(), idEmpresa, id, datos);
     }
@@ -113,7 +113,7 @@ public class EmpresaProductoController {
     public ClienteDtos.CategoriaResponse actualizarCategoria(
             @PathVariable Integer idEmpresa,
             @PathVariable Integer idCategoriaCliente,
-            @RequestBody ClienteDtos.CategoriaUpdate datos) {
+            @jakarta.validation.Valid @RequestBody ClienteDtos.CategoriaUpdate datos) {
         return clienteService.actualizarCategoria(SecurityUtils.currentUser(), idEmpresa, idCategoriaCliente, datos);
     }
 

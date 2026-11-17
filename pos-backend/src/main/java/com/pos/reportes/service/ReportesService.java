@@ -89,6 +89,7 @@ public class ReportesService {
               and """ + " " + VENTA_VALIDA_JPQL + "\n";
 
     private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
     private final EmpresaRepository empresaRepository;
     private final SucursalRepository sucursalRepository;
     private final ProductoRepository productoRepository;
@@ -99,13 +100,13 @@ public class ReportesService {
     private EntityManager entityManager;
 
     public ReportesService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy,
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
             ProductoRepository productoRepository,
             GeminiClient geminiClient,
             PlatformTransactionManager transactionManager) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
         this.productoRepository = productoRepository;
@@ -173,7 +174,7 @@ public class ReportesService {
     /** Resumen de ventas de un dia. Incluido en el plan gratuito (reportes diarios), por eso no exige plan. */
     @Transactional(readOnly = true)
     public Map<String, Object> resumenVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        requireDatos(usuario, empresaId, "sale:read", "nombre");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, Object[]> totales = totalesPorSucursal(empresaId, dia, dia);
 
@@ -206,11 +207,6 @@ public class ReportesService {
             int cantidad = vals == null ? 0 : aInt(vals[1]);
             double monto = vals == null ? 0 : aDouble(vals[2]);
             int unidades = unidadesPorSucursal.getOrDefault(sucursal.getIdSucursal(), 0);
-        for (Sucursal sucursal : sucursales(empresaId)) {
-            Object[] vals = totales.get(sucursal.getIdSucursal());
-            int cantidad = vals == null ? 0 : aInt(vals[1]);
-            double monto = vals == null ? 0 : aDouble(vals[2]);
-            int unidades = unidadesPorSucursal.getOrDefault(sucursal.getIdSucursal(), 0);
             Map<String, Object> sucursalDto = new LinkedHashMap<>();
             sucursalDto.put("id_sucursal", sucursal.getIdSucursal());
             sucursalDto.put("sucursal", sucursal.getNombre());
@@ -232,7 +228,7 @@ public class ReportesService {
     /** Detalle de ventas de un dia. Incluido en el plan gratuito (reportes diarios), por eso no exige plan. */
     @Transactional(readOnly = true)
     public Map<String, Object> detalleVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        requireDatos(usuario, empresaId, "sale:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> porSucursal = new HashMap<>();
         for (Object[] row : ventasConSucursal(empresaId, dia, dia)) {
@@ -413,16 +409,6 @@ public class ReportesService {
         return response;
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Reportes dinamicos (lenguaje natural)
-    // ---------------------------------------------------------------------------------------------
-
-    public ReporteDtos.RespuestaInterpretacion interpretar(Usuario usuario, Integer empresaId, String prompt) {
-        requireReporte(usuario, empresaId, "reportes_avanzados");
-        return interpretarPedido(prompt);
-    }
-
-    private ReporteDtos.RespuestaInterpretacion interpretarPedido(String prompt) {
     // ---------------------------------------------------------------------------------------------
     // Reportes dinamicos (lenguaje natural)
     // ---------------------------------------------------------------------------------------------

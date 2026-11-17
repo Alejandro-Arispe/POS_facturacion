@@ -43,8 +43,8 @@ public class CompraPlanService {
         subscription.setPlan(compra.getPlan()); subscription.setEmpresa(empresa);
         subscription.setEstado("activo"); subscription.setStripePaymentStatus("paid");
         subscription.setFechaInicio(LocalDate.now());
-        // Los días de uso comienzan al configurar la empresa, no mientras se completa el alta.
-        subscription.setFechaFin(compra.getPlan().getPrecio().signum() == 0 ? null : LocalDate.now().plusDays(30));
+        // Los días de uso comienzan al configurar la empresa; el plan gratuito es la prueba de 30 días (HU-03).
+        subscription.setFechaFin(LocalDate.now().plusDays(30));
         historial.save(subscription);
         compra.setEmpresa(empresa); compras.save(compra);
     }

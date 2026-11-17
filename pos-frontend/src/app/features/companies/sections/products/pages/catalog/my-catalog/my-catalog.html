@@ -588,6 +588,21 @@
                 [disabled]="guardandoProducto"
                 (codesChange)="siatAlta = $event"
               />
+              <label class="field">
+                <span>Stock inicial (opcional)</span>
+                <input class="input" type="number" min="0" step="1" name="stockInicial" [(ngModel)]="stockInicial" [disabled]="guardandoProducto" />
+              </label>
+              @if ((stockInicial ?? 0) > 0) {
+                <label class="field">
+                  <span>Sucursal del stock inicial</span>
+                  <select class="input" name="idSucursalStock" [(ngModel)]="idSucursalStock" [disabled]="guardandoProducto">
+                    <option [ngValue]="null">Selecciona una sucursal</option>
+                    @for (s of sucursalesStock; track s.id) {
+                      <option [ngValue]="s.id">{{ s.nombre }}</option>
+                    }
+                  </select>
+                </label>
+              }
               @if (imagenProductoSeleccionada) {
                 <p class="text-sm text-muted">
                   Imagen seleccionada: {{ imagenProductoSeleccionada.name }}

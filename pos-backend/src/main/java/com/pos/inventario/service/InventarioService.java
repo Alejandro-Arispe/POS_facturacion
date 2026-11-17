@@ -151,6 +151,16 @@ public class InventarioService {
         return applyMovement(usuario,idEmpresa,idSucursal,payload,false);
     }
 
+    /** HU-04: stock inicial de un producto recién creado, registrado como movimiento de entrada. */
+    @Transactional
+    public void registrarStockInicial(Usuario usuario,Integer company,Integer branch,Integer product,int quantity) {
+        var type=tipoMovimientoRepository.findByNombreIgnoreCase("Entrada manual")
+            .orElseThrow(() -> ApiException.badRequest("Tipo de inventario Entrada manual no configurado."));
+        var input=new InventarioDtos.MovimientoCreate(); input.setIdProducto(product); input.setCantidad(quantity);
+        input.setIdTipoMovimiento(type.getIdTipoMovimiento()); input.setObservacion("Stock inicial");
+        crearMovimiento(usuario,company,branch,input);
+    }
+
     /** Only server-derived sale outflows use this path. There is no HTTP endpoint for it. */
     @Transactional
     public void registrarSalidaVenta(Usuario usuario,Integer company,Integer branch,Integer product,int quantity,Integer sale) {

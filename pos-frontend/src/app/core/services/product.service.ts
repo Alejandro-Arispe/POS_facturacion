@@ -52,7 +52,7 @@ export interface CrearSubcategoriaRequest {
 }
 
 export type CrearProductoRequest = import('./product-fields').ProductValues &
-  import('./siat.service').SiatCodes;
+  import('./siat.service').SiatCodes & { stock_inicial?: number; id_sucursal?: number };
 
 export interface ActualizarCategoriaRequest {
   nombre?: string;

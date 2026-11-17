@@ -28,6 +28,13 @@ public class Persona {
 	@Column(name = "nombre_completo", nullable = false, length = 150)
 	private String nombreCompleto;
 
+	/** HU-01: nombre y apellido por separado (nombre_completo se mantiene como "nombre apellido"). */
+	@Column(name = "nombre", length = 75)
+	private String nombre;
+
+	@Column(name = "apellido", length = 75)
+	private String apellido;
+
 	@Column(name = "fecha_nacimiento", nullable = false)
 	private LocalDate fechaNacimiento;
 

@@ -69,6 +69,12 @@ public class EmpresaController {
 		return empresaService.misPermisos(idEmpresa,idSucursal);
 	}
 
+	/** HU-29: plan activo o, si no hay, el último vencido (null si nunca tuvo plan). */
+	@GetMapping("/{idEmpresa}/mi-plan")
+	public com.pos.empresas.dto.SuscripcionActivaResumenResponse miPlan(@PathVariable Integer idEmpresa) {
+		return empresaService.miPlan(idEmpresa);
+	}
+
 	@GetMapping("/{idEmpresa}")
 	public EmpresaResponse obtener(@PathVariable Integer idEmpresa) {
 		return empresaService.obtener(idEmpresa);

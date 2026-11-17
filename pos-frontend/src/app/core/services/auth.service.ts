@@ -8,7 +8,8 @@ import { CompanyPermissionsService } from './company-permissions.service';
 export interface RegisterRequest {
   email: string;
   contrasena: string;
-  nombre_completo: string;
+  nombre: string;
+  apellido: string;
   fecha_nacimiento: string;
   genero: string;
   telefono: string;

@@ -546,6 +546,14 @@ export class Sales implements OnInit {
     this.registerError = '';
     this.registerMessage = '';
 
+    // HU-34: el stock real es el de la sucursal (las recomendaciones pueden no traerlo).
+    const branchStock =
+      this.products.find((p) => p.idProducto === product.idProducto)?.stock ?? product.stock;
+    if (branchStock <= 0) {
+      this.registerError = 'Stock insuficiente';
+      return;
+    }
+
     const existingItem = this.saleDetails.find((item) => item.idProducto === product.idProducto);
 
     if (existingItem) {
@@ -607,9 +615,8 @@ export class Sales implements OnInit {
             this.searchTerm = value;
             this.stopScanner();
             setTimeout(() => {
-              if (this.filteredProducts.length === 1) {
-                this.addProduct(this.filteredProducts[0]);
-              }
+              this.addFromSearch();
+              this.cdr.markForCheck();
             }, 50);
           }
         } catch {
@@ -631,9 +638,28 @@ export class Sales implements OnInit {
 
   protected onSearchEnter(event: Event): void {
     event.preventDefault();
+    this.addFromSearch();
+  }
 
-    if (this.filteredProducts.length === 1) {
-      this.addProduct(this.filteredProducts[0]);
+  /** HU-34: código de barras exacto → ese producto; 1 coincidencia → agrega; 0 → "Producto no encontrado". */
+  private addFromSearch(): void {
+    const term = this.normalizeSearchTerm(this.searchTerm);
+    if (!term) {
+      return;
+    }
+    const exact = this.products.find(
+      (p) => !!p.codigoBarras && this.normalizeSearchTerm(p.codigoBarras) === term,
+    );
+    if (exact) {
+      this.addProduct(exact);
+      this.searchTerm = '';
+      return;
+    }
+    const matches = this.filteredProducts;
+    if (matches.length === 1) {
+      this.addProduct(matches[0]);
+    } else if (matches.length === 0) {
+      this.registerError = 'Producto no encontrado';
     }
   }
 

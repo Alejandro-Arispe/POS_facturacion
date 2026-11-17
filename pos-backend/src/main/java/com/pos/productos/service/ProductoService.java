@@ -285,6 +285,9 @@ public class ProductoService {
         fields.require(grants,"product","create",ProductFields.REQUIRED_CREATE);
         validateValues(data,true);
         validateSiat(data,true);
+        if (data.getStockInicial()!=null && data.getStockInicial()<0) throw ApiException.badRequest("El stock inicial no puede ser negativo.");
+        boolean conStockInicial=data.getStockInicial()!=null && data.getStockInicial()>0;
+        if (conStockInicial && data.getIdSucursal()==null) throw ApiException.badRequest("Selecciona la sucursal del stock inicial.");
         SubcategoriaProducto sub=requireSubcategoriaEmpresa(data.getIdSubcategoria(),company);
         if (!Boolean.FALSE.equals(data.getActivo())) empresaAccess.requireProductCapacity(company);
         String newImage=image==null?null:storeImage(image);
@@ -293,6 +296,7 @@ public class ProductoService {
         if (image!=null) p.setImagen(newImage);
         persist(p);
         inventarioService.sincronizarStocksPorProducto(p.getIdProducto(),company);
+        if (conStockInicial) inventarioService.registrarStockInicial(usuario,company,data.getIdSucursal(),p.getIdProducto(),data.getStockInicial());
         return toProducto(p,grants);
     }
 

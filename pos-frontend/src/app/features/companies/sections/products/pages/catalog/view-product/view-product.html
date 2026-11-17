@@ -71,6 +71,28 @@
             }
           </dl>
         }
+        @if (permissions.hasPermission('inventory:configure') && sucursales.length) {
+          <div class="mt-6">
+            <h2 class="title-md">Stock mínimo</h2>
+            <div class="flex flex-wrap gap-3 items-end">
+              <select class="input" name="idSucursalMin" [(ngModel)]="idSucursalMin" (ngModelChange)="loadMin()">
+                <option [ngValue]="null">Selecciona una sucursal</option>
+                @for (s of sucursales; track s.id) {
+                  <option [ngValue]="s.id">{{ s.nombre }}</option>
+                }
+              </select>
+              @if (idSucursalMin) {
+                <input class="input" type="number" min="0" step="1" name="stockMinimo" [(ngModel)]="stockMinimo" />
+                <button type="button" class="btn btn-primary" [disabled]="savingMin" (click)="saveMin()">
+                  {{ savingMin ? 'Guardando…' : 'Guardar mínimo' }}
+                </button>
+              }
+            </div>
+            @if (minMessage) {
+              <p class="text-sm text-muted">{{ minMessage }}</p>
+            }
+          </div>
+        }
         <div class="mt-6 flex flex-wrap gap-3">
           <a class="btn btn-secondary" [routerLink]="['/company', companyId, 'products']">Cerrar</a>
           @if (permissions.hasPermission('product:update')) {

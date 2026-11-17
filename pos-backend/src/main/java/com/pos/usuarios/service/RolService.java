@@ -20,7 +20,9 @@ public class RolService {
     private final RbacResolver resolver;
     private final RoleAdministrationPolicy policy;
     private final RbacAudit audit;
-    public RolService(RolRepository roles,PermisoRepository permissions,RolPermisoRepository grants,EmpresaAccess access,RbacResolver resolver,RoleAdministrationPolicy policy,RbacAudit audit) {
+    private final UsuarioRolRepository assignments;
+    public RolService(RolRepository roles,PermisoRepository permissions,RolPermisoRepository grants,EmpresaAccess access,RbacResolver resolver,RoleAdministrationPolicy policy,RbacAudit audit,UsuarioRolRepository assignments) {
+        this.assignments=assignments;
         this.roles=roles;
         this.permissions=permissions;
         this.grants=grants;
@@ -129,6 +131,28 @@ public class RolService {
         roles.saveAndFlush(r);
         audit.record(actor,r.getIdEmpresa(),"role:update","rol="+id+"; activo="+r.getActivo()+"; atributos="+List.of(req.nombre()!=null,req.descripcion()!=null,req.activo()!=null,req.permisoIds()!=null || req.campos()!=null));
         return detail(r,capabilities.allows("role:read:permissions"));
+    }
+    /** HU-30: elimina un rol personalizado; los roles por defecto (protegidos/SISTEMA) y los que tienen usuarios no se eliminan. */
+    @Transactional
+    public void eliminar(Integer id) {
+        Usuario actor=SecurityUtils.currentUser();
+        Rol r=requireReadable(id);
+        policy.mutable(r);
+        policy.lock(r.getIdEmpresa());
+        r=policy.refresh(r);
+        access.requireEmpresa(actor,r.getIdEmpresa());
+        var capabilities=policy.companyManager(actor,r.getIdEmpresa(),"update");
+        policy.manageable(capabilities,r);
+        if(assignments.existsByRol_IdRolAndActivoTrue(id)) throw ApiException.badRequest("No se puede eliminar: el rol tiene usuarios asignados.");
+        Integer company=r.getIdEmpresa();
+        try {
+            grants.deleteAll(grants.findByRol_IdRol(id));
+            roles.delete(r);
+            roles.flush();
+        } catch(org.springframework.dao.DataIntegrityViolationException ex) {
+            throw ApiException.badRequest("No se puede eliminar: el rol tiene historial de asignaciones. Desactívalo.");
+        }
+        audit.record(actor,company,"role:delete","rol="+id);
     }
     private void validate(RbacResolver.Grants actor,Set<Integer> desired,Set<Integer> delegate) {
         for(Integer id:desired) if(id==null || permissions.findById(id).filter(p->Boolean.TRUE.equals(p.getActivo()) && PermissionCodes.isCanonical(p.getCodigoCanonico())).isEmpty()) throw ApiException.badRequest("Permiso inexistente o inactivo: "+id);

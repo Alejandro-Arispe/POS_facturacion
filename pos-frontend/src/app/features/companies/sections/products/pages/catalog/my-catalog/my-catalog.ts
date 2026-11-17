@@ -77,6 +77,10 @@ export class ProductosPanel implements OnInit {
   };
 
   protected siatAlta: SiatCodes = {};
+  /** HU-04: stock inicial opcional (genera una entrada en la sucursal elegida). */
+  protected stockInicial: number | null = null;
+  protected idSucursalStock: number | null = null;
+  protected sucursalesStock: { id: number; nombre: string }[] = [];
   protected camposProducto: CamposProducto = camposProductoPorDefecto();
   protected camposCargados = false;
   protected productos: ProductoConCosto[] = [];
@@ -336,6 +340,15 @@ export class ProductosPanel implements OnInit {
     this.cargarNombreEmpresa();
     this.cargarCamposProducto();
     this.cargarDatos();
+    this.companyService.getSucursales(this.companyId).subscribe({
+      next: (branches) => {
+        this.sucursalesStock = branches
+          .map((b) => ({ id: Number(b.id_sucursal ?? b.idSucursal ?? b.id), nombre: b.nombre }))
+          .filter((b) => b.id > 0);
+        this.cdr.detectChanges();
+      },
+      error: () => (this.sucursalesStock = []),
+    });
   }
 
   protected canRead(field: ProductField): boolean {
@@ -424,8 +437,21 @@ export class ProductosPanel implements OnInit {
       this.errorGeneral = 'No tienes permiso para establecer la imagen.';
       return;
     }
+    const stock = Number(this.stockInicial ?? 0);
+    if (stock < 0 || !Number.isInteger(stock)) {
+      this.errorGeneral = 'El stock inicial debe ser un entero no negativo.';
+      return;
+    }
+    if (stock > 0 && !this.idSucursalStock) {
+      this.errorGeneral = 'Selecciona la sucursal del stock inicial.';
+      return;
+    }
     this.guardandoProducto = true;
-    const datos = { ...payload, ...this.siatAlta };
+    const datos = {
+      ...payload,
+      ...this.siatAlta,
+      ...(stock > 0 ? { stock_inicial: stock, id_sucursal: Number(this.idSucursalStock) } : {}),
+    };
     const request$ = this.imagenProductoSeleccionada
       ? this.productService.crearProductoConImagen(
           this.companyId,
@@ -589,6 +615,8 @@ export class ProductosPanel implements OnInit {
     this.productoForm.activo = true;
     this.siatAlta = {};
     this.imagenProductoSeleccionada = null;
+    this.stockInicial = null;
+    this.idSucursalStock = null;
   }
 
   private limpiarMensajes(): void {

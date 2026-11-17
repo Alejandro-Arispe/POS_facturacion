@@ -73,6 +73,16 @@ public class PlanPolicy {
                 .orElseThrow(() -> ApiException.forbidden("Activa un plan desde Mis empresas para acceder al POS."));
     }
 
+    /** HU-29: marca como "vencido" el plan cuya fecha pasó; devuelve true si la empresa queda suspendida por vencimiento. */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public boolean suspenderSiVencio(Integer companyId) {
+        em.createQuery("update HistorialSuscripcion hs set hs.estado = 'vencido' where hs.empresa.idEmpresa = :id"
+                + " and lower(hs.estado) in ('activo', 'activa') and hs.fechaFin is not null and hs.fechaFin < :hoy")
+                .setParameter("id", companyId).setParameter("hoy", LocalDate.now()).executeUpdate();
+        return em.createQuery("select count(hs) from HistorialSuscripcion hs where hs.empresa.idEmpresa = :id and hs.estado = 'vencido'", Long.class)
+                .setParameter("id", companyId).getSingleResult() > 0;
+    }
+
     @Transactional
     public void requireProductCapacity(Integer companyId) {
         lockCompany(companyId);

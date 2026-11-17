@@ -364,6 +364,15 @@ export class CompanyService {
     return this.apiService.get<Company[]>('/api/empresas/mis-empresas');
   }
 
+  /** HU-29: plan activo o último vencido de la empresa. */
+  getMiPlan(
+    idEmpresa: string | number,
+  ): Observable<{ estado: string; fecha_fin: string | null; plan_nombre: string } | null> {
+    return this.apiService.get<{ estado: string; fecha_fin: string | null; plan_nombre: string } | null>(
+      `/api/empresas/${idEmpresa}/mi-plan`,
+    );
+  }
+
   getMisPermisos(
     idEmpresa: string | number,
     idSucursal?: string | number | null,
@@ -407,6 +416,10 @@ export class CompanyService {
       `/api/roles/${idRol}`,
       payload,
     );
+  }
+
+  eliminarRol(idRol: string | number): Observable<null> {
+    return this.apiService.delete<null>(`/api/roles/${idRol}`);
   }
 
   crearRol(idEmpresa: string | number, payload: CreateRoleRequest): Observable<CreateRoleResponse> {
