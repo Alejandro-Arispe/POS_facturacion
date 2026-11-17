@@ -52,8 +52,8 @@
                     <td>{{ invoice.nombre_cliente }}<br /><small class="text-muted">{{ invoice.nit_cliente }}</small></td>
                     <td><code [title]="invoice.cuf">{{ shortCuf(invoice.cuf) }}</code></td>
                     <td>
-                      <span class="badge" [class.badge-success]="invoice.estado_siat === 'EMITIDA'"
-                        [class.badge-danger]="invoice.estado_siat === 'ANULADA'">{{ invoice.estado_siat }}</span>
+                      <span class="badge" [class.badge-success]="invoice.estado_siat === 'EMITIDA' || invoice.estado_siat === 'VALIDADA'"
+                        [class.badge-danger]="invoice.estado_siat === 'ANULADA' || invoice.estado_siat === 'RECHAZADA'">{{ invoice.estado_siat }}</span>
                     </td>
                     <td><strong>{{ invoice.monto_total | money }}</strong></td>
                     <td>

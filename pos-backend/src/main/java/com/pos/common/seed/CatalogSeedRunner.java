@@ -283,6 +283,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
         seedMetodoPago("EFECTIVO", "Pago en efectivo");
         seedMetodoPago("QR", "Pago por QR");
         seedMetodoPago("TARJETA", "Pago con tarjeta");
+        seedMetodoPago("TRANSFERENCIA", "Pago por transferencia bancaria");
     }
 
     private void seedMetodoPago(String nombre, String descripcion) {

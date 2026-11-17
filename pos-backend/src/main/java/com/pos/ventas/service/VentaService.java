@@ -32,6 +32,7 @@ import com.pos.productos.domain.Producto;
 import com.pos.productos.repo.ProductoRepository;
 import com.pos.usuarios.domain.Usuario;
 import com.pos.usuarios.repo.UsuarioRolRepository;
+import com.pos.ventas.domain.AutorizacionCredito;
 import com.pos.ventas.domain.CuentaPorCobrar;
 import com.pos.ventas.domain.DetalleVenta;
 import com.pos.ventas.domain.MetodoPago;
@@ -76,6 +77,10 @@ public class VentaService {
     private final UsuarioRolRepository usuarioRolRepository;
     private final com.pos.siat.service.SiatFacturaService siatFacturaService;
     private final com.pos.ventas.repo.FacturaRepository facturaRepository;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.ventas.repo.AutorizacionCreditoRepository autorizacionCreditoRepository;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.usuarios.repo.UsuarioRepository usuarioRepository;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.common.security.PasswordService passwordService;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.auditoria.service.BitacoraService bitacoraService;
 
     public VentaService(
             EmpresaAccess empresaAccess, SalePricing pricing, com.pos.common.access.RbacResolver rbac, com.pos.ventas.repo.PedidoClienteDetalleRepository orderDetails,
@@ -153,7 +158,13 @@ public class VentaService {
         Integer idSucursal = sesion.getCaja().getSucursal().getIdSucursal();
         empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"sale:create");
         if (Boolean.TRUE.equals(payload.getFacturaLinea())) empresaAccess.requirePermiso(usuario,idEmpresa,idSucursal,"invoice:issue");
-        SalePricing.Quote quote = pricing.calculate(idEmpresa,payload,rbac.resolve(usuario,idEmpresa,idSucursal));
+        // HU-08: el descuento base de la categoría del cliente se aplica en la misma transacción de la venta.
+        BigDecimal descuentoCategoria = payload.getIdCliente() == null || payload.getIdCliente() <= 0 ? BigDecimal.ZERO
+                : clienteRepository.findById(payload.getIdCliente())
+                        .filter(c -> Boolean.TRUE.equals(c.getActivo()) && belongsToCompany(c, idEmpresa))
+                        .map(Cliente::getCategoriaCliente).map(com.pos.clientes.domain.CategoriaCliente::getDescuentoBase)
+                        .orElse(BigDecimal.ZERO);
+        SalePricing.Quote quote = pricing.calculate(idEmpresa,payload,rbac.resolve(usuario,idEmpresa,idSucursal),descuentoCategoria);
 
         TipoVenta tipoVenta = tipoVentaRepository.findById(payload.getIdTipoVenta())
                 .orElseThrow(() -> ApiException.notFound("Tipo de venta no encontrado."));
@@ -204,6 +215,7 @@ public class VentaService {
             if (!Boolean.TRUE.equals(cliente.getActivo()) || !belongsToCompany(cliente,idEmpresa))
                 throw ApiException.notFound("Cliente no encontrado en esta empresa.");
         }
+        Usuario adminAutorizador = null;
         if (esCredito) {
             if (cliente == null) {
                 throw ApiException.badRequest("Una venta a credito debe tener cliente.");
@@ -214,7 +226,7 @@ public class VentaService {
             }
             BigDecimal limit=cliente.getLimiteCredito()!=null && cliente.getLimiteCredito().signum()>0 ? cliente.getLimiteCredito() : nvl(cliente.getCategoriaCliente().getLimiteCredito());
             if(cuentaPorCobrarRepository.sumSaldoPendienteByCliente(cliente.getIdCliente()).add(quote.total()).compareTo(limit)>0)
-                throw ApiException.badRequest("La venta supera el límite de crédito disponible del cliente.");
+                adminAutorizador = autorizadorExcesoCredito(payload.getAutorizacionCredito(), idEmpresa, idSucursal);
         }
 
         PedidoCliente pedido = null;
@@ -331,6 +343,19 @@ public class VentaService {
                     metodoPrincipal);
         }
 
+        if (adminAutorizador != null) {
+            AutorizacionCredito autorizacion = new AutorizacionCredito();
+            autorizacion.setVenta(venta);
+            autorizacion.setIdUsuarioAdmin(adminAutorizador.getIdUsuario());
+            autorizacion.setFecha(LocalDateTime.now());
+            autorizacion.setMotivo(payload.getAutorizacionCredito().getMotivo().trim());
+            autorizacionCreditoRepository.save(autorizacion);
+            bitacoraService.registrar(new com.pos.auditoria.service.BitacoraService.Evento(
+                    adminAutorizador, adminAutorizador.getEmail(), idEmpresa, "AUTORIZAR_CREDITO", "VENTAS", null, null, 200,
+                    "Autorizó exceder el límite de crédito en la venta " + venta.getIdVenta() + " (cliente " + cliente.getIdCliente()
+                            + ", cajero " + usuario.getIdUsuario() + "): " + autorizacion.getMotivo()));
+        }
+
         if (esCredito && cuenta != null && cliente != null) {
             try {
                 notificationService.enviarNotificacionUsuario(
@@ -350,6 +375,21 @@ public class VentaService {
             }
         }
         return toVentaResponse(ventaRepository.findById(venta.getIdVenta()).orElse(venta));
+    }
+
+    /** HU-09: valida que quien autoriza sea administrador de la empresa (modelo RBAC) y sus credenciales. */
+    private Usuario autorizadorExcesoCredito(VentaDtos.AutorizacionCreditoCreate datos, Integer idEmpresa, Integer idSucursal) {
+        if (datos == null || datos.getEmail() == null || datos.getEmail().isBlank() || datos.getContrasena() == null)
+            throw ApiException.badRequest("La venta supera el límite de crédito disponible del cliente. Requiere autorización de un administrador.");
+        if (datos.getMotivo() == null || datos.getMotivo().isBlank())
+            throw ApiException.badRequest("Indica el motivo de la autorización de crédito.");
+        Usuario admin = usuarioRepository.findByEmailIgnoreCase(datos.getEmail().trim())
+                .filter(u -> passwordService.matches(datos.getContrasena(), u.getContrasena()))
+                .orElseThrow(() -> ApiException.forbidden("Credenciales de administrador inválidas."));
+        if (!rbac.hasBranchAccess(admin, idEmpresa, idSucursal)
+                || rbac.assignments(admin, idEmpresa, idSucursal).stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
+            throw ApiException.forbidden("El usuario no tiene permiso de administrador para autorizar el crédito.");
+        return admin;
     }
 
     @Transactional(readOnly = true)
@@ -385,7 +425,7 @@ public class VentaService {
         }
         Set<Integer> ids = new HashSet<>();
         BigDecimal totalPagado = BigDecimal.ZERO;
-        Set<String> permitidos = Set.of("EFECTIVO", "QR", "TARJETA");
+        Set<String> permitidos = Set.of("EFECTIVO", "QR", "TARJETA", "TRANSFERENCIA");
         for (VentaDtos.PagoCreditoItem pago : pagos) {
             if (pago == null || pago.getIdMetodoPago()==null) throw ApiException.badRequest("Pago inválido.");
             SalePricing.money(pago.getMontoPagado(),"pago");
@@ -513,6 +553,27 @@ public class VentaService {
                     .stream().map(this::toPagoCredito).toList());
             result.add(dto);
         }
+        return result;
+    }
+
+    /** HU-10: historial de pagos de crédito del cliente (mismas reglas de acceso que sus cuentas por cobrar). */
+    @Transactional(readOnly = true)
+    public List<VentaDtos.HistorialPagoResponse> historialPagos(Usuario usuario, Integer idEmpresa, Integer idCliente) {
+        List<VentaDtos.HistorialPagoResponse> result = new ArrayList<>();
+        for (VentaDtos.CuentaPorCobrarResponse cuenta : cuentasPorCobrar(usuario, idEmpresa, idCliente)) {
+            for (VentaDtos.PagoCreditoResponse pago : cuenta.getPagosCredito()) {
+                VentaDtos.HistorialPagoResponse row = new VentaDtos.HistorialPagoResponse();
+                row.setIdCxc(cuenta.getIdCxc());
+                row.setIdVenta(cuenta.getIdVenta());
+                row.setIdPagoCredito(pago.getIdPagoCredito());
+                row.setMontoPagado(pago.getMontoPagado());
+                row.setFechaPago(pago.getFechaPago());
+                row.setMetodoPago(pago.getMetodoPago());
+                result.add(row);
+            }
+        }
+        result.sort(java.util.Comparator.comparing(VentaDtos.HistorialPagoResponse::getFechaPago,
+                java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
         return result;
     }
 

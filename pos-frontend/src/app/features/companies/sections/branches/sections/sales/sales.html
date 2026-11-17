@@ -77,6 +77,23 @@
               @if (registerError) {
                 <p class="feedback feedback-error">{{ registerError }}</p>
               }
+              @if (registerFieldErrors.length) {
+                <ul class="feedback feedback-error" aria-label="Errores de validacion de la factura">
+                  @for (fieldError of registerFieldErrors; track fieldError) {
+                    <li>{{ fieldError }}</li>
+                  }
+                </ul>
+              }
+
+              @if (creditAuthorizationOpen && selectedSaleTypeIsCredit) {
+                <div class="feedback credit-authorization" aria-label="Autorizacion de credito">
+                  <strong>Autorizacion de administrador</strong>
+                  <input class="input" name="creditAuthEmail" type="email" placeholder="Correo del administrador" autocomplete="off" [(ngModel)]="creditAuth.email" />
+                  <input class="input" name="creditAuthPassword" type="password" placeholder="Contrasena" autocomplete="new-password" [(ngModel)]="creditAuth.contrasena" />
+                  <input class="input" name="creditAuthReason" maxlength="500" placeholder="Motivo de la autorizacion" [(ngModel)]="creditAuth.motivo" />
+                  <button type="button" class="btn btn-secondary" (click)="cancelCreditAuthorization()">Cancelar</button>
+                </div>
+              }
 
               @if (registerMessage) {
                 <p class="feedback feedback-success">
@@ -586,6 +603,7 @@
                             <th>Cliente</th>
                             <th>Tipo</th>
                             <th>Estado</th>
+                            <th>Factura</th>
                             <th>Total</th>
                             <th class="text-right">Detalle</th>
                           </tr>
@@ -599,6 +617,18 @@
                               <td>{{ sale.tipoVenta }}</td>
                               <td>
                                 <span class="badge badge-success">{{ sale.estado }}</span>
+                              </td>
+                              <td>
+                                @if (sale.estadoFactura) {
+                                  <span class="badge"
+                                    [class.badge-success]="sale.estadoFactura === 'VALIDADA' || sale.estadoFactura === 'EMITIDA'"
+                                    [class.badge-info]="sale.estadoFactura === 'PENDIENTE' || sale.estadoFactura === 'OBSERVADA' || sale.estadoFactura === 'CONTINGENCIA'"
+                                    [class.badge-disabled]="sale.estadoFactura === 'ANULADA' || sale.estadoFactura === 'RECHAZADA'">
+                                    {{ sale.estadoFactura }}
+                                  </span>
+                                } @else {
+                                  <span class="text-muted">Sin factura</span>
+                                }
                               </td>
                               <td><strong>{{ sale.total | money }}</strong></td>
                               <td class="text-right">

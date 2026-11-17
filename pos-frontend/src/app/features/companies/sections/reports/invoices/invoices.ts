@@ -21,14 +21,16 @@ interface CompanyInvoice {
   nombre_cliente: string;
   monto_total: number;
   cuf: string;
-  estado_siat: 'EMITIDA' | 'ANULADA' | 'CONTINGENCIA';
+  estado_siat: 'EMITIDA' | 'PENDIENTE' | 'VALIDADA' | 'OBSERVADA' | 'RECHAZADA' | 'ANULADA' | 'CONTINGENCIA';
 }
 
 interface ResendInvoiceResponse {
   mensaje: string;
   id_factura: number;
-  correo_cliente: string;
-  enviado: boolean;
+  correo_cliente: string | null;
+  estado_siat: CompanyInvoice['estado_siat'];
+  correo_estado: string | null;
+  correo_intentos: number | null;
 }
 
 @Component({
@@ -175,6 +177,7 @@ export class InvoicesReport implements OnInit {
       )
       .subscribe({
         next: (response) => {
+          invoice.estado_siat = response.estado_siat ?? invoice.estado_siat;
           this.successMessage = response.correo_cliente
             ? `${response.mensaje} Correo: ${response.correo_cliente}`
             : response.mensaje;

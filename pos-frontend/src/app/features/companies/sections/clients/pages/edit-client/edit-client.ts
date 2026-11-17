@@ -11,6 +11,9 @@ import {
 } from '../../../../../../core/services/company.service';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
+import { MoneyPipe } from '../../../../../../shared/pipes/money.pipe';
+import { DatePipe } from '@angular/common';
+import { ClientPaymentHistoryItem } from '../../../../../../core/services/company.service';
 
 interface ClientEditForm {
   id_categoria_cliente: number | null;
@@ -29,7 +32,7 @@ interface ClientCategoryOption {
 @Component({
   selector: 'app-edit-client',
   standalone: true,
-  imports: [FormsModule, Navbar, Sidebar],
+  imports: [FormsModule, Navbar, Sidebar, MoneyPipe, DatePipe],
   templateUrl: './edit-client.html',
   styleUrls: ['./edit-client.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,8 +60,27 @@ export class EditClient implements OnInit {
   protected clientName = 'Cliente';
   protected categories: ClientCategoryOption[] = [];
 
+  // HU-10: pestaña "Historial de Pagos" de la ficha del cliente.
+  protected activeTab: 'datos' | 'pagos' = 'datos';
+  protected paymentHistory: ClientPaymentHistoryItem[] = [];
+  protected loadingPayments = false;
+  protected paymentsError = '';
+
   ngOnInit(): void {
     this.cargarDatos();
+  }
+
+  protected showPaymentHistory(): void {
+    this.activeTab = 'pagos';
+    if (!this.companyId || !this.clientId) return;
+    this.loadingPayments = true;
+    this.paymentsError = '';
+    this.companyService.getHistorialPagosCliente(this.companyId, this.clientId)
+      .pipe(finalize(() => { this.loadingPayments = false; this.cdr.detectChanges(); }))
+      .subscribe({
+        next: (rows) => { this.paymentHistory = rows; },
+        error: (error) => { this.paymentsError = error?.error?.detail ?? 'No se pudo cargar el historial de pagos.'; },
+      });
   }
 
 

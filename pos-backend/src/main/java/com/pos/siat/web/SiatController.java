@@ -27,6 +27,8 @@ public class SiatController {
     private final SinUnidadMedidaRepository unidades;
     private final SinMotivoAnulacionRepository motivos;
     private final SiatFacturaService facturas;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.siat.service.FacturaEnvioService envio;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.siat.sin.SinService sin;
 
     public SiatController(SinProductoServicioRepository productos, SinUnidadMedidaRepository unidades,
             SinMotivoAnulacionRepository motivos, SiatFacturaService facturas) {
@@ -54,6 +56,40 @@ public class SiatController {
     @GetMapping("/api/facturas/{idFactura}")
     public Map<String, Object> detalle(@PathVariable Integer idFactura) {
         return facturas.detalle(SecurityUtils.currentUser(), idFactura);
+    }
+
+    /** HU-18: reenvío manual desde el historial (al SIN si hace falta y el PDF al correo del cliente). */
+    @PostMapping("/api/empresas/{idEmpresa}/facturas/reenviar")
+    public Map<String, Object> reenviar(@PathVariable Integer idEmpresa, @RequestBody Map<String, Integer> body) {
+        return envio.reenviar(SecurityUtils.currentUser(), idEmpresa, body == null ? null : body.get("id_factura"));
+    }
+
+    /** Bandera para simular la caída del SIN (solo superadministrador). */
+    @org.springframework.web.bind.annotation.GetMapping("/api/sin/simulado/disponibilidad")
+    public Map<String, Object> disponibilidad() {
+        requireSuperAdmin();
+        return Map.of("disponible", sin.disponible());
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/api/sin/simulado/disponibilidad")
+    public Map<String, Object> cambiarDisponibilidad(@RequestBody Map<String, Boolean> body) {
+        requireSuperAdmin();
+        if (body == null || body.get("disponible") == null)
+            throw com.pos.common.exception.ApiException.badRequest("Indica 'disponible': true o false.");
+        sin.setDisponible(body.get("disponible"));
+        return Map.of("disponible", sin.disponible());
+    }
+
+    private static void requireSuperAdmin() {
+        var usuario = SecurityUtils.currentUser();
+        if (usuario == null || !usuario.esSuperAdmin())
+            throw com.pos.common.exception.ApiException.forbidden("Solo el superadministrador puede simular la caída del SIN.");
+    }
+
+    /** Estado de la factura consultado al SIN simulado. */
+    @GetMapping("/api/facturas/{idFactura}/estado")
+    public Map<String, Object> estado(@PathVariable Integer idFactura) {
+        return facturas.consultarEstado(SecurityUtils.currentUser(), idFactura);
     }
 
     @PostMapping("/api/facturas/{idFactura}/anular")

@@ -24,7 +24,39 @@
           <p class="feedback feedback-info">Cargando datos del cliente...</p>
         }
 
-        <form class="client-form" (submit)="guardarCliente($event)">
+        <div class="tabs" role="tablist">
+          <button class="btn" type="button" role="tab" [class.btn-primary]="activeTab === 'datos'" (click)="activeTab = 'datos'">Datos</button>
+          <button class="btn" type="button" role="tab" [class.btn-primary]="activeTab === 'pagos'" (click)="showPaymentHistory()">Historial de Pagos</button>
+        </div>
+
+        @if (activeTab === 'pagos') {
+          @if (loadingPayments) {
+            <p class="feedback feedback-info">Cargando historial de pagos...</p>
+          } @else if (paymentsError) {
+            <p class="feedback feedback-error">{{ paymentsError }}</p>
+          } @else if (!paymentHistory.length) {
+            <p class="text-muted">Este cliente no tiene pagos registrados.</p>
+          } @else {
+            <table class="table">
+              <thead>
+                <tr><th>Fecha</th><th>Venta</th><th>Cuenta</th><th>Metodo</th><th>Monto</th></tr>
+              </thead>
+              <tbody>
+                @for (pago of paymentHistory; track pago.id_pago_credito) {
+                  <tr>
+                    <td>{{ pago.fecha_pago | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td>{{ pago.id_venta }}</td>
+                    <td>{{ pago.id_cxc }}</td>
+                    <td>{{ pago.metodo_pago?.nombre ?? '-' }}</td>
+                    <td>{{ pago.monto_pagado | money }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        }
+
+        <form class="client-form" [hidden]="activeTab !== 'datos'" (submit)="guardarCliente($event)">
           <div class="form-group category-selector-group">
             <label class="label" for="cliente_categoria">Categoria de cliente</label>
 

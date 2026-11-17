@@ -130,4 +130,10 @@ public class EmpresaProductoController {
             @PathVariable Integer idEmpresa, @PathVariable Integer idCliente) {
         return ventaService.cuentasPorCobrar(SecurityUtils.currentUser(), idEmpresa, idCliente);
     }
+
+    @GetMapping("/{idEmpresa}/clientes/{idCliente}/pagos-credito")
+    public List<VentaDtos.HistorialPagoResponse> historialPagos(
+            @PathVariable Integer idEmpresa, @PathVariable Integer idCliente) {
+        return ventaService.historialPagos(SecurityUtils.currentUser(), idEmpresa, idCliente);
+    }
 }

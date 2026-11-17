@@ -19,6 +19,12 @@ public class SalePricing {
     public SalePricing(ProductoRepository products) { this.products = products; }
 
     public Quote calculate(Integer company, VentaDtos.VentaCreate input, RbacResolver.Grants grants) {
+        return calculate(company, input, grants, BigDecimal.ZERO);
+    }
+
+    /** categoryPct: descuento base (0-100) de la categoría del cliente; se aplica por línea sin requerir permiso de descuento. */
+    public Quote calculate(Integer company, VentaDtos.VentaCreate input, RbacResolver.Grants grants, BigDecimal categoryPct) {
+        BigDecimal pct = categoryPct == null ? BigDecimal.ZERO : categoryPct;
         if (input.getDetalles() == null || input.getDetalles().isEmpty() || input.getDetalles().size() > 500)
             throw ApiException.badRequest("La venta debe contener entre 1 y 500 detalles.");
         List<Line> lines = new ArrayList<>();
@@ -36,8 +42,11 @@ public class SalePricing {
             if (price.compareTo(catalog) != 0 && !grants.allows("sale:create:precio_unitario"))
                 throw ApiException.forbidden("No puedes cambiar el precio unitario de una venta.");
             BigDecimal gross = money(price.multiply(BigDecimal.valueOf(item.getCantidad())), "importe del detalle");
-            BigDecimal discount = money(item.getDescuento() == null ? BigDecimal.ZERO : item.getDescuento(), "descuento");
-            if (discount.signum() > 0) requireDiscount(grants);
+            BigDecimal categoryDiscount = gross.multiply(pct).divide(BigDecimal.valueOf(100), 2, java.math.RoundingMode.HALF_UP);
+            BigDecimal discount = money(item.getDescuento() == null ? categoryDiscount : item.getDescuento(), "descuento");
+            if (discount.compareTo(categoryDiscount) < 0)
+                throw ApiException.badRequest("Falta aplicar el descuento de la categoría del cliente.");
+            if (discount.compareTo(categoryDiscount) > 0) requireDiscount(grants);
             if (discount.compareTo(gross) > 0) throw ApiException.badRequest("El descuento no puede superar el importe del detalle.");
             BigDecimal net = gross.subtract(discount);
             sameIfSupplied(item.getSubtotal(), net, "subtotal del detalle");
@@ -47,7 +56,7 @@ public class SalePricing {
             subtotal = subtotal.add(gross); lineDiscount = lineDiscount.add(discount);
         }
         BigDecimal discount = input.getDescuentoTotal() == null ? lineDiscount : money(input.getDescuentoTotal(), "descuento total");
-        if (discount.signum() > 0) requireDiscount(grants);
+        if (discount.compareTo(lineDiscount) > 0) requireDiscount(grants);
         if (discount.compareTo(lineDiscount) < 0 || discount.compareTo(subtotal) > 0)
             throw ApiException.badRequest("El descuento total debe incluir los descuentos de detalle y no superar el subtotal.");
         money(subtotal, "subtotal");

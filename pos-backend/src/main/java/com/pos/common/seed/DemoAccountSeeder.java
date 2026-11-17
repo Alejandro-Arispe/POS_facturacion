@@ -120,7 +120,7 @@ public class DemoAccountSeeder {
                 Sucursal.class).setParameter("c", company).getResultList();
         LocalDate today = LocalDate.now(ZONE);
         List<Login> logins = new ArrayList<>();
-        String[] cashiers = {"cajero.centro@doncarlos.com.bo", "cajero.sur@doncarlos.com.bo"};
+        String[] cashiers = {"cajero.centro@example.com", "cajero.sur@example.com"};
         String[] cashierNames = {"Rosa Quispe Mamani", "Marco Condori Flores"};
         for (int i = 0; i < Math.min(cashiers.length, branches.size()); i++) {
             Usuario user = ensureUser(cashiers[i], password, cashierNames[i], "512345" + (i + 6));
@@ -137,7 +137,7 @@ public class DemoAccountSeeder {
             }
             logins.add(new Login("Empleado (cajero)", cashiers[i], password, branches.get(i).getNombre()));
         }
-        String clientEmail = "mariela.gutierrez@gmail.com";
+        String clientEmail = "mariela.gutierrez@example.com";
         Usuario clientUser = ensureUser(clientEmail, password, "Mariela Gutierrez Paz", "6012345");
         boolean hasClient = !em.createQuery("select c from Cliente c where c.idUsuario = :u and c.idEmpresa = :e",
                 Cliente.class).setParameter("u", clientUser.getIdUsuario()).setParameter("e", companyId).getResultList().isEmpty();
@@ -190,7 +190,7 @@ public class DemoAccountSeeder {
         company.setNombre("Minimarket Don Carlos");
         company.setRazonSocial("Comercial Don Carlos S.R.L.");
         company.setNit(nit);
-        company.setCorreo(owner.getIdUsuario() == 1 ? "contacto@doncarlos.com.bo" : "contacto" + owner.getIdUsuario() + "@doncarlos.com.bo");
+        company.setCorreo(owner.getIdUsuario() == 1 ? "contacto@example.com" : "contacto" + owner.getIdUsuario() + "@example.com");
         company.setFechaCreacion(today.minusDays(DAYS + 1));
         save(company);
         link(owner, catalog(Rol.class, "ADMINISTRADOR"), company, today);
@@ -309,7 +309,7 @@ public class DemoAccountSeeder {
             save(person);
             Usuario user = new Usuario();
             user.setPersona(person);
-            user.setEmail(emails[i] + (company.getIdEmpresa() == 1 ? "" : company.getIdEmpresa()) + "@gmail.com");
+            user.setEmail(emails[i] + (company.getIdEmpresa() == 1 ? "" : company.getIdEmpresa()) + "@example.com");
             user.setContrasena(hash);
             user.setFechaCreacion(company.getFechaCreacion());
             user.setActivo(true);
@@ -402,7 +402,7 @@ public class DemoAccountSeeder {
                 balances.merge(method.getIdMetodoPago(), sale.getTotal(), BigDecimal::add);
                 // Una de cada tres ventas lleva factura SIAT simulada (CUF, CUFD y QR).
                 if ((day + saleIndex) % 3 == 0) {
-                    siat.emitir(sale, session, client, new SiatFacturaService.Comprador(1, null, null), method.getNombre());
+                    siat.emitir(sale, session, client, new SiatFacturaService.Comprador(1, null, null), method.getNombre(), false);
                 }
             }
             session.setMontoFinal(balances.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add));

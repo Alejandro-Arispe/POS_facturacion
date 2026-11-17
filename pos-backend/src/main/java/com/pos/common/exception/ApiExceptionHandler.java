@@ -21,6 +21,14 @@ public class ApiExceptionHandler {
         return body(HttpStatus.BAD_REQUEST, "JSON invalido: revisa los atributos y sus valores.");
     }
 
+    @ExceptionHandler(FieldValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleFieldValidation(FieldValidationException ex) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("detail", ex.getDetail());
+        payload.put("errores", ex.getErrores());
+        return ResponseEntity.status(ex.getStatus()).body(payload);
+    }
+
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> handleApi(ApiException ex) {
         return body(ex.getStatus(), ex.getDetail());

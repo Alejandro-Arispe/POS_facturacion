@@ -141,6 +141,8 @@ export interface SalePaymentRequest {
 
 export interface CreateSaleRequest {
   id_tipo_venta: number;
+  /** HU-09: credenciales del admin que autoriza exceder el límite de crédito. */
+  autorizacion_credito?: { email: string; contrasena: string; motivo: string } | null;
   id_cliente: number | null;
   id_metodo_pago: number | null;
   id_pedido?: number | null;
@@ -161,6 +163,7 @@ export interface CreateSaleResponse {
   id_venta: number;
   id_factura?: number | null;
   cuf?: string | null;
+  estado_siat?: string | null;
   id_usuario: number;
   id_caja_sesion: number;
   subtotal: number;
@@ -211,6 +214,7 @@ export interface SaleHistoryPaymentItem {
 
 export interface SaleHistoryResponse {
   id_venta: number;
+  estado_siat?: string | null;
   id_tipo_venta?: number;
   tipo_venta_nombre?: string;
   id_cliente?: number | null;

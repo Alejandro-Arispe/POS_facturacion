@@ -68,6 +68,17 @@ public final class VentaDtos {
         private BigDecimal total;
         private String estado;
         private List<DetalleCreate> detalles = new ArrayList<>();
+        /** HU-09: credenciales del administrador que autoriza exceder el límite de crédito. */
+        private AutorizacionCreditoCreate autorizacionCredito;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class AutorizacionCreditoCreate {
+        private String email;
+        private String contrasena;
+        private String motivo;
     }
 
     @Getter
@@ -186,6 +197,18 @@ public final class VentaDtos {
         private String estado;
         private List<PagoCreditoResponse> pagosCredito = new ArrayList<>();
         private List<MovimientoCajaResponse> movimientosCaja = new ArrayList<>();
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class HistorialPagoResponse {
+        private Integer idCxc;
+        private Integer idVenta;
+        private Integer idPagoCredito;
+        private BigDecimal montoPagado;
+        private LocalDateTime fechaPago;
+        private CatalogoItem metodoPago;
     }
 
     @Getter

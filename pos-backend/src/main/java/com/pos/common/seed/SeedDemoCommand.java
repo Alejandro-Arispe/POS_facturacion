@@ -15,7 +15,7 @@ public class SeedDemoCommand {
         try (var context = new SpringApplicationBuilder(PosBackendSpringApplication.class)
                 .profiles("seed-demo").run(arguments)) {
             var env = context.getEnvironment();
-            String email = env.getProperty("app.demo-seed.email", "admin@doncarlos.com.bo");
+            String email = env.getProperty("app.demo-seed.email", "admin@example.com");
             String password = env.getProperty("app.demo-seed.password", "Tienda2026!");
             var seeder = context.getBean(DemoAccountSeeder.class);
             seeder.ensureUser(email, password, "Carlos Mendoza Rojas", "4567890");

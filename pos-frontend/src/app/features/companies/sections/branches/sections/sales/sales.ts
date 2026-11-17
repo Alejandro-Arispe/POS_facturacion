@@ -124,6 +124,8 @@ interface SaleHistoryRow {
   cajaSesionId: number | string;
   total: number;
   estado: string;
+  /** Estado SIAT de la factura (PENDIENTE, VALIDADA, OBSERVADA, RECHAZADA, ANULADA, CONTINGENCIA). */
+  estadoFactura: string | null;
   metodosPago: string;
   metodosPagoIds: string;
   articulos: number;
@@ -544,6 +546,7 @@ export class Sales implements OnInit {
     }
 
     this.registerError = '';
+    this.registerFieldErrors = [];
     this.registerMessage = '';
 
     // HU-34: el stock real es el de la sucursal (las recomendaciones pueden no traerlo).
@@ -562,7 +565,7 @@ export class Sales implements OnInit {
       return;
     }
 
-    const clientDiscount = this.canDiscount ? this.getClientDiscountPercentage() : 0;
+    const clientDiscount = this.getClientDiscountPercentage();
 
     this.saleDetails = [
       ...this.saleDetails,
@@ -593,6 +596,7 @@ export class Sales implements OnInit {
     }
     this.scannerOpen = true;
     this.registerError = '';
+    this.registerFieldErrors = [];
     setTimeout(() => void this.startScanner(Detector), 50);
   }
 
@@ -675,6 +679,7 @@ export class Sales implements OnInit {
     item.cantidad = quantity;
     this.updateItemDiscount(item, item.descuento);
     this.registerError = '';
+    this.registerFieldErrors = [];
   }
 
   protected updateItemDiscount(item: SaleDetailItem, value: number | string): void {
@@ -702,8 +707,9 @@ export class Sales implements OnInit {
   }
 
   protected getItemDiscountAmount(item: SaleDetailItem): number {
-    if (!this.canDiscount) return 0;
     const itemSubtotal = this.getItemSubtotal(item);
+    // El descuento de la categoría del cliente (HU-08) se aplica aunque el usuario no pueda dar descuentos manuales.
+    if (!this.canDiscount) return this.roundCurrency(itemSubtotal * this.getClientDiscountPercentage() / 100);
 
     if (item.descuentoTipo === 'percentage') {
       return this.roundCurrency(itemSubtotal * Math.min(this.normalizeMoney(item.descuento), 100) / 100);
@@ -723,6 +729,7 @@ export class Sales implements OnInit {
 
   protected cobrar(): void {
     this.registerError = '';
+    this.registerFieldErrors = [];
     this.registerMessage = '';
 
     if (!this.hasPermission('sale:create')) {
@@ -747,8 +754,9 @@ export class Sales implements OnInit {
       return;
     }
 
-    if (this.selectedSaleTypeIsCredit && this.exceedsSelectedClientCreditLimit()) {
-      this.registerError = `El total de la venta no puede superar el limite de credito de la categoria: Bs ${this.formatCurrency(this.getSelectedClientCreditLimit())}.`;
+    if (this.selectedSaleTypeIsCredit && this.exceedsSelectedClientCreditLimit() && !this.creditAuthorizationReady) {
+      this.creditAuthorizationOpen = true;
+      this.registerError = `La venta supera el limite de credito (Bs ${this.formatCurrency(this.getSelectedClientCreditLimit())}). Requiere autorizacion de un administrador.`;
       return;
     }
 
@@ -814,6 +822,7 @@ export class Sales implements OnInit {
   protected confirmQrPayment(row: SalePaymentRow): void {
     row.qrConfirmado = true;
     this.registerError = '';
+    this.registerFieldErrors = [];
   }
 
   /** Genera un QR cualquiera: no se conecta a ningun banco, solo simula el cobro. */
@@ -823,6 +832,39 @@ export class Sales implements OnInit {
     const reference = `POS-PAGO-SIMULADO-${Date.now().toString(36).toUpperCase()}`;
     this.qrImages.set(row.id, await QRCode.toDataURL(reference, { margin: 1, width: 220 }));
     this.cdr.markForCheck();
+  }
+
+  // HU-09: autorizacion de un administrador cuando la venta a credito excede el limite.
+  protected creditAuthorizationOpen = false;
+  protected creditAuth = { email: '', contrasena: '', motivo: '' };
+
+  protected get creditAuthorizationReady(): boolean {
+    return this.creditAuthorizationOpen && !!this.creditAuth.email.trim() && !!this.creditAuth.contrasena && !!this.creditAuth.motivo.trim();
+  }
+
+  protected cancelCreditAuthorization(): void {
+    this.creditAuthorizationOpen = false;
+    this.creditAuth = { email: '', contrasena: '', motivo: '' };
+  }
+
+  // HU-17: errores por campo de la validacion previa de la factura (respuesta { detail, errores }).
+  protected registerFieldErrors: string[] = [];
+  private static readonly FIELD_LABELS: Record<string, string> = {
+    nit_emisor: 'NIT de la empresa',
+    codigo_tipo_documento: 'Documento del comprador',
+    monto_total: 'Total',
+    iva: 'IVA 13%',
+    cuis: 'CUIS',
+    cufd: 'CUFD',
+  };
+
+  private fieldErrors(error: unknown): string[] {
+    const errores = (error as { error?: { errores?: Record<string, string> } })?.error?.errores;
+    if (!errores || typeof errores !== 'object') return [];
+    return Object.entries(errores).map(([field, message]) => {
+      const label = field.endsWith('.codigo_producto_sin') ? 'Codigo SIN del producto' : (Sales.FIELD_LABELS[field] ?? field);
+      return `${label}: ${message}`;
+    });
   }
 
   private registrarVentaCredito(): void {
@@ -847,12 +889,16 @@ export class Sales implements OnInit {
       total: this.total,
       estado: 'Pendiente',
       detalles: this.buildSaleDetailPayload(),
+      autorizacion_credito: this.creditAuthorizationReady
+        ? { email: this.creditAuth.email.trim(), contrasena: this.creditAuth.contrasena, motivo: this.creditAuth.motivo.trim() }
+        : null,
     };
 
     this.chargingSale = true;
 
     this.cashRegisterService.registrarVentaSesionCaja(this.cashRegisterSessionId, payload).subscribe({
       next: (response) => {
+        this.cancelCreditAuthorization();
         this.registerMessage = `Venta a credito registrada correctamente con el ID ${response.id_venta}.`;
         this.lastInvoiceId = response.id_factura ?? null;
         if (this.lastInvoiceId) this.registerMessage += ' Factura emitida (SIAT simulado).';
@@ -865,6 +911,7 @@ export class Sales implements OnInit {
       error: (error) => {
         this.chargingSale = false;
         this.registerError = error?.error?.detail ?? 'No se pudo registrar la venta a credito.';
+        this.registerFieldErrors = this.fieldErrors(error);
         this.cdr.detectChanges();
       },
     });
@@ -872,6 +919,7 @@ export class Sales implements OnInit {
 
   protected registrarPago(): void {
     this.registerError = '';
+    this.registerFieldErrors = [];
 
     if (!this.hasPermission('sale:create')) {
       this.registerError = 'No tienes permiso para registrar ventas.';
@@ -899,8 +947,9 @@ export class Sales implements OnInit {
       return;
     }
 
-    if (this.selectedSaleTypeIsCredit && this.exceedsSelectedClientCreditLimit()) {
-      this.registerError = `El total de la venta no puede superar el limite de credito de la categoria: Bs ${this.formatCurrency(this.getSelectedClientCreditLimit())}.`;
+    if (this.selectedSaleTypeIsCredit && this.exceedsSelectedClientCreditLimit() && !this.creditAuthorizationReady) {
+      this.creditAuthorizationOpen = true;
+      this.registerError = `La venta supera el limite de credito (Bs ${this.formatCurrency(this.getSelectedClientCreditLimit())}). Requiere autorizacion de un administrador.`;
       return;
     }
 
@@ -984,6 +1033,7 @@ export class Sales implements OnInit {
       error: (error) => {
         this.chargingSale = false;
         this.registerError = error?.error?.detail ?? 'No se pudo registrar la venta.';
+        this.registerFieldErrors = this.fieldErrors(error);
         this.cdr.detectChanges();
       },
     });
@@ -991,6 +1041,7 @@ export class Sales implements OnInit {
 
   protected cancelarPago(): void {
     this.registerError = '';
+    this.registerFieldErrors = [];
     this.closePaymentTab();
     this.activeTab = 'register';
   }
@@ -1207,6 +1258,7 @@ export class Sales implements OnInit {
     }
     this.loadingRegisterData = true;
     this.registerError = '';
+    this.registerFieldErrors = [];
 
     if (!this.companyId || !this.branchId) {
       this.loadingRegisterData = false;
@@ -1444,7 +1496,7 @@ export class Sales implements OnInit {
 
         // If a category with a base discount exists, apply it to current sale details
         const pct = this.getClientDiscountPercentage();
-        if (pct > 0 && this.canDiscount) {
+        if (pct > 0) {
           this.applyClientDiscountToSaleDetails(pct);
         }
 
@@ -1609,6 +1661,7 @@ export class Sales implements OnInit {
       cajaSesionId: sale.id_caja_sesion,
       total: Number(sale.total ?? 0),
       estado: sale.estado,
+      estadoFactura: sale.estado_siat ?? null,
       metodosPago: paymentLabels,
       metodosPagoIds: paymentMethodIds,
       articulos: saleDetails.reduce((total, detail) => total + Number(detail.cantidad ?? 0), 0),
@@ -1713,6 +1766,7 @@ export class Sales implements OnInit {
 
   private clearSalesMessages(): void {
     this.registerError = '';
+    this.registerFieldErrors = [];
     this.registerMessage = '';
   }
 

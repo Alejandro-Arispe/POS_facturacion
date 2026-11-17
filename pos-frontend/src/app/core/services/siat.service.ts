@@ -45,7 +45,7 @@ export interface FacturaSiat {
   nombre_cliente: string;
   monto_total: number;
   cuf: string;
-  estado_siat: 'EMITIDA' | 'ANULADA' | 'CONTINGENCIA';
+  estado_siat: 'EMITIDA' | 'PENDIENTE' | 'VALIDADA' | 'OBSERVADA' | 'RECHAZADA' | 'ANULADA' | 'CONTINGENCIA';
   cuis?: string;
   cufd?: string;
   qr_code_data?: string;
