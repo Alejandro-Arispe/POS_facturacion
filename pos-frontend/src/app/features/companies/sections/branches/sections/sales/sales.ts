@@ -55,11 +55,26 @@ interface ProductSearchItem {
   codigoBarras: string;
   /** Ruta protegida de la imagen del producto (/media/products/...), si el usuario puede verla. */
   imagen?: string | null;
+  /** Confianza de la regla de asociacion (0 a 1) cuando es una sugerencia. */
+  confianza?: number | null;
+}
+
+/** Sugerencia del backend (JSON en snake_case) basada en reglas de asociacion (HU-26). */
+interface RecommendedProductRecord {
+  id_producto: number;
+  nombre: string;
+  unidad_medida?: string | null;
+  precio?: number | null;
+  stock?: number | null;
+  codigo?: string | null;
+  codigo_barras?: string | null;
+  imagen?: string | null;
+  confianza?: number | null;
 }
 
 interface RecommendedProductsResponse {
   productos_analizados: number[];
-  recomendaciones: ProductSearchItem[];
+  recomendaciones: RecommendedProductRecord[];
 }
 
 interface SaleDetailItem extends ProductSearchItem {
@@ -1396,7 +1411,11 @@ export class Sales implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
-          this.recommendedProducts = (response.recomendaciones || []).map((product) => this.mapRecommendedProduct(product));
+          // Solo productos con stock en esta sucursal, maximo 3 (HU-26).
+          this.recommendedProducts = (response.recomendaciones || [])
+            .map((product) => this.mapRecommendedProduct(product))
+            .filter((product) => product.stock > 0)
+            .slice(0, 3);
           this.loadingRecommendedProducts = false;
           this.cdr.detectChanges();
         },
@@ -1677,17 +1696,20 @@ export class Sales implements OnInit {
     };
   }
 
-  private mapRecommendedProduct(product: ProductSearchItem): ProductSearchItem {
+  private mapRecommendedProduct(product: RecommendedProductRecord): ProductSearchItem {
+    const id = Number(product.id_producto);
+    // El stock y la imagen se toman de la sucursal actual cuando el producto ya esta cargado.
+    const local = this.products.find((p) => p.idProducto === id);
     return {
-      idProducto: Number(product.idProducto),
+      idProducto: id,
       nombre: product.nombre ?? 'Producto sin nombre',
-      unidadMedida: product.unidadMedida ?? 'unidad',
-      precio: Number(product.precio ?? 0),
-      stock: Number(product.stock ?? 0),
-      codigo: this.stringifyOptional(product.codigo ?? product.idProducto),
-      codigoBarras: this.stringifyOptional(product.codigoBarras),
-      // Las sugerencias vienen del reporte: se reutiliza la imagen del producto ya cargado en la sucursal.
-      imagen: product.imagen ?? this.products.find((p) => p.idProducto === Number(product.idProducto))?.imagen ?? null,
+      unidadMedida: product.unidad_medida ?? local?.unidadMedida ?? 'unidad',
+      precio: Number(product.precio ?? local?.precio ?? 0),
+      stock: local ? local.stock : Number(product.stock ?? 0),
+      codigo: this.stringifyOptional(product.codigo ?? id),
+      codigoBarras: this.stringifyOptional(product.codigo_barras),
+      imagen: product.imagen ?? local?.imagen ?? null,
+      confianza: product.confianza ?? null,
     };
   }
 

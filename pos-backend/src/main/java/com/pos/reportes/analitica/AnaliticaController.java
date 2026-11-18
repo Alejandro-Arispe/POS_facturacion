@@ -22,7 +22,8 @@ public class AnaliticaController {
 	public Map<String, Object> analizar(
 			@PathVariable Integer idEmpresa,
 			@RequestParam(required = false) Integer dias,
-			@RequestParam(name = "id_sucursal", required = false) Integer idSucursal) {
-		return analiticaService.analizar(idEmpresa, dias, idSucursal);
+			@RequestParam(name = "id_sucursal", required = false) Integer idSucursal,
+			@RequestParam(required = false) Integer pronostico) {
+		return analiticaService.analizar(idEmpresa, dias, idSucursal, pronostico);
 	}
 }

@@ -88,6 +88,16 @@ class ProductStat(BaseModel):
     abc_class: str
 
 
+class ProductForecast(BaseModel):
+    """Proyeccion de un producto para los proximos dias (HU-25)."""
+    product: str
+    category: str | None
+    units: float
+    revenue: float
+    recent_units: float
+    change_pct: float | None
+
+
 class GroupStat(BaseModel):
     label: str
     revenue: float
@@ -116,6 +126,7 @@ class AnalyticsResponse(BaseModel):
     daily: list[DailyPoint]
     forecast: list[ForecastPoint]
     forecast_total: float
+    product_forecast: list[ProductForecast] = []
     trend: Trend
     products: list[ProductStat]
     categories: list[GroupStat]

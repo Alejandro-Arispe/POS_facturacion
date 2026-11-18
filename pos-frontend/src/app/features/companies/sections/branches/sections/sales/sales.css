@@ -1042,3 +1042,5 @@ body.dark-theme .sale-detail-panel td:nth-child(5) { color: #2dd4bf; }
 .card-terminal { margin: 0; font-size: 0.8rem; color: var(--color-text-soft); }
 .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .card-number, .card-holder { grid-column: 1 / -1; }
+
+.recommendation-confidence { color: var(--color-success, #07845c) !important; font-weight: 600; }

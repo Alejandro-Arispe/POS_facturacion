@@ -101,6 +101,12 @@ public class AnaliticaService {
 
 	@Transactional(readOnly = true)
 	public Map<String, Object> analizar(Integer idEmpresa, Integer dias, Integer idSucursal) {
+		return analizar(idEmpresa, dias, idSucursal, null);
+	}
+
+	/** @param pronostico dias a proyectar (1 a 60); el widget del dashboard usa 7 (HU-25). */
+	@Transactional(readOnly = true)
+	public Map<String, Object> analizar(Integer idEmpresa, Integer dias, Integer idSucursal, Integer pronostico) {
 		var scope=dataPolicy.require(SecurityUtils.currentUser(),idEmpresa,idSucursal,"dashboard:read","sale:read","inventory:read");
         dataPolicy.productFields(scope,"nombre","id_subcategoria");
         empresaAccess.requirePlanFeature(SecurityUtils.currentUser(),idEmpresa,"reportes_avanzados");
@@ -162,7 +168,7 @@ public class AnaliticaService {
 		solicitud.put("currency", moneda);
 		solicitud.put("start", inicio.toString());
 		solicitud.put("end", fin.toString());
-		solicitud.put("forecast_days", 14);
+		solicitud.put("forecast_days", pronostico == null ? 14 : Math.max(1, Math.min(pronostico, 60)));
 		solicitud.put("lines", lineas);
 		solicitud.put("payments", pagos);
 		solicitud.put("stock", stock);

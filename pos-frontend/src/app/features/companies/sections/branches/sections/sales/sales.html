@@ -179,8 +179,8 @@
 
                       <section class="recommended-products-panel" aria-label="Productos recomendados">
                         <div class="panel-section-header">
-                          <h2 class="title-md panel-heading">Productos Recomendados</h2>
-                          <span class="panel-accent-pill recommended-pill">Sugerencias</span>
+                          <h2 class="title-md panel-heading">{{ saleDetails.length === 0 ? 'Productos disponibles' : 'Los clientes también compraron…' }}</h2>
+                          <span class="panel-accent-pill recommended-pill">{{ saleDetails.length === 0 ? 'Catálogo' : 'IA · Apriori' }}</span>
                         </div>
 
                         @if (loadingRecommendedProducts) {
@@ -194,7 +194,7 @@
                         } @else if (visibleRecommendedProducts.length === 0) {
                           <section class="sales-state compact" aria-live="polite">
                             <p class="text-muted">
-                              {{ saleDetails.length === 0 ? 'No hay productos con stock en esta sucursal.' : 'No hay productos recomendados para este detalle.' }}
+                              {{ saleDetails.length === 0 ? 'No hay productos con stock en esta sucursal.' : 'Aún no hay suficientes ventas conjuntas para sugerir productos.' }}
                             </p>
                           </section>
                         } @else {
@@ -208,6 +208,9 @@
                                 </span>
                                 <span class="product-info">
                                   <strong>{{ product.nombre }}</strong>
+                                  @if (product.confianza) {
+                                    <small class="recommendation-confidence">{{ (product.confianza * 100) | number: '1.0-0' }}% lo llevó junto</small>
+                                  }
                                   <small>
                                     Codigo {{ product.codigo || product.idProducto }}
                                     @if (product.codigoBarras) {

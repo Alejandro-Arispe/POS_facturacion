@@ -801,21 +801,18 @@ public class ReportesService {
         dataPolicy.productFields(dataPolicy.require(usuario, idEmpresa, null, "product:read", "inventory:read"),
                 "nombre", "precio", "unidad_medida", "codigo_barra", "id_subcategoria");
         empresaAccess.requirePlanFeature(usuario, idEmpresa, "predicciones");
-        Integer idSub = origen.get(0).getSubcategoria() == null ? null : origen.get(0).getSubcategoria().getIdSubcategoria();
-        List<Producto> candidatos = idSub == null
-                ? productoRepository.findByIdEmpresa(idEmpresa)
-                : productoRepository.findBySubcategoria_IdSubcategoria(idSub);
+        // HU-26: reglas de asociacion (Apriori de nivel 2) sobre las canastas de los ultimos 180 dias.
+        // Para cada producto Y fuera del carrito: confianza = ventas(X y Y) / ventas(X), con X en el carrito.
+        Map<Integer, Double[]> reglas = reglasDeAsociacion(idEmpresa, ids);
+        Map<Integer, Producto> porId = new HashMap<>();
+        if (!reglas.isEmpty()) {
+            for (Producto p : productoRepository.findByIdProductoIn(new ArrayList<>(reglas.keySet()))) porId.put(p.getIdProducto(), p);
+        }
         List<Producto> elegidos = new ArrayList<>();
-        for (Producto producto : candidatos) {
-            if (ids.contains(producto.getIdProducto())
-                    || !Boolean.TRUE.equals(producto.getActivo())
-                    || !idEmpresa.equals(producto.getIdEmpresa())) {
-                continue;
-            }
+        for (Integer candidato : reglas.keySet()) {
+            Producto producto = porId.get(candidato);
+            if (producto == null || !Boolean.TRUE.equals(producto.getActivo()) || !idEmpresa.equals(producto.getIdEmpresa())) continue;
             elegidos.add(producto);
-            if (elegidos.size() >= 8) {
-                break;
-            }
         }
         Map<Integer, Integer> stockPorProducto = new HashMap<>();
         if (!elegidos.isEmpty()) {
@@ -832,20 +829,76 @@ public class ReportesService {
         }
         List<ReporteDtos.ProductoRecomendado> recs = new ArrayList<>();
         for (Producto producto : elegidos) {
+            int stock = stockPorProducto.getOrDefault(producto.getIdProducto(), 0);
+            if (stock <= 0) continue; // Solo se sugieren productos con stock.
+            Double[] regla = reglas.get(producto.getIdProducto());
             ReporteDtos.ProductoRecomendado dto = new ReporteDtos.ProductoRecomendado();
             dto.setIdProducto(producto.getIdProducto());
             dto.setNombre(producto.getNombre());
             dto.setUnidadMedida(producto.getUnidadMedida());
             dto.setPrecio(producto.getPrecio() == null ? 0 : producto.getPrecio().doubleValue());
-            dto.setStock(stockPorProducto.getOrDefault(producto.getIdProducto(), 0));
+            dto.setStock(stock);
             dto.setCodigo(String.valueOf(producto.getIdProducto()));
             dto.setCodigoBarras(producto.getCodigoBarra());
+            dto.setImagen(producto.getImagen());
+            dto.setConfianza(round(regla[0]));
+            dto.setSoporte(round(regla[1]));
+            dto.setLift(round(regla[2]));
             recs.add(dto);
+            if (recs.size() >= MAX_RECOMENDACIONES) break;
         }
         ReporteDtos.RecomendacionResponse response = new ReporteDtos.RecomendacionResponse();
         response.setProductosAnalizados(ids);
         response.setRecomendaciones(recs);
         return response;
+    }
+
+    /** Maximo de sugerencias en el PDV ("Los clientes tambien compraron..."). */
+    private static final int MAX_RECOMENDACIONES = 3;
+    /** Una regla necesita aparecer en al menos este numero de ventas para considerarse. */
+    private static final int SOPORTE_MINIMO_VENTAS = 2;
+    private static final double CONFIANZA_MINIMA = 0.10;
+    private static final int DIAS_HISTORIAL_RECOMENDACION = 180;
+
+    /**
+     * Reglas X -> Y para los productos X del carrito. Devuelve, ordenado por confianza y lift, cada producto Y con
+     * [confianza, soporte, lift]. Si no hay suficientes ventas conjuntas la lista queda vacia y el PDV no muestra nada.
+     */
+    private Map<Integer, Double[]> reglasDeAsociacion(Integer idEmpresa, List<Integer> carrito) {
+        Map<String, Object> params = paramsRango(idEmpresa, LocalDate.now().minusDays(DIAS_HISTORIAL_RECOMENDACION), LocalDate.now());
+        Map<Integer, java.util.Set<Integer>> canastas = new HashMap<>();
+        for (Object[] row : consulta("select v.idVenta, d.idProducto" + FROM_LINEAS, Object[].class, params).getResultList()) {
+            canastas.computeIfAbsent(aInt(row[0]), k -> new java.util.HashSet<>()).add(aInt(row[1]));
+        }
+        int total = canastas.size();
+        if (total == 0) return Map.of();
+        Map<Integer, Integer> frecuencia = new HashMap<>();
+        for (var canasta : canastas.values()) for (Integer p : canasta) frecuencia.merge(p, 1, Integer::sum);
+        Map<Integer, Double[]> mejores = new HashMap<>();
+        for (Integer x : new java.util.HashSet<>(carrito)) {
+            int conX = frecuencia.getOrDefault(x, 0);
+            if (conX == 0) continue;
+            Map<Integer, Integer> conjuntas = new HashMap<>();
+            for (var canasta : canastas.values()) {
+                if (!canasta.contains(x)) continue;
+                for (Integer y : canasta) if (!carrito.contains(y)) conjuntas.merge(y, 1, Integer::sum);
+            }
+            for (var e : conjuntas.entrySet()) {
+                if (e.getValue() < SOPORTE_MINIMO_VENTAS) continue;
+                double confianza = (double) e.getValue() / conX;
+                if (confianza < CONFIANZA_MINIMA) continue;
+                double soporte = (double) e.getValue() / total;
+                double lift = confianza / ((double) frecuencia.get(e.getKey()) / total);
+                Double[] actual = mejores.get(e.getKey());
+                if (actual == null || confianza > actual[0]) mejores.put(e.getKey(), new Double[] {confianza, soporte, lift});
+            }
+        }
+        Map<Integer, Double[]> ordenado = new LinkedHashMap<>();
+        mejores.entrySet().stream()
+                .sorted((a, b) -> a.getValue()[0].equals(b.getValue()[0])
+                        ? Double.compare(b.getValue()[2], a.getValue()[2]) : Double.compare(b.getValue()[0], a.getValue()[0]))
+                .forEach(e -> ordenado.put(e.getKey(), e.getValue()));
+        return ordenado;
     }
 
     // ---------------------------------------------------------------------------------------------
