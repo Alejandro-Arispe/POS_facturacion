@@ -1,3 +1,4 @@
+import { exportReportExcel, exportReportPdf, ReportTable } from '../../../../../shared/utils/report-export';
 import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
 import { firstValueFrom } from 'rxjs';
 import { CompanyPermissionsService } from '../../../../../core/services/company-permissions.service';
@@ -256,6 +257,22 @@ export class QbeReport implements OnInit {
     anchor.click();
     document.body.removeChild(anchor);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /** HU-24: el mismo resultado de la consulta, exportado a PDF. */
+  protected async exportPdf(): Promise<void> {
+    if(!this.lastQuery || !this.permissions.hasPermission('report:export')) return;
+    try { this.result=await firstValueFrom(this.qbeService.run(this.companyId,this.lastQuery,true)); }
+    catch(error) {this.result=null;this.fail(error,'No se pudo actualizar la consulta para exportar.');return;}
+    if(!this.permissions.hasPermission('report:export')) return;
+    const r = this.result;
+    const table: ReportTable = {
+      title: r.descripcion || 'Consulta QBE',
+      filters: [`Fuente: ${this.source?.nombre ?? this.source?.codigo ?? 'QBE'}`, `Filas: ${r.filas.length}`],
+      headers: r.columnas.map((c) => c.etiqueta),
+      rows: r.filas.map((row) => row.map((v, i) => this.format(v, r.columnas[i].tipo, r.columnas[i].codigo))),
+    };
+    exportReportPdf(table, `consulta-${this.source?.codigo ?? 'qbe'}`);
   }
 
   private fail(err: any, fallback: string): void {

@@ -27,7 +27,82 @@
         <div class="tabs" role="tablist">
           <button class="btn" type="button" role="tab" [class.btn-primary]="activeTab === 'datos'" (click)="activeTab = 'datos'">Datos</button>
           <button class="btn" type="button" role="tab" [class.btn-primary]="activeTab === 'pagos'" (click)="showPaymentHistory()">Historial de Pagos</button>
+          <button class="btn" type="button" role="tab" [class.btn-primary]="activeTab === 'compras'" (click)="showPurchaseHistory()">Historial de Compras</button>
         </div>
+
+        @if (activeTab === 'compras') {
+          <form class="purchase-filters" (submit)="$event.preventDefault(); loadPurchases()">
+            <label class="form-group">
+              <span class="label">Desde</span>
+              <input class="input" type="date" name="purchasesFrom" [(ngModel)]="purchasesFrom" />
+            </label>
+            <label class="form-group">
+              <span class="label">Hasta</span>
+              <input class="input" type="date" name="purchasesTo" [(ngModel)]="purchasesTo" />
+            </label>
+            <button class="btn btn-primary" type="submit">Filtrar</button>
+            <button class="btn btn-secondary" type="button" (click)="clearPurchaseFilters()">Limpiar</button>
+          </form>
+          @if (loadingPurchases) {
+            <p class="feedback feedback-info">Cargando historial de compras...</p>
+          } @else if (purchasesError) {
+            <p class="feedback feedback-error">{{ purchasesError }}</p>
+          } @else if (!purchases.length) {
+            <p class="text-muted">El cliente no tiene compras en el periodo seleccionado.</p>
+          } @else {
+            <p class="text-muted">{{ purchases.length }} compra(s) · Total {{ purchasesTotal | money }}</p>
+            <table class="table">
+              <thead>
+                <tr><th>Fecha</th><th>Venta</th><th>N° factura</th><th>Tipo</th><th>Estado</th><th>Total</th><th></th></tr>
+              </thead>
+              <tbody>
+                @for (compra of purchases; track compra.id_venta) {
+                  <tr>
+                    <td>{{ compra.fecha | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td>#{{ compra.id_venta }}</td>
+                    <td>{{ compra.numero_factura ?? 'Sin factura' }}</td>
+                    <td>{{ compra.tipo_venta_nombre ?? '-' }}</td>
+                    <td>{{ compra.estado }}</td>
+                    <td>{{ compra.total | money }}</td>
+                    <td><button class="btn btn-secondary btn-sm" type="button" (click)="selectedPurchase = compra">Ver detalle</button></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        }
+
+        @if (selectedPurchase; as compra) {
+          <div class="purchase-overlay" role="presentation" (click)="selectedPurchase = null">
+            <section class="purchase-modal panel" role="dialog" aria-modal="true" aria-labelledby="purchaseTitle"
+              (click)="$event.stopPropagation()">
+              <header class="purchase-modal-header">
+                <h2 class="title-md" id="purchaseTitle">Compra #{{ compra.id_venta }} · {{ compra.fecha | date: 'dd/MM/yyyy HH:mm' }}</h2>
+                <button class="btn btn-secondary btn-sm" type="button" aria-label="Cerrar" (click)="selectedPurchase = null">&times;</button>
+              </header>
+              <p class="text-muted">Solo lectura · {{ compra.numero_factura ? 'Factura N° ' + compra.numero_factura : 'Sin factura' }}</p>
+              <table class="table">
+                <thead><tr><th>Producto</th><th>Cant.</th><th>P. unitario</th><th>Desc.</th><th>Total</th></tr></thead>
+                <tbody>
+                  @for (d of compra.detalles; track d.id_producto) {
+                    <tr>
+                      <td>{{ d.producto?.nombre ?? d.descripcion ?? ('Producto #' + d.id_producto) }}</td>
+                      <td>{{ d.cantidad }}</td>
+                      <td>{{ d.precio_unitario | money }}</td>
+                      <td>{{ d.descuento | money }}</td>
+                      <td>{{ d.total | money }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <p><strong>Total: {{ compra.total | money }}</strong>
+                @if (compra.pagos?.length) {
+                  · Pagado con {{ paymentMethods(compra) }}
+                }
+              </p>
+            </section>
+          </div>
+        }
 
         @if (activeTab === 'pagos') {
           @if (loadingPayments) {

@@ -41,6 +41,8 @@ interface SalesSummaryReportResponse {
     monto_vendido: number;
     ticket_promedio: number;
     productos_vendidos: number;
+    devoluciones?: number;
+    ventas_netas?: number;
   };
 }
 
@@ -63,6 +65,8 @@ interface SalesSummaryReportView {
     amount: string;
     averageTicket: string;
     productsSold: number;
+    returns?: string;
+    netAmount?: string;
   };
 }
 
@@ -1025,6 +1029,8 @@ export class StaticReports {
         amount: this.formatCurrency(totalEmpresa.monto_vendido),
         averageTicket: this.formatCurrency(totalEmpresa.ticket_promedio),
         productsSold: totalEmpresa.productos_vendidos,
+        returns: this.formatCurrency(totalEmpresa.devoluciones ?? 0),
+        netAmount: this.formatCurrency(totalEmpresa.ventas_netas ?? totalEmpresa.monto_vendido),
       },
     };
   }

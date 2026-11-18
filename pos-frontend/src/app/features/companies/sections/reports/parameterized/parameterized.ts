@@ -221,6 +221,13 @@ export class ParameterizedReports implements OnInit {
             { label: 'Total de ventas realizadas', value: this.indicatorValue(response, 'cantidad_ventas') },
             { label: 'Monto total vendido', value: formatCurrency(this.indicatorValue(response, 'monto_total')) },
             { label: 'Productos vendidos (unidades)', value: this.indicatorValue(response, 'productos_vendidos') },
+            // HU-15/HU-22: devoluciones parciales y ventas netas (cuando el filtro es por periodo/sucursal).
+            ...(this.hasIndicator(response, 'ventas_netas')
+              ? [
+                  { label: 'Devoluciones', value: formatCurrency(this.indicatorValue(response, 'devoluciones')) },
+                  { label: 'Ventas netas', value: formatCurrency(this.indicatorValue(response, 'ventas_netas')) },
+                ]
+              : []),
           ],
           details: (response.detalle_analitico || []).map((item: any) => ({
             nro: item.numero_venta,
@@ -435,6 +442,10 @@ export class ParameterizedReports implements OnInit {
   }
 
   /** Lee un indicador del resumen gerencial por su clave estable (no por el texto de la etiqueta). */
+  private hasIndicator(response: any, key: string): boolean {
+    return (response?.resumen_gerencial ?? []).some((indicator: any) => indicator?.clave === key);
+  }
+
   private indicatorValue(response: any, key: string): number {
     const item = (response?.resumen_gerencial ?? []).find((indicator: any) => indicator?.clave === key);
     const value = Number(item?.valor ?? 0);

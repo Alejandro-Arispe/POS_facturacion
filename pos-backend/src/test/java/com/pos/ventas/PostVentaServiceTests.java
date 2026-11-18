@@ -29,6 +29,8 @@ import com.pos.usuarios.domain.Usuario;
 import com.pos.ventas.dto.VentaDtos;
 import com.pos.ventas.service.PostVentaService;
 import com.pos.ventas.service.VentaService;
+import com.pos.reportes.dto.ReporteDtos;
+import com.pos.reportes.service.ReportesService;
 
 import jakarta.persistence.EntityManager;
 
@@ -47,6 +49,7 @@ class PostVentaServiceTests {
     @Autowired DemoAccountSeeder seeder;
     @Autowired VentaService ventas;
     @Autowired PostVentaService postVenta;
+    @Autowired ReportesService reportes;
     @Autowired EntityManager em;
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate tx;
@@ -140,6 +143,23 @@ class PostVentaServiceTests {
         vender(1, cliente, saldoMetodo);
         assertThat(saldoAFavor(cliente)).isEqualByComparingTo(saldo.subtract(precio));
         assertThat(efectivoEsperado()).isEqualByComparingTo(esperadoAntesCompra);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void devolucionParcialSeRestaEnVentasNetasDelReporte() {
+        Integer idVenta = vender(2, null, efectivo);
+        postVenta.devolver(owner, idVenta, List.of(new PostVentaService.LineaDevolucion(producto, 1)), "EFECTIVO", "Producto vencido");
+        ReporteDtos.VentasParamRequest filtros = new ReporteDtos.VentasParamRequest();
+        filtros.setFechaInicial(java.time.LocalDate.now());
+        filtros.setFechaFinal(java.time.LocalDate.now());
+        filtros.setIdSucursal(sucursal);
+        var reporte = reportes.ventasParametrizado(owner, empresa, filtros);
+        var indicadores = (List<java.util.Map<String, Object>>) reporte.get("resumen_gerencial");
+        java.util.function.Function<String, Double> valor = clave -> indicadores.stream()
+                .filter(i -> clave.equals(i.get("clave"))).map(i -> ((Number) i.get("valor")).doubleValue()).findFirst().orElseThrow();
+        assertThat(valor.apply("devoluciones")).isEqualTo(precio.doubleValue());
+        assertThat(valor.apply("ventas_netas")).isEqualTo(valor.apply("monto_total") - precio.doubleValue());
     }
 
     @Test

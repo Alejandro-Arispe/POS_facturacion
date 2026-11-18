@@ -483,3 +483,5 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.report-export-actions { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }

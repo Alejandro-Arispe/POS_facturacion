@@ -615,6 +615,35 @@ public class VentaService {
                 .toList();
     }
 
+    /**
+     * HU-11: compras de un cliente en la empresa, de la mas reciente a la mas antigua. Excluye las ventas
+     * anuladas (regla de la HU) y admite un rango de fechas. Las ve el personal con "sale:read" o el propio cliente.
+     */
+    @Transactional(readOnly = true)
+    public List<VentaDtos.VentaResponse> historialCliente(Usuario usuario, Integer idEmpresa, Integer idCliente,
+            java.time.LocalDate desde, java.time.LocalDate hasta) {
+        empresaAccess.requireEmpresa(usuario, idEmpresa);
+        Cliente cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
+        if (!belongsToCompany(cliente, idEmpresa)) throw ApiException.notFound("Cliente no encontrado en esta empresa.");
+        boolean own = java.util.Objects.equals(cliente.getIdUsuario(), usuario.getIdUsuario());
+        if (!own && !rbac.resolve(usuario, idEmpresa, null).allows("sale:read"))
+            throw ApiException.forbidden("No tiene permiso para consultar las compras de este cliente.");
+        if (desde != null && hasta != null && desde.isAfter(hasta))
+            throw ApiException.badRequest("La fecha inicial no puede ser posterior a la final.");
+        LocalDateTime inicio = desde == null ? null : desde.atStartOfDay();
+        LocalDateTime fin = hasta == null ? null : hasta.plusDays(1).atStartOfDay();
+        return ventaRepository.findByIdCliente(idCliente).stream()
+                .filter(v -> !"ANULADA".equalsIgnoreCase(v.getEstado()))
+                .filter(v -> inicio == null || !v.getFecha().isBefore(inicio))
+                .filter(v -> fin == null || v.getFecha().isBefore(fin))
+                .filter(v -> cajaSesionRepository.findWithCajaSucursalEmpresa(v.getIdCajaSesion())
+                        .map(s -> idEmpresa.equals(s.getCaja().getSucursal().getEmpresa().getIdEmpresa())).orElse(false))
+                .sorted(java.util.Comparator.comparing(Venta::getFecha).reversed())
+                .map(this::toVentaResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<VentaDtos.CuentaPorCobrarResponse> cuentasPorCobrar(Usuario usuario, Integer idEmpresa, Integer idCliente) {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
@@ -725,6 +754,7 @@ public class VentaService {
         facturaRepository.findByVenta_IdVenta(venta.getIdVenta()).ifPresent(factura -> {
             dto.setIdFactura(factura.getIdFactura());
             dto.setCuf(factura.getCuf());
+            dto.setNumeroFactura(factura.getNumeroFactura());
             dto.setEstadoSiat(factura.getEstadoSiat());
         });
         List<VentaDtos.DetalleResponse> detalles = new ArrayList<>();

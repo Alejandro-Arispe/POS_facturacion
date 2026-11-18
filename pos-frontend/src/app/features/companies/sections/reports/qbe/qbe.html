@@ -146,6 +146,7 @@
               <p class="text-sm text-muted">{{ result.descripcion }} · {{ result.total_filas }} fila(s){{ result.truncado ? ' (limitado)' : '' }}</p>
             </div>
             <button class="btn btn-secondary" type="button" [disabled]="!result.filas.length" (click)="exportExcel()">Exportar a Excel</button>
+            <button class="btn btn-secondary" type="button" (click)="exportPdf()">Exportar a PDF</button>
           </div>
           <div class="table-shell">
             <table class="table">

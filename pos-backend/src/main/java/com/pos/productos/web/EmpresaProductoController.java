@@ -131,6 +131,15 @@ public class EmpresaProductoController {
         return ventaService.cuentasPorCobrar(SecurityUtils.currentUser(), idEmpresa, idCliente);
     }
 
+    /** HU-11: historial de compras del cliente (sin anuladas), con filtro opcional por rango de fechas. */
+    @GetMapping("/{idEmpresa}/clientes/{idCliente}/ventas")
+    public List<VentaDtos.VentaResponse> historialCompras(
+            @PathVariable Integer idEmpresa, @PathVariable Integer idCliente,
+            @RequestParam(required = false) java.time.LocalDate desde,
+            @RequestParam(required = false) java.time.LocalDate hasta) {
+        return ventaService.historialCliente(SecurityUtils.currentUser(), idEmpresa, idCliente, desde, hasta);
+    }
+
     @GetMapping("/{idEmpresa}/clientes/{idCliente}/pagos-credito")
     public List<VentaDtos.HistorialPagoResponse> historialPagos(
             @PathVariable Integer idEmpresa, @PathVariable Integer idCliente) {

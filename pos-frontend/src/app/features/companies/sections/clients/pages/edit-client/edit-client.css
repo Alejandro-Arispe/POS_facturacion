@@ -177,3 +177,9 @@
     align-items: stretch;
   }
 }
+
+/* HU-11: historial de compras */
+.purchase-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 12px 0; }
+.purchase-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / 45%); }
+.purchase-modal { width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 20px; display: grid; gap: 10px; }
+.purchase-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

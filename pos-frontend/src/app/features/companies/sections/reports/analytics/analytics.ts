@@ -1,3 +1,5 @@
+import { exportReportExcel, exportReportPdf, ReportTable } from '../../../../../shared/utils/report-export';
+import { CompanyPermissionsService } from '../../../../../core/services/company-permissions.service';
 import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -55,6 +57,7 @@ export class AnalyticsDashboard implements OnInit {
   protected readonly weekdayShort = WEEKDAY_SHORT;
   protected readonly branchIdOf = branchIdOf;
   protected days = 30;
+  protected readonly permissions = inject(CompanyPermissionsService);
   protected branchId = '';
   protected branches: Branch[] = [];
   protected data: AnalyticsResult | null = null;
@@ -292,6 +295,26 @@ export class AnalyticsDashboard implements OnInit {
   protected compact(value: number): string {
     if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
     return String(Math.round(value));
+  }
+
+  /** HU-24: exporta el ranking de productos con los indicadores y el pronostico como resumen. */
+  protected exportAnalytics(format: 'pdf' | 'excel'): void {
+    const d = this.data;
+    if (!d || !this.permissions.hasPermission('report:export')) return;
+    const branch = this.branches.find((b) => branchIdOf(b) === this.branchId);
+    const table: ReportTable = {
+      title: 'Analisis inteligente de ventas',
+      filters: [`Periodo: ultimos ${this.days} dias (${d.start} a ${d.end})`, `Sucursal: ${branch?.nombre ?? 'Todas'}`],
+      headers: ['Producto', 'Categoria', 'Unidades', 'Ingresos', 'Participacion %', 'Clase ABC'],
+      rows: d.products.map((p) => [p.product, p.category ?? '', p.units, p.revenue, p.share_pct, p.abc_class]),
+      footer: [
+        `Ingresos: ${d.kpis.revenue} ${d.currency} | Ventas: ${d.kpis.sales} | Ticket promedio: ${d.kpis.avg_ticket}`,
+        `Tendencia: ${d.trend.direction} (${d.trend.pct_per_week}% por semana)`,
+        `Pronostico ${d.forecast.length} dias: ${d.forecast_total} ${d.currency}`,
+      ],
+    };
+    const file = 'analisis-ventas';
+    if (format === 'pdf') exportReportPdf(table, file); else exportReportExcel(table, file);
   }
 }
 

@@ -166,6 +166,7 @@ public final class VentaDtos {
         private String tipoVentaNombre;
         private Integer idFactura;
         private String cuf;
+        private Integer numeroFactura;
         private String motivoAnulacion;
         private String estadoSiat;
         private List<DetalleResponse> detalles = new ArrayList<>();

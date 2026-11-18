@@ -210,7 +210,8 @@ public class ReportesService {
             Map<String, Object> sucursalDto = new LinkedHashMap<>();
             sucursalDto.put("id_sucursal", sucursal.getIdSucursal());
             sucursalDto.put("sucursal", sucursal.getNombre());
-            sucursalDto.put("ventas_dia", resumenMontos(cantidad, monto, unidades));
+            sucursalDto.put("ventas_dia", conDevoluciones(resumenMontos(cantidad, monto, unidades),
+                    devolucionesEn(empresaId, dia, dia, sucursal.getIdSucursal())));
             sucursalDto.put("top_productos", topPorSucursal.getOrDefault(sucursal.getIdSucursal(), List.of()));
             sucursalDtos.add(sucursalDto);
             totalVentas += cantidad;
@@ -221,7 +222,8 @@ public class ReportesService {
         response.put("id_empresa", empresaId);
         response.put("fecha", dia.toString());
         response.put("sucursales", sucursalDtos);
-        response.put("total_empresa", resumenMontos(totalVentas, montoVendido, productosVendidos));
+        response.put("total_empresa", conDevoluciones(resumenMontos(totalVentas, montoVendido, productosVendidos),
+                devolucionesEn(empresaId, dia, dia, null)));
         return response;
     }
 
@@ -967,13 +969,21 @@ public class ReportesService {
         aplicados.put("metodo_pago", textoFiltro(filtros.getIdMetodoPago(), "todos"));
         aplicados.put("producto", textoFiltro(filtros.getIdProducto(), "todos"));
         aplicados.put("personal", textoFiltro(filtros.getIdUsuario(), "todos"));
-        return respuestaParametrizada(empresa, aplicados, List.of(
+        List<Map<String, Object>> indicadores = new ArrayList<>(List.of(
                 indicador("cantidad_ventas", "Cantidad de ventas", detalle.size()),
                 indicador("monto_total", "Monto total", round(total)),
                 indicador("productos_vendidos",
                         filtros.getIdProducto() == null ? "Productos vendidos (unidades)" : "Unidades del producto vendidas",
-                        productosVendidos)),
-                detalle);
+                        productosVendidos)));
+        // HU-15/HU-22: las devoluciones parciales se restan para obtener las ventas netas. Solo aplica cuando el
+        // filtro es por periodo y sucursal: una devolucion no tiene metodo de pago, tipo de venta ni cajero propios.
+        if (filtros.getIdProducto() == null && filtros.getIdMetodoPago() == null && filtros.getIdTipoVenta() == null
+                && filtros.getIdUsuario() == null) {
+            double devoluciones = devolucionesEn(empresaId, rango[0], rango[1], filtros.getIdSucursal());
+            indicadores.add(indicador("devoluciones", "Devoluciones", round(devoluciones)));
+            indicadores.add(indicador("ventas_netas", "Ventas netas", round(total - devoluciones)));
+        }
+        return respuestaParametrizada(empresa, aplicados, indicadores, detalle);
     }
 
     @Transactional(readOnly = true)
@@ -1570,6 +1580,33 @@ public class ReportesService {
             grupos.computeIfAbsent(aIntStatic(fila.get("id_sucursal")), k -> new ArrayList<>()).add(fila);
         }
         return grupos;
+    }
+
+    /**
+     * Monto devuelto (HU-15) en el periodo por devoluciones parciales. Las ventas devueltas por completo ya quedan
+     * fuera de los reportes (estado DEVUELTA), asi que sus devoluciones no se restan otra vez.
+     */
+    private double devolucionesEn(Integer empresaId, LocalDate desde, LocalDate hasta, Integer idSucursal) {
+        Map<String, Object> params = paramsRango(empresaId, desde, hasta);
+        StringBuilder jpql = new StringBuilder("""
+                select coalesce(sum(d.monto), 0) from Devolucion d, CajaSesion cs
+                join cs.caja c join c.sucursal s
+                where d.venta.idCajaSesion = cs.idCajaSesion
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and d.fecha between :desde and :hasta
+                  and upper(d.venta.estado) not in ('ANULADA', 'CANCELADA', 'DEVUELTA')
+                """);
+        if (idSucursal != null) {
+            jpql.append(" and s.idSucursal = :idSucursal");
+            params.put("idSucursal", idSucursal);
+        }
+        return aDouble(consulta(jpql.toString(), Object.class, params).getSingleResult());
+    }
+
+    private static Map<String, Object> conDevoluciones(Map<String, Object> resumen, double devoluciones) {
+        resumen.put("devoluciones", round(devoluciones));
+        resumen.put("ventas_netas", round(((Number) resumen.get("monto_vendido")).doubleValue() - devoluciones));
+        return resumen;
     }
 
     private Map<String, Object> resumenMontos(int cantidad, double monto, int unidades) {
