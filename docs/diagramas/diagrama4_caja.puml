@@ -1,0 +1,41 @@
+@startuml diagrama4_caja
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+actor "Cajero" as C
+participant "CajaPage" as CP
+participant "CajaController" as CC
+participant "CajaService" as CS
+participant "SesionCajaRepository" as SR
+
+C -> CP : inicia turno, ingresa monto inicial
+CP -> CC : POST /api/ventas/sesiones\n{montoInicial}
+activate CC
+CC -> CS : abrirSesion(cajero, montoInicial)
+activate CS
+CS -> SR : save(sesion ABIERTA)
+SR --> CS : SesionCaja
+CS --> CC : SesionDto
+deactivate CS
+CC --> CP : 200 OK {idSesion}
+deactivate CC
+CP --> C : caja ABIERTA
+
+loop durante el turno
+  C -> CP : registra ventas / movimientos
+end
+
+C -> CP : solicita cierre de caja
+CP -> CC : POST /api/ventas/sesiones/{id}/cerrar
+activate CC
+CC -> CS : cerrarSesion(idSesion)
+activate CS
+CS -> CS : calcular totales\n(efectivo, créditos, pagos)
+CS -> SR : update(sesion CERRADA, totales)
+SR --> CS : ok
+CS --> CC : ResumenCierreDto
+deactivate CS
+CC --> CP : 200 OK {resumen}
+deactivate CC
+CP --> C : muestra resumen de cierre
+@enduml

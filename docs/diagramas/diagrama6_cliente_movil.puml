@@ -1,0 +1,41 @@
+@startuml diagrama6_cliente_movil
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+actor "Cliente" as CL
+participant "CatalogoPage" as CAT
+participant "CarritoPage" as CAR
+participant "FacturasPage" as FAC
+participant "PedidoController" as PC
+participant "VentaController" as VC
+participant "SiatController" as SC
+participant "PedidoRepository" as PR
+
+CL -> CAT : abre catálogo
+CAT -> PC : GET /api/empresas/{id}/productos
+PC --> CAT : [{nombre, precio, disponible}]
+CAT --> CL : lista con chip Disponible/Agotado
+
+CL -> CAR : agrega productos, confirma pedido
+CAR -> PC : POST /api/pedidos/empresas/{id}\n{items}
+activate PC
+PC -> PR : save(pedido)
+PR --> PC : Pedido
+PC --> CAR : 200 OK {idPedido}
+deactivate PC
+CAR --> CL : "Pedido confirmado #N"
+
+CL -> FAC : abre Mis Facturas
+FAC -> VC : GET /api/facturas/me
+VC --> FAC : [FacturaResumenDto]
+FAC --> CL : lista de facturas
+
+CL -> FAC : toca factura → ver detalle
+FAC -> SC : GET /api/facturas/me/{id}/pdf
+activate SC
+SC -> SC : verifica que factura pertenece al cliente
+SC --> FAC : byte[] PDF
+deactivate SC
+FAC -> FAC : guarda archivo temporal
+FAC --> CL : abre visor PDF del teléfono
+@enduml

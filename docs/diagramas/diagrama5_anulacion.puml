@@ -1,0 +1,38 @@
+@startuml diagrama5_anulacion
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+actor "Administrador" as A
+participant "FacturasPage" as FP
+participant "FacturaController" as FC
+participant "SiatFacturaService" as SFS
+participant "SinSimulado\n(SIN Bolivia)" as SIN
+participant "FacturaRepository" as FR
+
+A -> FP : selecciona factura, elige motivo
+FP -> FC : PATCH /api/facturas/{id}/anular\n{motivoCodigo}
+activate FC
+FC -> SFS : anularFactura(idFactura, motivo)
+activate SFS
+SFS -> FR : findById(id)
+FR --> SFS : Factura
+alt factura ya anulada
+  SFS --> FC : throw IllegalStateException
+  FC --> FP : 400 Bad Request "ya anulada"
+else factura válida
+  SFS -> SIN : registrarEventoAnulacion(CUF, motivo)
+  activate SIN
+  SIN --> SFS : {aceptado}
+  deactivate SIN
+  SFS -> FR : update(estado ANULADA)
+  FR --> SFS : ok
+  opt MAIL_ENABLED = true
+    SFS -> SFS : notificarAnulacion(cliente)
+  end
+  SFS --> FC : FacturaDto ANULADA
+  deactivate SFS
+  FC --> FP : 200 OK {factura ANULADA}
+  deactivate FC
+  FP --> A : muestra confirmación
+end
+@enduml
