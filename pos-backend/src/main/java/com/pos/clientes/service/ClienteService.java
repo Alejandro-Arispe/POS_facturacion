@@ -58,13 +58,21 @@ public class ClienteService {
 
     @Transactional(readOnly = true)
     public List<ClienteDtos.CategoriaResponse> listarCategorias(Usuario usuario, Integer idEmpresa) {
-        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
+        // La app movil del cliente consulta las categorias de su empresa para mostrar su limite y descuento.
+        if (!esClienteActivo(usuario, idEmpresa)) empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
         return categoriaRepository.findByIdEmpresa(idEmpresa).stream().map(this::toCategoria).toList();
+    }
+
+    /** Cliente activo de la empresa: puede leer las categorias (solo lectura), no el resto de la gestion. */
+    private boolean esClienteActivo(Usuario usuario, Integer idEmpresa) {
+        return usuario != null && idEmpresa != null
+                && clienteRepository.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(usuario.getIdUsuario(), idEmpresa)
+                        .map(c -> Boolean.TRUE.equals(c.getActivo())).orElse(false);
     }
 
     @Transactional(readOnly = true)
     public ClienteDtos.CategoriaResponse obtenerCategoria(Usuario usuario, Integer idEmpresa, Integer idCategoria) {
-        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
+        if (!esClienteActivo(usuario, idEmpresa)) empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
         CategoriaCliente categoria = categoriaRepository.findById(idCategoria)
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
         if (!idEmpresa.equals(categoria.getIdEmpresa())) {
