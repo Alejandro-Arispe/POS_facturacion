@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../features/catalogo/catalogo_page.dart';
-import '../features/inicio/inicio_page.dart';
 import '../features/mis_compras/compras_page.dart';
 import '../features/mis_facturas/facturas_page.dart';
+import '../features/mis_pedidos/pedidos_page.dart';
 import '../features/profile/pages/profile_page.dart';
 
 /// Contenedor principal tras el login con la navegación inferior.
@@ -20,7 +20,7 @@ class _HomeShellState extends State<HomeShell> {
   late int _index = widget.initialIndex;
 
   static const _pages = <Widget>[
-    InicioPage(),
+    PedidosPage(),
     CatalogoPage(),
     ComprasPage(),
     FacturasPage(),
@@ -36,9 +36,9 @@ class _HomeShellState extends State<HomeShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Inicio',
+            icon: Icon(Icons.local_shipping_outlined),
+            selectedIcon: Icon(Icons.local_shipping),
+            label: 'Pedidos',
           ),
           NavigationDestination(
             icon: Icon(Icons.storefront_outlined),

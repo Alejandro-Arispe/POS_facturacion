@@ -11,6 +11,7 @@ import com.pos.common.access.*;
 import com.pos.common.exception.ApiException;
 import com.pos.common.security.SecurityUtils;
 import com.pos.productos.repo.ProductoRepository;
+import com.pos.siat.service.SiatFacturaService;
 import com.pos.ventas.domain.Factura;
 import com.pos.ventas.repo.FacturaRepository;
 import com.pos.empresas.repo.CajaSesionRepository;
@@ -23,10 +24,13 @@ public class ProtectedFilesController {
     private final EmpresaAccess access;
     private final DataReadPolicy policy;
     private final RbacResolver rbac;
+    private final SiatFacturaService siat;
     private final Path media,xml;
     public ProtectedFilesController(ProductoRepository products,FacturaRepository invoices,CajaSesionRepository sessions,
-            EmpresaAccess access,DataReadPolicy policy,RbacResolver rbac,@Value("${app.media-dir}") String media,@Value("${app.xml-dir}") String xml) {
+            EmpresaAccess access,DataReadPolicy policy,RbacResolver rbac,SiatFacturaService siat,
+            @Value("${app.media-dir}") String media,@Value("${app.xml-dir}") String xml) {
         this.products=products;this.invoices=invoices;this.sessions=sessions;this.access=access;this.policy=policy;this.rbac=rbac;
+        this.siat=siat;
         this.media=Paths.get(media).toAbsolutePath().normalize();this.xml=Paths.get(xml).toAbsolutePath().normalize();
     }
     @GetMapping("/media/products/{filename}")
@@ -42,7 +46,7 @@ public class ProtectedFilesController {
         return content(read(media,"products/"+filename),MediaType.parseMediaType(type),null);
     }
     @GetMapping("/api/facturas/{id}/{format}")
-    @Transactional(readOnly=true)
+    @Transactional
     public ResponseEntity<byte[]> invoice(@PathVariable Integer id,@PathVariable String format) {
         if(!Set.of("xml","pdf").contains(format)) throw ApiException.notFound("Formato no encontrado.");
         Factura invoice=invoices.findById(id).orElseThrow(() -> ApiException.notFound("Factura no encontrada."));
@@ -50,12 +54,17 @@ public class ProtectedFilesController {
         var branch=session.getCaja().getSucursal();
         var grants=policy.require(SecurityUtils.currentUser(),branch.getEmpresa().getIdEmpresa(),branch.getIdSucursal(),"invoice:reprint","sale:read");
         policy.productFields(grants,ProductFields.ALL.toArray(String[]::new));
-        String stored=format.equals("xml")?invoice.getXmlGenerado():invoice.getPdfGenerado();
         byte[] bytes;
-        if(format.equals("xml") && stored!=null && stored.stripLeading().startsWith("<")) bytes=stored.getBytes(StandardCharsets.UTF_8);
-        else {
-            if(stored==null || !stored.startsWith("/XMLS/")) throw ApiException.notFound("Archivo de factura no encontrado.");
-            bytes=read(xml,stored.substring("/XMLS/".length()));
+        if(format.equals("pdf")) {
+            // El PDF se guarda en Base64 (o se regenera); también se admite ruta legacy /XMLS/.
+            String stored=invoice.getPdfGenerado();
+            if(stored!=null && stored.startsWith("/XMLS/")) bytes=read(xml,stored.substring("/XMLS/".length()));
+            else bytes=siat.pdfDe(invoice);
+        } else {
+            String stored=invoice.getXmlGenerado();
+            if(stored!=null && stored.stripLeading().startsWith("<")) bytes=stored.getBytes(StandardCharsets.UTF_8);
+            else if(stored!=null && stored.startsWith("/XMLS/")) bytes=read(xml,stored.substring("/XMLS/".length()));
+            else throw ApiException.notFound("Archivo de factura no encontrado.");
         }
         return content(bytes,format.equals("xml")?MediaType.APPLICATION_XML:MediaType.APPLICATION_PDF,"factura-"+id+"."+format);
     }

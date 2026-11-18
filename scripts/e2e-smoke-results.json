@@ -1,0 +1,176 @@
+﻿[
+    {
+        "Flow":  "Infra",
+        "Step":  "GET / health",
+        "Ok":  true,
+        "Detail":  "status=ok"
+    },
+    {
+        "Flow":  "Catalogos",
+        "Step":  "GET /api/planes",
+        "Ok":  true,
+        "Detail":  "3 planes"
+    },
+    {
+        "Flow":  "Auth",
+        "Step":  "POST /api/auth/register",
+        "Ok":  true,
+        "Detail":  "activo=True"
+    },
+    {
+        "Flow":  "Auth",
+        "Step":  "Login usuario recién registrado",
+        "Ok":  true,
+        "Detail":  "token ok"
+    },
+    {
+        "Flow":  "Auth",
+        "Step":  "Login admin demo",
+        "Ok":  true,
+        "Detail":  "Bearer ok"
+    },
+    {
+        "Flow":  "Empresa",
+        "Step":  "GET mis-empresas",
+        "Ok":  true,
+        "Detail":  "id=1 nombre=Minimarket Don Carlos"
+    },
+    {
+        "Flow":  "Empresa",
+        "Step":  "GET mis-permisos",
+        "Ok":  true,
+        "Detail":  "84 permisos"
+    },
+    {
+        "Flow":  "Empresa",
+        "Step":  "GET mi-plan",
+        "Ok":  true,
+        "Detail":  "estado=Activa plan=Premium"
+    },
+    {
+        "Flow":  "Sucursales",
+        "Step":  "GET sucursales",
+        "Ok":  true,
+        "Detail":  "count=2 first=1"
+    },
+    {
+        "Flow":  "Caja",
+        "Step":  "GET cajas",
+        "Ok":  true,
+        "Detail":  "count=1 first=1"
+    },
+    {
+        "Flow":  "Catalogo",
+        "Step":  "GET productos",
+        "Ok":  true,
+        "Detail":  "count=12 prod=3 precio=16.50"
+    },
+    {
+        "Flow":  "Catalogo",
+        "Step":  "GET categorias-con-subcategorias",
+        "Ok":  true,
+        "Detail":  "count=3"
+    },
+    {
+        "Flow":  "Clientes",
+        "Step":  "GET clientes empresa",
+        "Ok":  true,
+        "Detail":  "count=9 first=1 keys=id_usuario_rol,id_usuario,id_rol,id_empresa,id_sucursal,activo,usuario,cliente"
+    },
+    {
+        "Flow":  "Inventario",
+        "Step":  "GET stock sucursal",
+        "Ok":  true,
+        "Detail":  "items=12"
+    },
+    {
+        "Flow":  "Clientes",
+        "Step":  "GET categorias-cliente",
+        "Ok":  true,
+        "Detail":  "count=2"
+    },
+    {
+        "Flow":  "Auth",
+        "Step":  "Login cajero centro",
+        "Ok":  true,
+        "Detail":  "Bearer ok"
+    },
+    {
+        "Flow":  "Ventas",
+        "Step":  "Catalogos tipo/metodo",
+        "Ok":  true,
+        "Detail":  "tipo=1 metodo=1"
+    },
+    {
+        "Flow":  "Caja",
+        "Step":  "POST abrir sesion",
+        "Ok":  true,
+        "Detail":  "sesion=63 caja=1"
+    },
+    {
+        "Flow":  "Ventas",
+        "Step":  "POST crear venta contado",
+        "Ok":  true,
+        "Detail":  "venta=122 total=16.50"
+    },
+    {
+        "Flow":  "Ventas",
+        "Step":  "GET historial sesion",
+        "Ok":  true,
+        "Detail":  "count=1"
+    },
+    {
+        "Flow":  "Caja",
+        "Step":  "POST cerrar sesion",
+        "Ok":  true,
+        "Detail":  "cerrada"
+    },
+    {
+        "Flow":  "Reportes",
+        "Step":  "GET resumenventas",
+        "Ok":  true,
+        "Detail":  "ok"
+    },
+    {
+        "Flow":  "Reportes",
+        "Step":  "GET estadoinventario",
+        "Ok":  true,
+        "Detail":  "ok"
+    },
+    {
+        "Flow":  "Reportes",
+        "Step":  "GET plantillas",
+        "Ok":  true,
+        "Detail":  "count=10"
+    },
+    {
+        "Flow":  "Usuarios",
+        "Step":  "GET personal",
+        "Ok":  true,
+        "Detail":  "ok"
+    },
+    {
+        "Flow":  "Usuarios",
+        "Step":  "GET roles",
+        "Ok":  true,
+        "Detail":  "count=3"
+    },
+    {
+        "Flow":  "Auditoria",
+        "Step":  "GET bitacora",
+        "Ok":  true,
+        "Detail":  "ok"
+    },
+    {
+        "Flow":  "Onboarding",
+        "Step":  "POST crear empresa",
+        "Ok":  true,
+        "Detail":  "id=3"
+    },
+    {
+        "Flow":  "Onboarding",
+        "Step":  "POST checkout plan gratuito",
+        "Ok":  true,
+        "Detail":  "session=free_d6e15d63-7cbe-46d5-9fe2-44cbacfa990f"
+    }
+]

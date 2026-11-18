@@ -12,6 +12,8 @@ import '../features/mis_compras/compra_detalle_page.dart';
 import '../features/mis_compras/compra_model.dart';
 import '../features/mis_facturas/factura_detalle_page.dart';
 import '../features/mis_facturas/factura_model.dart';
+import '../features/mis_pedidos/pedido_detalle_page.dart';
+import '../features/mis_pedidos/pedido_model.dart';
 import 'home_shell.dart';
 
 class AppRouter {
@@ -25,6 +27,7 @@ class AppRouter {
   static const String home = '/home';
   static const String carrito = '/carrito';
   static const String compraDetalle = '/compra-detalle';
+  static const String pedidoDetalle = '/pedido-detalle';
   static const String facturaDetalle = '/factura-detalle';
   static const String pagoCredito = '/pago-credito';
 
@@ -39,6 +42,10 @@ class AppRouter {
       case compraDetalle:
         return MaterialPageRoute(
           builder: (_) => CompraDetallePage(compra: settings.arguments as Compra),
+        );
+      case pedidoDetalle:
+        return MaterialPageRoute(
+          builder: (_) => PedidoDetallePage(pedido: settings.arguments as Pedido),
         );
       case facturaDetalle:
         return MaterialPageRoute(

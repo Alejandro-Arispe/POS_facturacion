@@ -21,7 +21,10 @@ import { FcmService } from '../../../core/notifications/fcm.service';
 import { NotificationDetailModalComponent } from '../notification-center/notification-detail-modal/notification-detail-modal.component';
 import { NotificationCenterComponent } from '../notification-center/notification-center.component';
 import { NotificationToastComponent } from '../notification-center/notification-toast/notification-toast.component';
-import { NotificationDetailModel } from '../notification-center/stock-alerts/stock-alerts';
+import {
+  NotificationDetailModel,
+  notificationAuthHeaders,
+} from '../notification-center/stock-alerts/stock-alerts';
 
 @Component({
   selector: 'app-navbar',
@@ -271,7 +274,9 @@ export class Navbar implements OnInit, OnDestroy {
     try {
       const base = this.fcmService.getApiBase();
       const responses = await Promise.all([
-        fetch(`${base}/notifications/history/empresas/${companyId}`),
+        fetch(`${base}/notifications/history/empresas/${companyId}`, {
+          headers: notificationAuthHeaders(),
+        }),
       ]);
 
       const payloads = await Promise.all(
