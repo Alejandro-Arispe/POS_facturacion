@@ -63,6 +63,19 @@ public class ProductImageStorage {
         }
     }
 
+    /** Lee una imagen guardada (/media/products/...); vacio si no existe o la ruta no es de este almacen. */
+    public java.util.Optional<byte[]> read(String storedPath) {
+        if (storedPath == null || !storedPath.startsWith("/media/products/")) return java.util.Optional.empty();
+        Path root = mediaDir.resolve("products").normalize();
+        Path file = root.resolve(storedPath.substring("/media/products/".length())).normalize();
+        if (!file.startsWith(root) || !Files.isRegularFile(file)) return java.util.Optional.empty();
+        try {
+            return java.util.Optional.of(Files.readAllBytes(file));
+        } catch (IOException ex) {
+            return java.util.Optional.empty();
+        }
+    }
+
     /** Removes only files created under this storage, for transaction rollback. */
     public void remove(String storedPath) {
         if (storedPath==null || !storedPath.startsWith("/media/products/")) return;

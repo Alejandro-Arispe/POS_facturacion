@@ -1044,3 +1044,7 @@ body.dark-theme .sale-detail-panel td:nth-child(5) { color: #2dd4bf; }
 .card-number, .card-holder { grid-column: 1 / -1; }
 
 .recommendation-confidence { color: var(--color-success, #07845c) !important; font-weight: 600; }
+
+/* Reconocimiento por camara (HU-27) */
+.vision-modal { max-width: 560px; }
+.vision-video { width: 100%; max-height: 320px; border-radius: 12px; background: #000; object-fit: cover; }

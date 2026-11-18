@@ -56,12 +56,27 @@ public class GeminiClient {
 	 * para que el llamador use su alternativa sin romper la operacion.
 	 */
 	public Optional<JsonNode> generarJson(String instrucciones, String mensaje) {
+		return generarJson(instrucciones, List.of(Map.of("text", mensaje)));
+	}
+
+	/** Parte de imagen para una consulta multimodal (Gemini acepta imagenes en linea en base64). */
+	public static Map<String, Object> imagen(String mimeType, byte[] contenido) {
+		return Map.of("inlineData", Map.of("mimeType", mimeType,
+				"data", java.util.Base64.getEncoder().encodeToString(contenido)));
+	}
+
+	public static Map<String, Object> texto(String texto) {
+		return Map.of("text", texto);
+	}
+
+	/** Igual que {@link #generarJson(String, String)} pero con varias partes (texto e imagenes). */
+	public Optional<JsonNode> generarJson(String instrucciones, List<Map<String, Object>> partes) {
 		if (!isEnabled()) {
 			return Optional.empty();
 		}
 		Map<String, Object> cuerpo = Map.of(
 				"systemInstruction", Map.of("parts", List.of(Map.of("text", instrucciones))),
-				"contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", mensaje)))),
+				"contents", List.of(Map.of("role", "user", "parts", partes)),
 				"generationConfig", Map.of(
 						"temperature", 0.1,
 						"responseMimeType", "application/json"));

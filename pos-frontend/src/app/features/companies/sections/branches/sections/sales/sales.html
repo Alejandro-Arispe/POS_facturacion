@@ -134,7 +134,8 @@
                               style="flex-grow: 1;"
                             />
                             <button type="button" class="btn btn-primary" (click)="openLoadOrderModal()">Cargar Pedido</button>
-                            <button type="button" class="btn" (click)="toggleScanner()">{{ scannerOpen ? 'Cerrar cámara' : 'Cámara' }}</button>
+                            <button type="button" class="btn" (click)="toggleScanner()" title="Leer código de barras con la cámara">{{ scannerOpen ? 'Cerrar cámara' : 'Código de barras' }}</button>
+                            <button type="button" class="btn btn-secondary" (click)="openVision()" title="Reconocer el producto con IA (Gemini)">Escanear por cámara</button>
                           </div>
                           @if (scannerOpen) {
                             <video id="barcodeVideo" autoplay muted playsinline style="width: 100%; max-height: 180px; margin-top: 8px;"></video>
@@ -1118,6 +1119,48 @@
           </button>
         </div>
       }
+    </section>
+  </div>
+}
+
+@if (visionOpen) {
+  <div class="modal-backdrop" role="presentation" (click)="closeVision()">
+    <section class="sale-detail-modal panel vision-modal" role="dialog" aria-modal="true" aria-labelledby="visionTitle"
+      (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div>
+          <span class="badge badge-success">IA · Gemini</span>
+          <h2 class="title-lg" id="visionTitle">Escanear producto por cámara</h2>
+          <p class="text-muted text-sm">Encuadra el producto y pulsa Reconocer. Si la confianza supera el 80 % se agrega solo.</p>
+        </div>
+        <button class="modal-close" type="button" aria-label="Cerrar" (click)="closeVision()">&times;</button>
+      </header>
+      <video id="visionVideo" class="vision-video" autoplay muted playsinline></video>
+      @if (visionError) {
+        <p class="feedback feedback-error">{{ visionError }}</p>
+      }
+      @if (visionResult; as r) {
+        <p class="feedback" [class.feedback-success]="r.estado === 'IDENTIFICADO'" [class.feedback-error]="r.estado === 'NO_IDENTIFICADO'">
+          {{ r.mensaje }}
+          @if (r.tiempo_ms) { <small class="text-muted"> ({{ (r.tiempo_ms / 1000) | number: '1.1-1' }} s)</small> }
+        </p>
+        @if (r.estado === 'COINCIDENCIAS') {
+          <div class="product-results" aria-label="Coincidencias">
+            @for (item of r.coincidencias; track item.id_producto) {
+              <button class="product-result" type="button" (click)="addRecognized(item.id_producto); closeVision()">
+                <span class="product-info"><strong>{{ item.nombre }}</strong><small>{{ item.motivo }}</small></span>
+                <span class="product-meta"><strong>{{ (item.confianza * 100) | number: '1.0-0' }}%</strong></span>
+              </button>
+            }
+          </div>
+        }
+      }
+      <div class="payment-actions">
+        <button class="btn btn-secondary" type="button" (click)="closeVision()">Cerrar</button>
+        <button class="btn btn-primary" type="button" [disabled]="visionBusy" (click)="captureVision()">
+          {{ visionBusy ? 'Reconociendo…' : 'Reconocer producto' }}
+        </button>
+      </div>
     </section>
   </div>
 }

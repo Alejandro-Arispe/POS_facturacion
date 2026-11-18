@@ -148,6 +148,14 @@ interface CashMovementItem {
   fecha: string;
 }
 
+/** Respuesta del reconocimiento por camara (HU-27). */
+interface VisionResult {
+  estado: 'IDENTIFICADO' | 'COINCIDENCIAS' | 'NO_IDENTIFICADO';
+  mensaje: string;
+  tiempo_ms?: number;
+  coincidencias: Array<{ id_producto: number; nombre: string; confianza: number; motivo?: string }>;
+}
+
 interface PostSaleItem {
   idProducto: number;
   descripcion: string;
@@ -789,6 +797,85 @@ export class Sales implements OnInit {
       this.registerError = 'No se pudo abrir la cámara.';
       this.stopScanner();
     }
+  }
+
+  // --- HU-27: reconocimiento de productos por camara (Gemini) -----------------------------------
+  protected visionOpen = false;
+  protected visionBusy = false;
+  protected visionError = '';
+  protected visionResult: VisionResult | null = null;
+  private visionStream: MediaStream | null = null;
+
+  protected async openVision(): Promise<void> {
+    if (this.scannerOpen) this.stopScanner();
+    this.visionOpen = true;
+    this.visionError = '';
+    this.visionResult = null;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.visionError = 'Este navegador no permite usar la cámara.';
+      return;
+    }
+    try {
+      this.visionStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      setTimeout(() => {
+        const video = document.getElementById('visionVideo') as HTMLVideoElement | null;
+        if (video) { video.srcObject = this.visionStream; void video.play(); }
+      }, 50);
+    } catch {
+      this.visionError = 'No se pudo acceder a la cámara. Revisa los permisos del navegador.';
+    }
+    this.cdr.markForCheck();
+  }
+
+  protected closeVision(): void {
+    this.visionStream?.getTracks().forEach((track) => track.stop());
+    this.visionStream = null;
+    this.visionOpen = false;
+    this.visionBusy = false;
+  }
+
+  /** Captura un cuadro del video, lo envia al backend (Gemini) y agrega el producto si se reconoce. */
+  protected captureVision(): void {
+    const video = document.getElementById('visionVideo') as HTMLVideoElement | null;
+    if (!video || !video.videoWidth || this.visionBusy) return;
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 960 / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    this.visionBusy = true;
+    this.visionError = '';
+    this.visionResult = null;
+    canvas.toBlob((blob) => {
+      if (!blob) { this.visionBusy = false; this.visionError = 'No se pudo capturar la foto.'; this.cdr.markForCheck(); return; }
+      const form = new FormData();
+      form.append('imagen', blob, 'captura.jpg');
+      this.apiService
+        .post<VisionResult, FormData>(
+          `/api/empresas/${this.companyId}/sucursales/${this.branchId}/productos/reconocer`, form)
+        .subscribe({
+          next: (result) => {
+            this.visionBusy = false;
+            this.visionResult = result;
+            if (result.estado === 'IDENTIFICADO' && result.coincidencias[0]) this.addRecognized(result.coincidencias[0].id_producto);
+            this.cdr.markForCheck();
+          },
+          error: (error) => {
+            this.visionBusy = false;
+            this.visionError = error?.error?.detail ?? 'No se pudo reconocer el producto.';
+            this.cdr.markForCheck();
+          },
+        });
+    }, 'image/jpeg', 0.85);
+  }
+
+  protected addRecognized(idProducto: number): void {
+    const product = this.products.find((p) => p.idProducto === idProducto);
+    if (!product) {
+      this.visionError = 'El producto reconocido no tiene stock en esta sucursal.';
+      return;
+    }
+    this.addProduct(product);
   }
 
   private stopScanner(): void {
