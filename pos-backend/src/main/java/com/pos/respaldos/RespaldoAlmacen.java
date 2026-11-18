@@ -26,7 +26,7 @@ import com.pos.common.exception.ApiException;
 public class RespaldoAlmacen {
 
     static final DateTimeFormatter FORMATO = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    private static final Pattern NOMBRE_SEGURO = Pattern.compile("^[0-9\\-]+.*\\.json$");
+    private static final Pattern NOMBRE_SEGURO = Pattern.compile("^[0-9\\-]+(-suc-\\d+)?(-\\d+)?\\.json$");
     private static final Pattern FECHA_EN_NOMBRE = Pattern.compile("^(\\d{8}-\\d{6})");
 
     private final ObjectMapper mapper = new ObjectMapper();
