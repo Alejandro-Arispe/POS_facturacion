@@ -121,36 +121,58 @@ export class OrdersInbox implements OnInit {
       alert('Este pedido no tiene sucursal asignada; no se puede cargar al POS.');
       return;
     }
+    if (order.estado !== 'listo_para_recoger') {
+      alert('Solo se pueden cargar al POS pedidos en estado "listo_para_recoger".');
+      return;
+    }
+    if (order.id_venta) {
+      alert('Este pedido ya fue convertido en venta.');
+      return;
+    }
 
-    // 1. Obtener cajas de esta sucursal
+    const cajasUrl = `/company/${this.companyId}/branch/${branchId}/cash-register`;
+
     this.cashRegisterService.getCajasSucursal(this.companyId.toString(), branchId.toString()).subscribe({
       next: (res) => {
         const list = Array.isArray(res) ? res : (res as any).cajas || (res as any).items || [];
-        // 2. Buscar sesion activa en cualquier caja de la sucursal asignada a este usuario
         const activeBox = list.find((c: any) => c.sesion_activa && c.sesion_activa.es_usuario_actual);
-        
-        if (activeBox && activeBox.sesion_activa) {
-          // Caja abierta por este cajero en esta sucursal -> Redirigir al POS
+        const occupiedBox = list.find((c: any) => c.sesion_activa && !c.sesion_activa.es_usuario_actual);
+
+        if (activeBox?.sesion_activa) {
           const sessionId = activeBox.sesion_activa.id_caja_sesion;
+          // Debe ir a .../sales (ruta real del POS); sin ese segmento la navegación no carga el carrito.
           this.router.navigate(
-            [`/company/${this.companyId}/branch/${branchId}/cash-register/${activeBox.id_caja}`],
+            ['/company', this.companyId, 'branch', branchId, 'cash-register', activeBox.id_caja, 'sales'],
             {
               queryParams: {
-                sessionId: sessionId,
+                sessionId,
                 section: 'sales',
-                pedido_id: order.id_pedido
-              }
-            }
+                pedido_id: order.id_pedido,
+              },
+            },
           );
-        } else {
-          // Sin caja abierta
-          alert('Debes abrir una caja en Sucursal #' + branchId + ' antes de cargar este pedido en el POS.');
+          return;
         }
+
+        if (occupiedBox) {
+          const ir = confirm(
+            `Hay una caja abierta en Sucursal #${branchId}, pero por otro usuario. ` +
+              '¿Ir a Cajas de esa sucursal?',
+          );
+          if (ir) this.router.navigateByUrl(cajasUrl);
+          return;
+        }
+
+        const ir = confirm(
+          `Debes abrir una caja en Sucursal #${branchId} antes de cargar este pedido. ` +
+            '¿Ir a Cajas ahora?',
+        );
+        if (ir) this.router.navigateByUrl(cajasUrl);
       },
       error: (err) => {
         console.error('Error verificando cajas', err);
         alert('Error al verificar estado de caja de la sucursal.');
-      }
+      },
     });
   }
 }

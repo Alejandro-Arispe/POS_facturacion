@@ -75,7 +75,11 @@ export class Navbar implements OnInit, OnDestroy {
     return titles.find(([path]) => url.includes(path))?.[1] ?? 'Punto de venta';
   }
 
-  protected get accountLabel(): string {
+  /** Cacheado para evitar NG0100 (MI → email) en el primer CD. */
+  protected readonly accountLabel: string = this.resolveAccountLabel();
+  protected readonly accountInitials: string = this.accountLabel.substring(0, 2).toUpperCase();
+
+  private resolveAccountLabel(): string {
     try {
       const token = this.authService.getAccessToken();
       if (!token) return 'Mi cuenta';
@@ -85,10 +89,6 @@ export class Navbar implements OnInit, OnDestroy {
     } catch {
       return 'Mi cuenta';
     }
-  }
-
-  protected get accountInitials(): string {
-    return this.accountLabel.substring(0, 2).toUpperCase();
   }
 
   protected get searchResults(): Array<{ label: string; commands: string[] }> {

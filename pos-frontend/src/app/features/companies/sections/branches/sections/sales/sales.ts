@@ -34,6 +34,7 @@ import {
 } from '../../../../../../core/services/product.service';
 import { ApiService } from '../../../../../../core/services/api.service';
 import { OrderService, Order } from '../../../../../../core/services/order.service';
+import { apiErrorMessage } from '../../../../../../core/utils/api-error';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
 import { SecureSrc } from '../../../../../../shared/directives/secure-src';
 import { InvoicePrintService } from '../../../../../../core/services/invoice-print.service';
@@ -275,6 +276,13 @@ export class Sales implements OnInit {
   protected loadingOrders = false;
   protected availableOrders: Order[] = [];
   protected loadedOrderId: number | null = null;
+  /** Pedido pendiente de cargar cuando termine el stock de sucursal. */
+  private pendingPedidoId: number | null = null;
+  private registerDataReady = false;
+  /** Catálogo completo (incluye stock 0) para cargar pedidos sin perder líneas. */
+  private catalogProducts: ProductSearchItem[] = [];
+  /** Cliente del pedido; se reaplica cuando llega la lista de clientes (el select no lo borre). */
+  private pendingOrderClientId: number | null = null;
 
   protected products: ProductSearchItem[] = [];
   protected recommendedProducts: ProductSearchItem[] = [];
@@ -566,18 +574,11 @@ export class Sales implements OnInit {
         this.cdr.detectChanges();
       }
 
-      // Check if pedido_id was passed
+      // Pedido desde bandeja: esperar a que el stock esté cargado (evita carrito vacío).
       const pedidoIdParam = params.get('pedido_id');
       if (pedidoIdParam) {
-        const orderIdNum = parseInt(pedidoIdParam, 10);
-        this.orderService.getOrderForPOS(parseInt(this.companyId, 10), parseInt(this.branchId, 10), orderIdNum).subscribe({
-          next: (order) => {
-            this.loadOrderIntoCart(order);
-          },
-          error: (err) => {
-            console.error('Error loading order from queryParam', err);
-          }
-        });
+        this.pendingPedidoId = parseInt(pedidoIdParam, 10);
+        this.tryLoadPendingOrder();
       }
     });
 
@@ -1219,6 +1220,7 @@ export class Sales implements OnInit {
       id_tipo_venta: this.selectedSaleTypeId,
       id_cliente: this.selectedClientId,
       id_metodo_pago: null,
+      id_pedido: this.loadedOrderId,
       factura_linea: this.onlineInvoice && this.hasPermission("invoice:issue"),
       ...this.invoiceBuyer(),
       subtotal: this.subtotal,
@@ -1247,7 +1249,7 @@ export class Sales implements OnInit {
       },
       error: (error) => {
         this.chargingSale = false;
-        this.registerError = error?.error?.detail ?? 'No se pudo registrar la venta a credito.';
+        this.registerError = apiErrorMessage(error, 'No se pudo registrar la venta a credito.');
         this.registerFieldErrors = this.fieldErrors(error);
         this.cdr.detectChanges();
       },
@@ -1374,7 +1376,7 @@ export class Sales implements OnInit {
       },
       error: (error) => {
         this.chargingSale = false;
-        this.registerError = error?.error?.detail ?? 'No se pudo registrar la venta.';
+        this.registerError = apiErrorMessage(error, 'No se pudo registrar la venta.');
         this.registerFieldErrors = this.fieldErrors(error);
         this.cdr.detectChanges();
       },
@@ -1406,6 +1408,7 @@ export class Sales implements OnInit {
     this.loadingRecommendedProducts = false;
     this.searchTerm = '';
     this.selectedClientId = null;
+    this.pendingOrderClientId = null;
     this.selectedSaleTypeId = this.getDefaultAllowedSaleTypeId();
     this.onlineInvoice = false;
     this.invoiceDocType = 1;
@@ -1600,35 +1603,65 @@ export class Sales implements OnInit {
 
   private loadRegisterData(): void {
     if(!this.companyPermissionsService.hasField('product','read','precio') || !this.companyPermissionsService.hasField('product','read','nombre')) {
-      this.products=[]; this.registerError='La búsqueda de ventas requiere acceso al nombre y precio de los productos.';return;
+      this.products=[];
+      this.registerDataReady = true;
+      this.registerError='La búsqueda de ventas requiere acceso al nombre y precio de los productos.';
+      return;
     }
     this.loadingRegisterData = true;
+    this.registerDataReady = false;
     this.registerError = '';
     this.registerFieldErrors = [];
 
     if (!this.companyId || !this.branchId) {
       this.loadingRegisterData = false;
+      this.registerDataReady = true;
       this.registerError = 'No se encontro la empresa o sucursal para cargar ventas.';
       return;
     }
 
+    this.registerDataReady = false;
     this.productService.getStockSucursal(this.companyId, this.branchId).subscribe({
       next: (stock) => {
-        this.products = stock
+        this.catalogProducts = stock
           .filter(item => typeof item.precio==='number' && typeof item.nombre_producto==='string')
-          .map((item) => this.mapStockProduct(item))
-          .filter((product) => product.stock > 0);
+          .map((item) => this.mapStockProduct(item));
+        this.products = this.catalogProducts.filter((product) => product.stock > 0);
         this.loadingRegisterData = false;
+        this.registerDataReady = true;
         this.loadClients();
+        this.tryLoadPendingOrder();
         this.cdr.detectChanges();
       },
       error: (error) => {
+        this.catalogProducts = [];
         this.products = [];
         this.loadingRegisterData = false;
-        this.registerError = error?.error?.detail ?? 'No se pudieron cargar los productos de la sucursal.';
+        this.registerDataReady = true;
+        this.registerError = apiErrorMessage(error, 'No se pudieron cargar los productos de la sucursal.');
+        this.tryLoadPendingOrder();
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private tryLoadPendingOrder(): void {
+    if (this.pendingPedidoId == null || this.loadingRegisterData || !this.registerDataReady) return;
+    if (!this.companyId || !this.branchId) return;
+
+    const orderId = this.pendingPedidoId;
+    this.pendingPedidoId = null;
+    this.orderService
+      .getOrderForPOS(parseInt(this.companyId, 10), parseInt(this.branchId, 10), orderId)
+      .subscribe({
+        next: (order) => this.loadOrderIntoCart(order),
+        error: (err) => {
+          console.error('Error loading order from queryParam', err);
+          this.registerError =
+            err?.error?.detail ?? `No se pudo cargar el pedido #${orderId} en el POS.`;
+          this.cdr.detectChanges();
+        },
+      });
   }
 
   private loadClients(): void {
@@ -1640,13 +1673,21 @@ export class Sales implements OnInit {
     this.companyService.getClientesEmpresa(this.companyId).subscribe({
       next: (clients) => {
         this.clients = clients.map((client) => this.mapClient(client));
+        this.reapplyPendingOrderClient();
         this.cdr.detectChanges();
       },
       error: () => {
         this.clients = [];
+        this.reapplyPendingOrderClient();
         this.cdr.detectChanges();
       },
     });
+  }
+
+  private reapplyPendingOrderClient(): void {
+    if (this.pendingOrderClientId == null) return;
+    this.selectedClientId = this.pendingOrderClientId;
+    this.onClientSelected(this.pendingOrderClientId);
   }
 
   private loadSaleTypes(): void {
@@ -2164,8 +2205,12 @@ export class Sales implements OnInit {
       next: (orders) => {
         // Filter orders for this branch that are ready or in prep
         const branchIdNum = parseInt(this.branchId, 10);
+        // Backend solo convierte pedidos en listo_para_recoger.
         this.availableOrders = orders.filter(
-          (o) => o.id_sucursal === branchIdNum && (o.estado === 'listo_para_recoger' || o.estado === 'en_preparacion' || o.estado === 'confirmado')
+          (o) =>
+            o.id_sucursal === branchIdNum &&
+            o.estado === 'listo_para_recoger' &&
+            !o.id_venta,
         );
         this.loadingOrders = false;
         this.cdr.detectChanges();
@@ -2183,28 +2228,86 @@ export class Sales implements OnInit {
   }
 
   protected loadOrderIntoCart(order: Order): void {
+    if (order.estado !== 'listo_para_recoger') {
+      this.registerError = `El pedido #${order.id_pedido} debe estar en "listo_para_recoger" (estado: ${order.estado}).`;
+      this.closeLoadOrderModal();
+      this.cdr.detectChanges();
+      return;
+    }
+    if (order.id_venta) {
+      this.registerError = `El pedido #${order.id_pedido} ya fue convertido en venta.`;
+      this.closeLoadOrderModal();
+      this.cdr.detectChanges();
+      return;
+    }
+    if (this.loadingRegisterData) {
+      this.pendingPedidoId = order.id_pedido;
+      this.registerMessage = `Cargando productos para el pedido #${order.id_pedido}…`;
+      this.closeLoadOrderModal();
+      this.cdr.detectChanges();
+      return;
+    }
+    if (this.catalogProducts.length === 0 && this.products.length === 0) {
+      this.registerError =
+        `No hay productos en esta sucursal para cargar el pedido #${order.id_pedido}.`;
+      this.closeLoadOrderModal();
+      this.cdr.detectChanges();
+      return;
+    }
+
     this.resetSaleForm();
     this.loadedOrderId = order.id_pedido;
-    if (order.id_cliente) {
-      this.selectedClientId = order.id_cliente;
+    // Pedido de app → emitir factura SIAT al cobrar (si el cajero tiene permiso).
+    this.onlineInvoice = this.hasPermission('invoice:issue');
+    this.pendingOrderClientId = order.id_cliente ?? null;
+    this.selectedClientId = this.pendingOrderClientId;
+    if (this.pendingOrderClientId != null) {
+      this.onClientSelected(this.pendingOrderClientId);
     }
-    
-    // Add each detail to the cart if the product exists in this branch's stock
+
+    const missing: number[] = [];
     for (const detalle of order.detalles) {
-      const productFound = this.products.find(p => p.idProducto === detalle.id_producto);
+      const productFound =
+        this.catalogProducts.find((p) => p.idProducto === detalle.id_producto) ??
+        this.products.find((p) => p.idProducto === detalle.id_producto);
       if (productFound) {
-        // We simulate adding the product
-        this.addProduct(productFound);
-        // We set the correct quantity
-        const addedItem = this.saleDetails.find(d => d.idProducto === detalle.id_producto);
-        if (addedItem) {
-          // Adjust quantity
-          addedItem.cantidad = detalle.cantidad;
-        }
+        this.upsertOrderLine(productFound, detalle.cantidad);
+      } else {
+        missing.push(detalle.id_producto);
       }
     }
-    
+
+    if (missing.length) {
+      this.registerError =
+        `Pedido #${order.id_pedido}: no se encontraron producto(s) ${missing.join(', ')}. ` +
+        'El carrito quedó incompleto; no se podrá facturar hasta igualar el pedido.';
+    } else {
+      this.registerMessage = `Pedido #${order.id_pedido} cargado. Cliente y líneas del pedido aplicados.`;
+      this.registerError = '';
+    }
+
     this.closeLoadOrderModal();
     this.cdr.detectChanges();
+  }
+
+  /** Carga líneas de pedido sin el bloqueo de stock de addProduct (el backend valida al vender). */
+  private upsertOrderLine(product: ProductSearchItem, cantidad: number): void {
+    const qty = Math.max(1, Math.floor(cantidad) || 1);
+    const existing = this.saleDetails.find((item) => item.idProducto === product.idProducto);
+    const clientDiscount = this.getClientDiscountPercentage();
+    if (existing) {
+      existing.cantidad = qty;
+      return;
+    }
+    this.saleDetails = [
+      ...this.saleDetails,
+      {
+        ...product,
+        precioCatalogo: product.precio,
+        cantidad: qty,
+        descuento: clientDiscount > 0 ? clientDiscount : 0,
+        descuentoTipo: clientDiscount > 0 ? 'percentage' : 'fixed',
+      },
+    ];
   }
 }

@@ -19,18 +19,18 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   late int _index = widget.initialIndex;
 
-  static const _pages = <Widget>[
-    PedidosPage(),
-    CatalogoPage(),
-    ComprasPage(),
-    FacturasPage(),
-    ProfilePage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      const PedidosPage(),
+      const CatalogoPage(),
+      const ComprasPage(),
+      FacturasPage(active: _index == 3),
+      const ProfilePage(),
+    ];
+
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
