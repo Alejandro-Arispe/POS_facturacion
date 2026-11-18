@@ -8,6 +8,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -17,20 +18,24 @@ import java.util.stream.Stream;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.pos.common.exception.ApiException;
 
 @Component
 public class RespaldoAlmacen {
 
     static final DateTimeFormatter FORMATO = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-    private static final Pattern NOMBRE_SEGURO = Pattern.compile("^[0-9\\-]+\\.json$");
+    private static final Pattern NOMBRE_SEGURO = Pattern.compile("^[0-9\\-]+.*\\.json$");
     private static final Pattern FECHA_EN_NOMBRE = Pattern.compile("^(\\d{8}-\\d{6})");
 
-    public String guardar(Integer idEmpresa, byte[] contenido, LocalDateTime fecha) {
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    public String guardar(Integer idEmpresa, byte[] contenido, LocalDateTime fecha, Integer idSucursal) {
         Path dir = directorio(idEmpresa);
         try {
             Files.createDirectories(dir);
-            String nombre = nombreLibre(dir, fecha);
+            String nombre = nombreLibre(dir, fecha, idSucursal);
             Path destino = resolverDentro(dir, nombre);
             Path temporal = dir.resolve(nombre + ".tmp").normalize();
             if (temporal.getParent() == null || !temporal.getParent().equals(dir)) {
@@ -55,11 +60,43 @@ public class RespaldoAlmacen {
             return List.of();
         }
         try (Stream<Path> archivos = Files.list(dir)) {
-            return archivos
-                    .filter(Files::isRegularFile)
-                    .map(path -> path.getFileName().toString())
-                    .filter(nombre -> NOMBRE_SEGURO.matcher(nombre).matches())
-                    .map(nombre -> new RespaldoRespuestas.Resumen(nombre, fechaDe(dir.resolve(nombre), nombre)))
+            List<RespaldoRespuestas.Resumen> res = new ArrayList<>();
+            for (Path path : archivos.filter(Files::isRegularFile).toList()) {
+                String nombre = path.getFileName().toString();
+                if (!NOMBRE_SEGURO.matcher(nombre).matches()) {
+                    continue;
+                }
+                long tamano = 0;
+                try {
+                    tamano = Files.size(path);
+                } catch (IOException ignored) {}
+                
+                String alcance = "EMPRESA_COMPLETA";
+                Integer idSuc = null;
+                String nomSuc = null;
+                try {
+                    byte[] bytes = Files.readAllBytes(path);
+                    JsonNode node = mapper.readTree(bytes);
+                    if (node.has("alcance")) {
+                        alcance = node.get("alcance").asText("EMPRESA_COMPLETA");
+                    }
+                    if (node.has("idSucursal") && !node.get("idSucursal").isNull()) {
+                        idSuc = node.get("idSucursal").asInt();
+                    }
+                    if (node.has("nombreSucursal") && !node.get("nombreSucursal").isNull()) {
+                        nomSuc = node.get("nombreSucursal").asText();
+                    }
+                } catch (Exception ignored) {}
+
+                res.add(new RespaldoRespuestas.Resumen(
+                        nombre,
+                        fechaDe(path, nombre),
+                        alcance,
+                        idSuc,
+                        nomSuc,
+                        tamano));
+            }
+            return res.stream()
                     .sorted(Comparator.comparing(RespaldoRespuestas.Resumen::fecha).reversed())
                     .toList();
         } catch (IOException ex) {
@@ -113,13 +150,14 @@ public class RespaldoAlmacen {
         return destino;
     }
 
-    private static String nombreLibre(Path dir, LocalDateTime fecha) {
-        String nombre = FORMATO.format(fecha) + ".json";
+    private static String nombreLibre(Path dir, LocalDateTime fecha, Integer idSucursal) {
+        String sufijo = (idSucursal != null) ? "-suc-" + idSucursal : "";
+        String nombre = FORMATO.format(fecha) + sufijo + ".json";
         if (!Files.exists(dir.resolve(nombre))) {
             return nombre;
         }
         for (int extra = 1; extra <= 20; extra++) {
-            String candidato = FORMATO.format(fecha) + "-" + extra + ".json";
+            String candidato = FORMATO.format(fecha) + sufijo + "-" + extra + ".json";
             if (!Files.exists(dir.resolve(candidato))) {
                 return candidato;
             }
@@ -136,13 +174,11 @@ public class RespaldoAlmacen {
     }
 
     private static LocalDateTime fechaDe(Path archivo, String nombre) {
-        String base = nombre.substring(0, nombre.length() - ".json".length());
-        Matcher matcher = FECHA_EN_NOMBRE.matcher(base);
+        Matcher matcher = FECHA_EN_NOMBRE.matcher(nombre);
         if (matcher.find()) {
             try {
                 return LocalDateTime.parse(matcher.group(1), FORMATO);
             } catch (DateTimeParseException ignored) {
-                // Se usa la fecha de modificación del archivo.
             }
         }
         try {

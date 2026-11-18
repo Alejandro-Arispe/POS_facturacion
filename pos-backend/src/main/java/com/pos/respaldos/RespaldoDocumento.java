@@ -8,13 +8,15 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * Foto JSON de una sola empresa. No incluye ventas: cuelgan de caja_sesion
- * (sucursal, caja, sesión, venta, detalle, factura y pagos).
- * Producto incluye costo porque la columna existe en la entidad.
+ * Foto JSON de una empresa o sucursal.
+ * Permite respaldar toda la empresa (idSucursal = null) o una sucursal específica.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RespaldoDocumento(
         Integer idEmpresa,
+        Integer idSucursal,
+        String nombreSucursal,
+        String alcance,
         LocalDateTime fecha,
         boolean incluyeVentas,
         String mensaje,
