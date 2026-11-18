@@ -22,6 +22,8 @@ import {
 import { Navbar } from '../../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../../shared/components/sidebar/sidebar';
 import { environments } from '../../../../../../../environments/environments';
+import { SiatHomologacion } from '../../../../../../../shared/components/siat-homologacion/siat-homologacion';
+import { SiatCodes } from '../../../../../../../core/services/siat.service';
 import { ProductFieldEditor } from '../../../../../../../shared/components/product-field-editor/product-field-editor';
 import {
   ProductField,
@@ -46,7 +48,7 @@ type ProductoAlta = ProductValues;
 @Component({
   selector: 'app-productos-catalog',
   standalone: true,
-  imports: [SecureSrc, MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon, ProductFieldEditor],
+  imports: [SecureSrc, MoneyPipe, FormsModule, Navbar, RouterLink, Sidebar, Icon, ProductFieldEditor, SiatHomologacion],
   templateUrl: './my-catalog.html',
   styleUrl: './my-catalog.css',
 })
@@ -74,6 +76,11 @@ export class ProductosPanel implements OnInit {
     activo: true,
   };
 
+  protected siatAlta: SiatCodes = {};
+  /** HU-04: stock inicial opcional (genera una entrada en la sucursal elegida). */
+  protected stockInicial: number | null = null;
+  protected idSucursalStock: number | null = null;
+  protected sucursalesStock: { id: number; nombre: string }[] = [];
   protected camposProducto: CamposProducto = camposProductoPorDefecto();
   protected camposCargados = false;
   protected productos: ProductoConCosto[] = [];
@@ -333,6 +340,15 @@ export class ProductosPanel implements OnInit {
     this.cargarNombreEmpresa();
     this.cargarCamposProducto();
     this.cargarDatos();
+    this.companyService.getSucursales(this.companyId).subscribe({
+      next: (branches) => {
+        this.sucursalesStock = branches
+          .map((b) => ({ id: Number(b.id_sucursal ?? b.idSucursal ?? b.id), nombre: b.nombre }))
+          .filter((b) => b.id > 0);
+        this.cdr.detectChanges();
+      },
+      error: () => (this.sucursalesStock = []),
+    });
   }
 
   protected canRead(field: ProductField): boolean {
@@ -410,6 +426,10 @@ export class ProductosPanel implements OnInit {
       this.errorGeneral = 'Completa los campos obligatorios.';
       return;
     }
+    if (!this.siatAlta.codigo_producto_sin || !this.siatAlta.codigo_unidad_medida_sin) {
+      this.errorGeneral = 'Completa la homologación SIAT: código de producto y unidad de medida SIN.';
+      return;
+    }
     if (
       this.imagenProductoSeleccionada &&
       !this.companyPermissionsService.hasField('product', 'create', 'imagen')
@@ -417,14 +437,28 @@ export class ProductosPanel implements OnInit {
       this.errorGeneral = 'No tienes permiso para establecer la imagen.';
       return;
     }
+    const stock = Number(this.stockInicial ?? 0);
+    if (stock < 0 || !Number.isInteger(stock)) {
+      this.errorGeneral = 'El stock inicial debe ser un entero no negativo.';
+      return;
+    }
+    if (stock > 0 && !this.idSucursalStock) {
+      this.errorGeneral = 'Selecciona la sucursal del stock inicial.';
+      return;
+    }
     this.guardandoProducto = true;
+    const datos = {
+      ...payload,
+      ...this.siatAlta,
+      ...(stock > 0 ? { stock_inicial: stock, id_sucursal: Number(this.idSucursalStock) } : {}),
+    };
     const request$ = this.imagenProductoSeleccionada
       ? this.productService.crearProductoConImagen(
           this.companyId,
-          payload,
+          datos,
           this.imagenProductoSeleccionada,
         )
-      : this.productService.crearProducto(this.companyId, payload);
+      : this.productService.crearProducto(this.companyId, datos);
     request$.subscribe({
       next: () => {
         this.guardandoProducto = false;
@@ -579,7 +613,10 @@ export class ProductosPanel implements OnInit {
     this.productoForm.precio = 0;
     this.productoForm.costo = null;
     this.productoForm.activo = true;
+    this.siatAlta = {};
     this.imagenProductoSeleccionada = null;
+    this.stockInicial = null;
+    this.idSucursalStock = null;
   }
 
   private limpiarMensajes(): void {

@@ -126,3 +126,5 @@
     width: 100%;
   }
 }
+
+.report-export-actions { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }

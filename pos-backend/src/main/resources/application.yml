@@ -41,6 +41,9 @@ spring:
           auth: true
           starttls:
             enable: ${SMTP_USE_TLS:true}
+          connectiontimeout: ${SMTP_CONNECT_TIMEOUT_MS:10000}
+          timeout: ${SMTP_TIMEOUT_MS:10000}
+          writetimeout: ${SMTP_WRITE_TIMEOUT_MS:10000}
 
 app:
   auth:
@@ -61,11 +64,16 @@ app:
     test-only: true
     secret-key: ${STRIPE_SECRET_KEY:}
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  mail:
+    # Envío real de correos: desactivado por defecto. Para activarlo, MAIL_ENABLED=true.
+    enabled: ${MAIL_ENABLED:false}
   mail-from: ${MAIL_FROM:cinthiacarrasco321@gmail.com}
   ai:
     gemini:
       api-key: ${GEMINI_API_KEY:}
-      model: ${GEMINI_MODEL:gemini-2.5-flash}
+      model: ${GEMINI_MODEL:gemini-3.8-flash}
+      # Modelo para el reconocimiento por camara (imagenes): rapido y multimodal.
+      vision-model: ${GEMINI_VISION_MODEL:gemini-3.1-flash-lite}
   analytics:
     url: ${ANALYTICS_URL:http://localhost:8001}
     api-key: ${ANALYTICS_API_KEY:}

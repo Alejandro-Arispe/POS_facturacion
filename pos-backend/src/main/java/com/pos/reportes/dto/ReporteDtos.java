@@ -129,6 +129,11 @@ public final class ReporteDtos {
         private Integer stock;
         private String codigo;
         private String codigoBarras;
+        private String imagen;
+        /** Regla de asociacion: proporcion de ventas con el producto del carrito que tambien lo incluyeron. */
+        private Double confianza;
+        private Double soporte;
+        private Double lift;
     }
 
     @Getter

@@ -151,6 +151,16 @@ public class InventarioService {
         return applyMovement(usuario,idEmpresa,idSucursal,payload,false);
     }
 
+    /** HU-04: stock inicial de un producto recién creado, registrado como movimiento de entrada. */
+    @Transactional
+    public void registrarStockInicial(Usuario usuario,Integer company,Integer branch,Integer product,int quantity) {
+        var type=tipoMovimientoRepository.findByNombreIgnoreCase("Entrada manual")
+            .orElseThrow(() -> ApiException.badRequest("Tipo de inventario Entrada manual no configurado."));
+        var input=new InventarioDtos.MovimientoCreate(); input.setIdProducto(product); input.setCantidad(quantity);
+        input.setIdTipoMovimiento(type.getIdTipoMovimiento()); input.setObservacion("Stock inicial");
+        crearMovimiento(usuario,company,branch,input);
+    }
+
     /** Only server-derived sale outflows use this path. There is no HTTP endpoint for it. */
     @Transactional
     public void registrarSalidaVenta(Usuario usuario,Integer company,Integer branch,Integer product,int quantity,Integer sale) {
@@ -160,6 +170,17 @@ public class InventarioService {
         if (!"salida".equalsIgnoreCase(type.getDireccion())) throw ApiException.badRequest("El movimiento Venta debe ser de salida.");
         var input=new InventarioDtos.MovimientoCreate(); input.setIdProducto(product); input.setCantidad(quantity);
         input.setIdTipoMovimiento(type.getIdTipoMovimiento()); input.setObservacion("Movimiento de la venta "+sale);
+        applyMovement(usuario,company,branch,input,true);
+    }
+
+    /** Reingreso de stock por anulacion o devolucion de una venta (HU-14/HU-15). Sin endpoint HTTP propio. */
+    @Transactional
+    public void registrarEntradaPostVenta(Usuario usuario,Integer company,Integer branch,Integer product,int quantity,String tipoNombre,String observacion) {
+        var type=tipoMovimientoRepository.findByNombreIgnoreCase(tipoNombre)
+            .orElseThrow(() -> ApiException.badRequest("Tipo de inventario "+tipoNombre+" no configurado."));
+        if (!"entrada".equalsIgnoreCase(type.getDireccion())) throw ApiException.badRequest("El movimiento "+tipoNombre+" debe ser de entrada.");
+        var input=new InventarioDtos.MovimientoCreate(); input.setIdProducto(product); input.setCantidad(quantity);
+        input.setIdTipoMovimiento(type.getIdTipoMovimiento()); input.setObservacion(observacion);
         applyMovement(usuario,company,branch,input,true);
     }
 
@@ -176,6 +197,8 @@ public class InventarioService {
         TipoMovimiento tipo = tipoMovimientoRepository.findById(payload.getIdTipoMovimiento())
                 .orElseThrow(() -> ApiException.notFound("Tipo de movimiento no encontrado."));
         if (!sale && "Venta".equalsIgnoreCase(tipo.getNombre())) throw ApiException.badRequest("Las salidas de venta se generan al registrar la venta.");
+        if (!sale && java.util.Set.of("anulacion de venta","devolucion de venta").contains(tipo.getNombre().toLowerCase(Locale.ROOT)))
+            throw ApiException.badRequest("Este movimiento se genera al anular o devolver una venta.");
         if (!Boolean.TRUE.equals(producto.getActivo())) throw ApiException.badRequest("El producto está inactivo.");
         String direccion = (tipo.getDireccion() == null ? "" : tipo.getDireccion()).trim().toLowerCase(Locale.ROOT);
         if (!direccion.equals("entrada") && !direccion.equals("salida")) {

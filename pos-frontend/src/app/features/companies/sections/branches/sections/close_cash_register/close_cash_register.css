@@ -335,3 +335,12 @@
   }
 }
 
+
+.sin-ventas {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-info, #356bdb) 12%, transparent);
+  color: var(--color-info, #356bdb);
+  font-weight: 600;
+}

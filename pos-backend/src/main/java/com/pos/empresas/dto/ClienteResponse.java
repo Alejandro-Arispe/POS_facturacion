@@ -9,5 +9,6 @@ public record ClienteResponse(
 		String codigoCliente,
 		BigDecimal saldoCredito,
 		BigDecimal limiteCredito,
-		Boolean activo) {
+		Boolean activo,
+		BigDecimal saldoAFavor) {
 }

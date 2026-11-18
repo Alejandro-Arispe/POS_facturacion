@@ -157,6 +157,16 @@
                           <td class="table-label">Productos vendidos</td>
                           <td>{{ salesSummaryReport.companyTotal.productsSold }}</td>
                         </tr>
+                        @if (salesSummaryReport.companyTotal.returns) {
+                          <tr>
+                            <td class="table-label">Devoluciones</td>
+                            <td>{{ salesSummaryReport.companyTotal.returns }}</td>
+                          </tr>
+                          <tr>
+                            <td class="table-label">Ventas netas</td>
+                            <td><strong>{{ salesSummaryReport.companyTotal.netAmount }}</strong></td>
+                          </tr>
+                        }
                       </tbody>
                     </table>
                   </div>

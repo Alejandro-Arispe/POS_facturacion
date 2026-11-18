@@ -5,6 +5,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { OnboardingService } from '../../../core/services/onboarding.service';
+import { CompanyService } from '../../../core/services/company.service';
+import { CompanyPermissionsService } from '../../../core/services/company-permissions.service';
 import { OnboardingSteps } from '../../../shared/components/onboarding-steps/onboarding-steps';
 
 @Component({
@@ -31,9 +33,60 @@ export class Login {
     private readonly authService: AuthService,
     private readonly cdr: ChangeDetectorRef,
     private readonly onboarding: OnboardingService,
+    private readonly companies: CompanyService,
+    private readonly permissions: CompanyPermissionsService,
   ) {
     this.idPlan =
       onboarding.selectPlan(route.snapshot.queryParamMap.get('plan')) ?? onboarding.plan;
+  }
+
+  /**
+   * HU-02: superadmin → panel; con una sola empresa con plan activo:
+   * admin (dashboard:read) → dashboard, cajero (sale:create) → PDV (cajas de su sucursal);
+   * en cualquier otro caso → Mis empresas.
+   */
+  private redirigirPorRol(): void {
+    const fallback = () => void this.router.navigate(['/my-companies']);
+    if (this.authService.isSuperAdmin()) {
+      void this.router.navigate(['/superadmin']);
+      return;
+    }
+    this.companies.getMisEmpresas().subscribe({
+      next: (list) => {
+        const activas = list.filter((c) =>
+          ['activo', 'activa'].includes((c.suscripcion_activa?.estado ?? '').toLowerCase()),
+        );
+        if (activas.length !== 1) return fallback();
+        const c = activas[0];
+        const id = String(c.idEmpresa ?? c.id_empresa ?? c.empresa_id ?? c.id ?? '');
+        this.companies.getMisPermisos(id).subscribe({
+          next: (access) => {
+            this.permissions.savePermissions(access.permisos);
+            this.permissions.saveActiveSubscription(access.suscripcion_activa);
+            if (this.permissions.hasPermission('dashboard:read')) {
+              void this.router.navigate(['/company', id, 'dashboard']);
+            } else if (this.permissions.hasPermission('sale:create')) {
+              this.companies.getSucursales(id).subscribe({
+                next: (branches) => {
+                  const b = branches.length === 1 ? branches[0] : null;
+                  const branchId = b ? (b.id_sucursal ?? b.idSucursal ?? b.id) : null;
+                  void this.router.navigate(
+                    branchId != null
+                      ? ['/company', id, 'branch', branchId, 'cash-register']
+                      : ['/company', id, 'branches'],
+                  );
+                },
+                error: fallback,
+              });
+            } else {
+              fallback();
+            }
+          },
+          error: fallback,
+        });
+      },
+      error: fallback,
+    });
   }
 
   protected iniciarSesion(event: SubmitEvent): void {
@@ -69,7 +122,7 @@ export class Login {
           return;
         }
 
-        void this.router.navigate(['/my-companies']);
+        this.redirigirPorRol();
       },
       error: () => {
         this.cargandoLogin = false;

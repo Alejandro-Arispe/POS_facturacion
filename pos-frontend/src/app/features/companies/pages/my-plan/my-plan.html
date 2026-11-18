@@ -1,0 +1,40 @@
+<div class="page-container">
+  <app-navbar />
+
+  <main class="edit-company-shell">
+    <section class="panel">
+      <a class="back-link" routerLink="/my-companies">Volver a Mis empresas</a>
+      <h1 class="title-xl">Mi plan</h1>
+
+      @if (cargando) {
+        <p class="feedback feedback-info">Cargando plan...</p>
+      }
+      @if (error) {
+        <p class="feedback feedback-error">{{ error }}</p>
+      }
+
+      @if (company && !cargando) {
+        <p class="text-muted">{{ company.nombre }}</p>
+        <dl class="company-data">
+          <div>
+            <dt>{{ vigente ? 'Plan actual' : 'Último plan' }}</dt>
+            <dd>{{ plan?.plan_nombre ?? 'Sin plan' }}</dd>
+          </div>
+          <div>
+            <dt>{{ vigente ? 'Vence' : 'Venció' }}</dt>
+            <dd>{{ plan ? (plan.fecha_fin ?? 'Sin vencimiento') : '—' }}</dd>
+          </div>
+          <div>
+            <dt>Estado</dt>
+            <dd>
+              <span class="badge" [class.badge-success]="vigente" [class.badge-danger]="!vigente">{{ estado }}</span>
+            </dd>
+          </div>
+        </dl>
+        @if (!vigente) {
+          <a class="btn btn-primary" routerLink="/my-companies">Renovar plan</a>
+        }
+      }
+    </section>
+  </main>
+</div>

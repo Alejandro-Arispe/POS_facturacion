@@ -1,3 +1,5 @@
+import { exportReportExcel, exportReportPdf, ReportTable } from '../../../../../shared/utils/report-export';
+import { CompanyPermissionsService } from '../../../../../core/services/company-permissions.service';
 import { watchReadPermissions } from '../../../../../core/services/watch-read-permissions';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -32,6 +34,7 @@ export class SalesPrediction implements OnInit {
   private readonly apiService = inject(ApiService);
 
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
+  protected readonly permissions = inject(CompanyPermissionsService);
   protected branches: Branch[] = [];
   protected selectedBranchId = '';
   protected loadingBranches = false;
@@ -98,5 +101,20 @@ export class SalesPrediction implements OnInit {
           this.branchesError = 'No se pudieron cargar las sucursales de la empresa.';
         },
       });
+  }
+
+  /** HU-24: exporta la prediccion de abastecimiento con la sucursal como filtro. */
+  protected exportPrediction(format: 'pdf' | 'excel'): void {
+    if (!this.permissions.hasPermission('report:export') || !this.predictionResults) return;
+    const branch = this.branches.find((b) => this.branchId(b) === String(this.selectedBranchId));
+    const table: ReportTable = {
+      title: 'Prediccion de abastecimiento (proximos 30 dias)',
+      filters: [`Sucursal: ${branch?.nombre ?? this.selectedBranchId}`],
+      headers: ['Producto', 'Vendido 30 d', 'Stock actual', 'Promedio diario', 'Prediccion 30 d', 'Comprar'],
+      rows: this.predictionResults.map((p) => [p.producto, p.vendido_ultimos_30_dias, p.stock_actual, p.promedio_diario,
+        p.prediccion_proximos_30_dias, p.recomendado_comprar]),
+    };
+    const file = 'prediccion-abastecimiento';
+    if (format === 'pdf') exportReportPdf(table, file); else exportReportExcel(table, file);
   }
 }

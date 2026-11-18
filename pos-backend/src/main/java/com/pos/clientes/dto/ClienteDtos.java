@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import jakarta.validation.constraints.NotBlank;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -18,6 +20,7 @@ public final class ClienteDtos {
     @NoArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class CategoriaCreate {
+        @NotBlank(message = "El nombre de la categoría es obligatorio.")
         private String nombre;
         private String descripcion;
         private Integer plazoCredito = 0;
@@ -31,6 +34,7 @@ public final class ClienteDtos {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class CategoriaUpdate {
         private Integer idCategoriaCliente;
+        @NotBlank(message = "El nombre de la categoría es obligatorio.")
         private String nombre;
         private String descripcion;
         private Integer plazoCredito;
@@ -87,6 +91,7 @@ public final class ClienteDtos {
         private String codigoCliente;
         private BigDecimal saldoCredito;
         private BigDecimal limiteCredito;
+        private BigDecimal saldoAFavor;
         private Boolean activo;
     }
 }

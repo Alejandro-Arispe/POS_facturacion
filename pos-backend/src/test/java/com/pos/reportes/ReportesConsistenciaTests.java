@@ -20,6 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.pos.common.exception.ApiException;
+import com.pos.common.jdbc.UtcTimestamps;
 import com.pos.common.security.PasswordService;
 import com.pos.common.seed.DemoAccountSeeder;
 import com.pos.reportes.dto.ReporteDtos;
@@ -40,7 +41,7 @@ import jakarta.persistence.EntityManager;
         "spring.datasource.url=jdbc:h2:mem:reportes;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa", "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=create-drop", "spring.config.import=",
+        "app.media-dir=target/seed-test-media", "spring.jpa.hibernate.ddl-auto=create-drop", "spring.config.import=",
         "app.superadmin.email=", "app.superadmin.password=", "app.ai.gemini.api-key="
 })
 class ReportesConsistenciaTests {
@@ -102,7 +103,8 @@ class ReportesConsistenciaTests {
                 join sucursal s on s.id_sucursal = ca.id_sucursal
                 where s.id_empresa = ? and upper(v.estado) not in ('ANULADA', 'CANCELADA')
                   and v.fecha >= ? and v.fecha < ?
-                """, Double.class, empresa, desde.atStartOfDay(), hoy.plusDays(1).atStartOfDay());
+                """, Double.class, empresa, UtcTimestamps.parametro(desde.atStartOfDay()),
+                UtcTimestamps.parametro(hoy.plusDays(1).atStartOfDay()));
         assertThat(totalParam).isEqualTo(Math.round(enBase * 100) / 100.0);
 
         // Unidades: la suma por fila es igual al indicador del resumen.

@@ -134,6 +134,15 @@
                             >
                               <app-icon name="edit" [size]="14" />Editar
                             </button>
+                            @if (!role.protegido && role.tipo !== 'SISTEMA') {
+                              <button
+                                type="button"
+                                class="btn btn-secondary !min-h-9 !px-3 !py-2 !text-xs"
+                                (click)="remove(role)"
+                              >
+                                Eliminar
+                              </button>
+                            }
                           } @else if (
                             !role.protegido &&
                             role.tipo !== 'SISTEMA' &&

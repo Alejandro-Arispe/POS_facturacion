@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -77,6 +78,12 @@ public class RolController {
     @PutMapping("/{idRol}")
     public RolDetalleResponse editar(@PathVariable Integer idRol, @RequestBody tools.jackson.databind.JsonNode body) {
         return rolService.editar(idRol, decode(body,RolUpdateRequest.class));
+    }
+
+    @DeleteMapping("/{idRol}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminar(@PathVariable Integer idRol) {
+        rolService.eliminar(idRol);
     }
 
     @PostMapping("/empresa/{idEmpresa}")

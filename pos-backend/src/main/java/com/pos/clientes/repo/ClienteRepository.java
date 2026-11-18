@@ -23,6 +23,8 @@ public interface ClienteRepository extends JpaRepository<Cliente, Integer> {
     Optional<Cliente> findFirstByIdUsuario(Integer idUsuario);
 
     boolean existsByCodigoCliente(String codigoCliente);
+
+    boolean existsByCategoriaCliente_IdCategoriaCliente(Integer idCategoriaCliente);
     Optional<Cliente> findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(Integer idUsuario,Integer idEmpresa);
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("select c from Cliente c where c.idCliente=:id")

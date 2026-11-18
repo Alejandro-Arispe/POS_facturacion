@@ -182,6 +182,15 @@ export class SuperAdminPanel implements OnInit {
     });
   }
 
+  protected deletePlan(plan: SuperAdminPlan): void {
+    if (!confirm(`¿Eliminar el plan ${plan.nombre}?`)) return;
+    this.message = '';
+    this.run(this.service.deletePlan(plan.id_plan), () => {
+      this.message = 'Plan eliminado.';
+      this.loadPlans();
+    });
+  }
+
   // ---------- Usuarios ----------
   protected get filteredUsers(): SuperAdminUser[] {
     const term = this.userSearch.trim().toLowerCase();

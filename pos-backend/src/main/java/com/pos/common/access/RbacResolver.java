@@ -11,8 +11,9 @@ import com.pos.usuarios.repo.*;
 @Transactional(readOnly = true)
 public class RbacResolver {
     public record Grants(Map<String, Permiso> permissions, Set<Integer> delegable, List<UsuarioRol> assignments) {
+        /** Only canonical codes (recurso:acción[:campo]) authorize; legacy aliases like PRODUCTO_VER never do. */
         public boolean allows(String code) {
-            return permissions.containsKey(code);
+            return code != null && PermissionCodes.isCanonical(code) && permissions.containsKey(code);
         }
     }
     private final com.pos.empresas.repo.SucursalRepository branches;

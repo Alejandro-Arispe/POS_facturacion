@@ -91,7 +91,7 @@
               </div>
               <div>
                 <dt>{{ 'Fecha de registro' | t }}</dt>
-                <dd>{{ company.fecha_registro }}</dd>
+                <dd>{{ company.fecha_registro ?? company.fecha_creacion }}</dd>
               </div>
             </dl>
 
@@ -121,6 +121,7 @@
                 [routerLink]="['/edit-company', obtenerIdEmpresa(company)]"
                 >{{ 'Editar' | t }}</a
               >
+              <a class="btn btn-secondary" [routerLink]="['/my-plan', obtenerIdEmpresa(company)]">Mi plan</a>
               @if (tienePlanActivo(company)) {
                 <button
                   type="button"

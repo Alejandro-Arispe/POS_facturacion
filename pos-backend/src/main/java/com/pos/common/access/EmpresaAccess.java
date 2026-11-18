@@ -38,7 +38,12 @@ public class EmpresaAccess {
     @Transactional(readOnly = true)
     public Empresa requireEmpresa(Usuario usuario, Integer idEmpresa) {
         Empresa empresa = requireEmpresaSinPlan(usuario, idEmpresa);
-        planPolicy.requireActive(idEmpresa);
+        if (!planPolicy.permits(idEmpresa, "")) {
+            if (planPolicy.suspenderSiVencio(idEmpresa)) {
+                throw ApiException.forbidden("Empresa suspendida: el plan venció. Renuévalo desde Mis empresas.");
+            }
+            planPolicy.requireActive(idEmpresa);
+        }
         return empresa;
     }
 

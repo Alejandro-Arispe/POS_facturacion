@@ -253,6 +253,8 @@ public class CatalogSeedRunner implements ApplicationRunner {
         seedTipoMovimiento("Ajuste positivo", "Corrige stock aumentando cantidad", "ENTRADA");
         seedTipoMovimiento("Ajuste negativo", "Corrige stock reduciendo cantidad", "SALIDA");
         seedTipoMovimiento("Merma", "Reduce stock por perdida o dano", "SALIDA");
+        seedTipoMovimiento("Anulacion de venta", "Reingresa el stock de una venta anulada", "ENTRADA");
+        seedTipoMovimiento("Devolucion de venta", "Reingresa productos devueltos por el cliente", "ENTRADA");
     }
 
     private void seedTipoMovimiento(String nombre, String descripcion, String direccion) {
@@ -283,6 +285,8 @@ public class CatalogSeedRunner implements ApplicationRunner {
         seedMetodoPago("EFECTIVO", "Pago en efectivo");
         seedMetodoPago("QR", "Pago por QR");
         seedMetodoPago("TARJETA", "Pago con tarjeta");
+        seedMetodoPago("SALDO A FAVOR", "Saldo a favor del cliente por devoluciones");
+        seedMetodoPago("TRANSFERENCIA", "Pago por transferencia bancaria");
     }
 
     private void seedMetodoPago(String nombre, String descripcion) {

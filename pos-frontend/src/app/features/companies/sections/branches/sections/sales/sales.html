@@ -77,9 +77,33 @@
               @if (registerError) {
                 <p class="feedback feedback-error">{{ registerError }}</p>
               }
+              @if (registerFieldErrors.length) {
+                <ul class="feedback feedback-error" aria-label="Errores de validacion de la factura">
+                  @for (fieldError of registerFieldErrors; track fieldError) {
+                    <li>{{ fieldError }}</li>
+                  }
+                </ul>
+              }
+
+              @if (creditAuthorizationOpen && selectedSaleTypeIsCredit) {
+                <div class="feedback credit-authorization" aria-label="Autorizacion de credito">
+                  <strong>Autorizacion de administrador</strong>
+                  <input class="input" name="creditAuthEmail" type="email" placeholder="Correo del administrador" autocomplete="off" [(ngModel)]="creditAuth.email" />
+                  <input class="input" name="creditAuthPassword" type="password" placeholder="Contrasena" autocomplete="new-password" [(ngModel)]="creditAuth.contrasena" />
+                  <input class="input" name="creditAuthReason" maxlength="500" placeholder="Motivo de la autorizacion" [(ngModel)]="creditAuth.motivo" />
+                  <button type="button" class="btn btn-secondary" (click)="cancelCreditAuthorization()">Cancelar</button>
+                </div>
+              }
 
               @if (registerMessage) {
-                <p class="feedback feedback-success">{{ registerMessage }}</p>
+                <p class="feedback feedback-success">
+                  {{ registerMessage }}
+                  @if (lastInvoiceId && hasPermission('invoice:reprint')) {
+                    <button class="btn btn-secondary" type="button" (click)="printLastInvoice()">
+                      Imprimir factura
+                    </button>
+                  }
+                </p>
               }
 
               @if (loadingRegisterData) {
@@ -110,7 +134,8 @@
                               style="flex-grow: 1;"
                             />
                             <button type="button" class="btn btn-primary" (click)="openLoadOrderModal()">Cargar Pedido</button>
-                            <button type="button" class="btn" (click)="toggleScanner()">{{ scannerOpen ? 'Cerrar cámara' : 'Cámara' }}</button>
+                            <button type="button" class="btn" (click)="toggleScanner()" title="Leer código de barras con la cámara">{{ scannerOpen ? 'Cerrar cámara' : 'Código de barras' }}</button>
+                            <button type="button" class="btn btn-secondary" (click)="openVision()" title="Reconocer el producto con IA (Gemini)">Escanear por cámara</button>
                           </div>
                           @if (scannerOpen) {
                             <video id="barcodeVideo" autoplay muted playsinline style="width: 100%; max-height: 180px; margin-top: 8px;"></video>
@@ -129,7 +154,12 @@
                           <div class="product-results" aria-label="Resultados de productos">
                             @for (product of filteredProducts; track trackProduct($index, product)) {
                               <button class="product-result" type="button" [disabled]="!hasPermission('sale:create')" (click)="addProduct(product)">
-                                <span>
+                                <span class="product-thumb">
+                                  @if (product.imagen) {
+                                    <img [secureSrc]="product.imagen" [alt]="product.nombre" width="52" height="52" loading="lazy" />
+                                  }
+                                </span>
+                                <span class="product-info">
                                   <strong>{{ product.nombre }}</strong>
                                   <small>
                                     Codigo {{ product.codigo || product.idProducto }}
@@ -150,8 +180,8 @@
 
                       <section class="recommended-products-panel" aria-label="Productos recomendados">
                         <div class="panel-section-header">
-                          <h2 class="title-md panel-heading">Productos Recomendados</h2>
-                          <span class="panel-accent-pill recommended-pill">Sugerencias</span>
+                          <h2 class="title-md panel-heading">{{ saleDetails.length === 0 ? 'Productos disponibles' : 'Los clientes también compraron…' }}</h2>
+                          <span class="panel-accent-pill recommended-pill">{{ saleDetails.length === 0 ? 'Catálogo' : 'IA · Apriori' }}</span>
                         </div>
 
                         @if (loadingRecommendedProducts) {
@@ -165,15 +195,23 @@
                         } @else if (visibleRecommendedProducts.length === 0) {
                           <section class="sales-state compact" aria-live="polite">
                             <p class="text-muted">
-                              {{ saleDetails.length === 0 ? 'No hay productos con stock en esta sucursal.' : 'No hay productos recomendados para este detalle.' }}
+                              {{ saleDetails.length === 0 ? 'No hay productos con stock en esta sucursal.' : 'Aún no hay suficientes ventas conjuntas para sugerir productos.' }}
                             </p>
                           </section>
                         } @else {
                           <div class="product-results" aria-label="Productos recomendados">
                             @for (product of visibleRecommendedProducts; track trackProduct($index, product)) {
                               <button class="product-result" type="button" [disabled]="!hasPermission('sale:create')" (click)="addProduct(product)">
-                                <span>
+                                <span class="product-thumb">
+                                  @if (product.imagen) {
+                                    <img [secureSrc]="product.imagen" [alt]="product.nombre" width="52" height="52" loading="lazy" />
+                                  }
+                                </span>
+                                <span class="product-info">
                                   <strong>{{ product.nombre }}</strong>
+                                  @if (product.confianza) {
+                                    <small class="recommendation-confidence">{{ (product.confianza * 100) | number: '1.0-0' }}% lo llevó junto</small>
+                                  }
                                   <small>
                                     Codigo {{ product.codigo || product.idProducto }}
                                     @if (product.codigoBarras) {
@@ -251,6 +289,27 @@
                             </span>
                           </label>
                         </div>
+
+                        @if (onlineInvoice) {
+                          <div class="form-group">
+                            <label class="label" for="invoiceDocType">Tipo de documento (SIN)</label>
+                            <select class="input" id="invoiceDocType" name="invoiceDocType" [(ngModel)]="invoiceDocType">
+                              @for (tipo of tiposDocumento; track tipo.codigo) {
+                                <option [ngValue]="tipo.codigo">{{ tipo.codigo }} - {{ tipo.nombre }}</option>
+                              }
+                            </select>
+                          </div>
+                          <div class="form-group">
+                            <label class="label" for="invoiceDocNumber">Número de documento</label>
+                            <input class="input" id="invoiceDocNumber" name="invoiceDocNumber" maxlength="30"
+                              placeholder="Vacío: documento del cliente" [(ngModel)]="invoiceDocNumber" />
+                          </div>
+                          <div class="form-group">
+                            <label class="label" for="invoiceBusinessName">Nombre o razón social</label>
+                            <input class="input" id="invoiceBusinessName" name="invoiceBusinessName" maxlength="200"
+                              placeholder="Vacío: nombre del cliente" [(ngModel)]="invoiceBusinessName" />
+                          </div>
+                        }
                       </section>
 
                       <section class="sale-summary-panel sale-checkout-panel" aria-label="Detalle de cobro">
@@ -314,12 +373,17 @@
                           <tbody>
                             @for (item of saleDetails; track trackDetail($index, item)) {
                               <tr>
-                                <td>
+                                <td class="detail-product">
+                                  @if (item.imagen) {
+                                    <img class="detail-thumb" [secureSrc]="item.imagen" [alt]="item.nombre" width="40" height="40" />
+                                  }
+                                  <div>
                                   <strong>{{ item.nombre }}</strong>
                                   <span class="detail-code">Codigo {{ item.codigo || item.idProducto }}</span>
                                   @if (item.codigoBarras) {
                                     <span class="detail-code">Barras {{ item.codigoBarras }}</span>
                                   }
+                                  </div>
                                 </td>
                                 <td>
                                   @if (canSetSalePrice) {
@@ -428,12 +492,13 @@
                           class="select"
                           [id]="'paymentMethod-' + paymentRow.id"
                           [name]="'paymentMethod-' + paymentRow.id"
-                          [(ngModel)]="paymentRow.metodoPagoId"
+                          [ngModel]="paymentRow.metodoPagoId"
+                          (ngModelChange)="changePaymentMethod(paymentRow, $event)"
                           [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
                         >
                           @for (paymentMethod of paymentMethods; track paymentMethod.id) {
                             <option [ngValue]="paymentMethod.id" [disabled]="isPaymentMethodDisabled(paymentRow, paymentMethod)">
-                              {{ paymentMethod.nombre }}
+                              {{ paymentMethod.nombre }}{{ isSaldoAFavorMethod(paymentMethod) ? ' (disponible ' + (selectedClientSaldoAFavor | money) + ')' : '' }}
                             </option>
                           }
                         </select>
@@ -453,6 +518,77 @@
                           (ngModelChange)="updatePaymentAmount(paymentRow, $event)"
                         />
                       </div>
+
+                      @if (isQrRow(paymentRow)) {
+                        <div class="qr-payment" role="group" aria-label="Pago por QR Simple">
+                          <label class="qr-bank">
+                            <span class="label">Banco del QR</span>
+                            <select class="select" [(ngModel)]="qrBanco" [ngModelOptions]="{ standalone: true }"
+                              (ngModelChange)="paymentRow.qrConfirmado = false; generateQr(paymentRow)">
+                              @for (banco of qrBancos; track banco) {
+                                <option [value]="banco">{{ banco }}</option>
+                              }
+                            </select>
+                          </label>
+                          @if (qrImages.get(paymentRow.id); as qr) {
+                            <img class="qr-payment-image" [src]="qr" alt="Codigo QR Simple para pagar" width="220" height="220" />
+                          }
+                          @if (qrInfo.get(paymentRow.id); as info) {
+                            <p class="qr-payment-text">
+                              <strong>QR Simple · {{ info.banco }}</strong><br />
+                              Cobro a {{ companyName || 'este comercio' }} por <strong>Bs {{ formatCurrency(paymentRow.monto ?? 0) }}</strong><br />
+                              <small>Ref. {{ info.referencia }} · Válido hasta {{ info.vence | date: 'HH:mm' }}</small>
+                            </p>
+                          }
+                          @if (paymentRow.qrConfirmado) {
+                            <p class="feedback feedback-success">Pago por QR recibido.</p>
+                          } @else {
+                            <button class="btn btn-primary" type="button" (click)="confirmQrPayment(paymentRow)">
+                              Confirmar pago recibido
+                            </button>
+                          }
+                        </div>
+                      }
+
+                      @if (isCardRow(paymentRow) && paymentRow.tarjeta; as card) {
+                        <div class="card-payment" role="group" aria-label="Pago con tarjeta">
+                          <p class="card-terminal">Terminal POS · Red ATC / Linkser (simulado)</p>
+                          @if (card.autorizacion) {
+                            <p class="feedback feedback-success">
+                              Aprobado · {{ card.marca }} {{ card.numero }} · Cód. autorización {{ card.autorizacion }}
+                            </p>
+                          } @else {
+                            <div class="card-grid">
+                              <label class="form-group card-number">
+                                <span class="label">Número de tarjeta {{ card.marca ? '(' + card.marca + ')' : '' }}</span>
+                                <input class="input" inputmode="numeric" autocomplete="off" placeholder="4111 1111 1111 1111"
+                                  [ngModel]="card.numero" (ngModelChange)="formatCardNumber(card, $event)" [ngModelOptions]="{ standalone: true }" />
+                              </label>
+                              <label class="form-group card-holder">
+                                <span class="label">Titular</span>
+                                <input class="input" autocomplete="off" placeholder="Como figura en la tarjeta"
+                                  [(ngModel)]="card.titular" [ngModelOptions]="{ standalone: true }" />
+                              </label>
+                              <label class="form-group">
+                                <span class="label">Vence (MM/AA)</span>
+                                <input class="input" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="08/29"
+                                  [(ngModel)]="card.vencimiento" [ngModelOptions]="{ standalone: true }" />
+                              </label>
+                              <label class="form-group">
+                                <span class="label">CVV</span>
+                                <input class="input" type="password" inputmode="numeric" maxlength="4" autocomplete="off"
+                                  [(ngModel)]="card.cvv" [ngModelOptions]="{ standalone: true }" />
+                              </label>
+                            </div>
+                            @if (card.error) {
+                              <p class="feedback feedback-error">{{ card.error }}</p>
+                            }
+                            <button class="btn btn-primary" type="button" [disabled]="card.procesando" (click)="authorizeCard(paymentRow)">
+                              {{ card.procesando ? 'Autorizando con el banco...' : 'Autorizar Bs ' + formatCurrency(paymentRow.monto ?? 0) }}
+                            </button>
+                          }
+                        </div>
+                      }
 
                       @if (salePaymentRows.length > 1) {
                         <button
@@ -479,6 +615,9 @@
             } @else if (activeTab === 'history' && hasPermission('sale:read')) {
               @if (salesHistoryError) {
                 <p class="feedback feedback-error">{{ salesHistoryError }}</p>
+              }
+              @if (postSaleMessage) {
+                <p class="feedback feedback-success">{{ postSaleMessage }}</p>
               }
 
               @if (loadingSalesHistory) {
@@ -524,6 +663,7 @@
                             <th>Cliente</th>
                             <th>Tipo</th>
                             <th>Estado</th>
+                            <th>Factura</th>
                             <th>Total</th>
                             <th class="text-right">Detalle</th>
                           </tr>
@@ -536,7 +676,19 @@
                               <td><strong>{{ sale.cliente }}</strong></td>
                               <td>{{ sale.tipoVenta }}</td>
                               <td>
-                                <span class="badge badge-success">{{ sale.estado }}</span>
+                                <span class="badge" [class.badge-success]="sale.estado !== 'DEVUELTA'" [class.badge-warning]="sale.estado === 'DEVUELTA'">{{ sale.estado }}</span>
+                              </td>
+                              <td>
+                                @if (sale.estadoFactura) {
+                                  <span class="badge"
+                                    [class.badge-success]="sale.estadoFactura === 'VALIDADA' || sale.estadoFactura === 'EMITIDA'"
+                                    [class.badge-info]="sale.estadoFactura === 'PENDIENTE' || sale.estadoFactura === 'OBSERVADA' || sale.estadoFactura === 'CONTINGENCIA'"
+                                    [class.badge-disabled]="sale.estadoFactura === 'ANULADA' || sale.estadoFactura === 'RECHAZADA'">
+                                    {{ sale.estadoFactura }}
+                                  </span>
+                                } @else {
+                                  <span class="text-muted">Sin factura</span>
+                                }
                               </td>
                               <td><strong>{{ sale.total | money }}</strong></td>
                               <td class="text-right">
@@ -548,6 +700,12 @@
                                 >
                                   Ver detalle
                                 </button>
+                                @if (canPostSale(sale)) {
+                                  <button type="button" class="btn btn-secondary btn-sm" (click)="openReturnSale(sale)"
+                                    title="Devolver productos de esta venta">Devolver</button>
+                                  <button type="button" class="btn btn-danger btn-sm" (click)="openAnnulSale(sale)"
+                                    title="Anular la venta completa">Anular</button>
+                                }
                               </td>
                             </tr>
                           }
@@ -879,6 +1037,130 @@
           Cerrar
         </button>
       </footer>
+    </section>
+  </div>
+}
+
+@if (postSale) {
+  <div class="modal-backdrop" role="presentation" (click)="closePostSale()">
+    <section class="sale-detail-modal panel post-sale-modal" role="dialog" aria-modal="true" aria-labelledby="postSaleTitle"
+      (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div>
+          <span class="badge" [class.badge-danger]="postSale.mode === 'anular'" [class.badge-warning]="postSale.mode === 'devolver'">
+            Venta #{{ postSale.sale.id }} · {{ postSale.sale.total | money }}
+          </span>
+          <h2 class="title-lg" id="postSaleTitle">{{ postSale.mode === 'anular' ? 'Anular venta' : 'Devolución de productos' }}</h2>
+          <p class="text-muted text-sm">
+            @if (postSale.mode === 'anular') {
+              Se repone todo el stock, se registra la salida de dinero en caja y, si tiene factura, se anula ante el SIN.
+            } @else {
+              Devolución parcial o total. Plazo: 7 días{{ postSale.vence ? ' (vence el ' + (postSale.vence | date: 'dd/MM/yyyy') + ')' : '' }}.
+            }
+          </p>
+        </div>
+        <button class="modal-close" type="button" aria-label="Cerrar" (click)="closePostSale()">&times;</button>
+      </header>
+
+      @if (postSale.loading) {
+        <p class="text-muted">Cargando productos de la venta...</p>
+      } @else {
+        @if (postSale.mode === 'devolver') {
+          @if (postSale.items.length === 0) {
+            <p class="text-muted">No quedan productos por devolver en esta venta.</p>
+          } @else {
+            <div class="table-shell">
+              <table class="table movement-table">
+                <thead><tr><th>Producto</th><th>Disponible</th><th>Precio neto</th><th>Devolver</th></tr></thead>
+                <tbody>
+                  @for (item of postSale.items; track item.idProducto) {
+                    <tr>
+                      <td>{{ item.descripcion }}</td>
+                      <td>{{ item.disponible }}</td>
+                      <td>{{ item.precio | money }}</td>
+                      <td>
+                        <input class="input post-sale-qty" type="number" min="0" [max]="item.disponible" step="1"
+                          [attr.aria-label]="'Cantidad a devolver de ' + item.descripcion"
+                          [(ngModel)]="item.cantidad" [ngModelOptions]="{ standalone: true }" />
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="post-sale-row">
+              <button class="btn btn-secondary btn-sm" type="button" (click)="returnAll()">Devolver todo</button>
+              <strong>Total a reembolsar: {{ postSaleReturnTotal | money }}</strong>
+            </div>
+            <fieldset class="post-sale-refund">
+              <legend class="label">Reembolso</legend>
+              <label><input type="radio" name="reembolso" value="EFECTIVO" [(ngModel)]="postSale.reembolso" /> Efectivo desde mi caja</label>
+              <label [class.text-muted]="!postSale.sale.clienteId">
+                <input type="radio" name="reembolso" value="SALDO_A_FAVOR" [(ngModel)]="postSale.reembolso" [disabled]="!postSale.sale.clienteId" />
+                Saldo a favor del cliente{{ postSale.sale.clienteId ? '' : ' (requiere cliente)' }}
+              </label>
+            </fieldset>
+          }
+        }
+
+        <label class="form-group">
+          <span class="label">Motivo (obligatorio)</span>
+          <textarea class="input" rows="2" maxlength="255" [(ngModel)]="postSale.motivo" [ngModelOptions]="{ standalone: true }"
+            [placeholder]="postSale.mode === 'anular' ? 'Ej.: error en el registro de la venta' : 'Ej.: producto vencido o dañado'"></textarea>
+        </label>
+        @if (postSale.error) {
+          <p class="feedback feedback-error">{{ postSale.error }}</p>
+        }
+        <div class="payment-actions">
+          <button class="btn btn-secondary" type="button" [disabled]="postSale.saving" (click)="closePostSale()">Cancelar</button>
+          <button class="btn" type="button" [class.btn-danger]="postSale.mode === 'anular'" [class.btn-primary]="postSale.mode === 'devolver'"
+            [disabled]="postSale.saving || (postSale.mode === 'devolver' && postSale.items.length === 0)" (click)="confirmPostSale()">
+            {{ postSale.saving ? 'Procesando...' : postSale.mode === 'anular' ? 'Confirmar anulación' : 'Registrar devolución' }}
+          </button>
+        </div>
+      }
+    </section>
+  </div>
+}
+
+@if (visionOpen) {
+  <div class="modal-backdrop" role="presentation" (click)="closeVision()">
+    <section class="sale-detail-modal panel vision-modal" role="dialog" aria-modal="true" aria-labelledby="visionTitle"
+      (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div>
+          <span class="badge badge-success">IA · Gemini</span>
+          <h2 class="title-lg" id="visionTitle">Escanear producto por cámara</h2>
+          <p class="text-muted text-sm">Encuadra el producto y pulsa Reconocer. Si la confianza supera el 80 % se agrega solo.</p>
+        </div>
+        <button class="modal-close" type="button" aria-label="Cerrar" (click)="closeVision()">&times;</button>
+      </header>
+      <video id="visionVideo" class="vision-video" autoplay muted playsinline></video>
+      @if (visionError) {
+        <p class="feedback feedback-error">{{ visionError }}</p>
+      }
+      @if (visionResult; as r) {
+        <p class="feedback" [class.feedback-success]="r.estado === 'IDENTIFICADO'" [class.feedback-error]="r.estado === 'NO_IDENTIFICADO'">
+          {{ r.mensaje }}
+          @if (r.tiempo_ms) { <small class="text-muted"> ({{ (r.tiempo_ms / 1000) | number: '1.1-1' }} s)</small> }
+        </p>
+        @if (r.estado === 'COINCIDENCIAS') {
+          <div class="product-results" aria-label="Coincidencias">
+            @for (item of r.coincidencias; track item.id_producto) {
+              <button class="product-result" type="button" (click)="addRecognized(item.id_producto); closeVision()">
+                <span class="product-info"><strong>{{ item.nombre }}</strong><small>{{ item.motivo }}</small></span>
+                <span class="product-meta"><strong>{{ (item.confianza * 100) | number: '1.0-0' }}%</strong></span>
+              </button>
+            }
+          </div>
+        }
+      }
+      <div class="payment-actions">
+        <button class="btn btn-secondary" type="button" (click)="closeVision()">Cerrar</button>
+        <button class="btn btn-primary" type="button" [disabled]="visionBusy" (click)="captureVision()">
+          {{ visionBusy ? 'Reconociendo…' : 'Reconocer producto' }}
+        </button>
+      </div>
     </section>
   </div>
 }

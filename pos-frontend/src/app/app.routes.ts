@@ -91,6 +91,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    path: 'my-plan/:empresa',
+    loadComponent: () => import('./features/companies/pages/my-plan/my-plan').then((m) => m.MyPlan),
+    canActivate: [authGuard],
+  },
+  {
     path: 'register-company',
     component: RegisterCompany,
     canActivate: [authGuard],

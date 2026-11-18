@@ -51,6 +51,15 @@ export interface AnalyticsInsight {
   detail: string;
 }
 
+export interface AnalyticsProductForecast {
+  product: string;
+  category: string | null;
+  units: number;
+  revenue: number;
+  recent_units: number;
+  change_pct: number | null;
+}
+
 export interface AnalyticsResult {
   company: string;
   currency: string;
@@ -60,6 +69,8 @@ export interface AnalyticsResult {
   daily: AnalyticsDailyPoint[];
   forecast: AnalyticsForecastPoint[];
   forecast_total: number;
+  /** Top de productos con mayor proyeccion para el horizonte pedido (HU-25). */
+  product_forecast?: AnalyticsProductForecast[];
   trend: { direction: string; daily_change: number; pct_per_week: number; r2: number };
   products: AnalyticsProduct[];
   categories: AnalyticsGroup[];
@@ -74,8 +85,14 @@ export interface AnalyticsResult {
 export class AnalyticsService {
   private readonly api = inject(ApiService);
 
-  analyze(companyId: string | number, days: number, branchId?: string | number | null): Observable<AnalyticsResult> {
+  analyze(
+    companyId: string | number,
+    days: number,
+    branchId?: string | number | null,
+    forecastDays?: number,
+  ): Observable<AnalyticsResult> {
     const branch = branchId ? `&id_sucursal=${branchId}` : '';
-    return this.api.get<AnalyticsResult>(`/api/reportes/${companyId}/analitica?dias=${days}${branch}`);
+    const forecast = forecastDays ? `&pronostico=${forecastDays}` : '';
+    return this.api.get<AnalyticsResult>(`/api/reportes/${companyId}/analitica?dias=${days}${branch}${forecast}`);
   }
 }

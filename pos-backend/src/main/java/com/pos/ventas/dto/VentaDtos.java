@@ -52,18 +52,63 @@ public final class VentaDtos {
     @Setter
     @NoArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class AnulacionCreate {
+        private String motivo;
+        /** Motivo SIN para anular la factura (1 a 4); por defecto 1. */
+        private Integer codigoMotivoSin;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class DevolucionItem {
+        private Integer idProducto;
+        private Integer cantidad;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class DevolucionCreate {
+        private List<DevolucionItem> items = new ArrayList<>();
+        /** EFECTIVO o SALDO_A_FAVOR. */
+        private String tipoReembolso;
+        private String motivo;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class VentaCreate {
         private Integer idTipoVenta;
         private Integer idCliente;
         private Integer idMetodoPago;
         private Integer idPedido;
         private Boolean facturaLinea = Boolean.FALSE;
+        /** Datos del comprador para la factura SIAT simulada (opcionales; se toman del cliente si faltan). */
+        private Integer codigoTipoDocumento;
+        private String numeroDocumento;
+        private String razonSocial;
         private List<PagoCreate> pagos;
         private BigDecimal subtotal;
         private BigDecimal descuentoTotal;
         private BigDecimal total;
         private String estado;
         private List<DetalleCreate> detalles = new ArrayList<>();
+        /** HU-09: credenciales del administrador que autoriza exceder el límite de crédito. */
+        private AutorizacionCreditoCreate autorizacionCredito;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class AutorizacionCreditoCreate {
+        private String email;
+        private String contrasena;
+        private String motivo;
     }
 
     @Getter
@@ -119,6 +164,11 @@ public final class VentaDtos {
         private Integer idMetodoPago;
         private CatalogoItem metodoPago;
         private String tipoVentaNombre;
+        private Integer idFactura;
+        private String cuf;
+        private Integer numeroFactura;
+        private String motivoAnulacion;
+        private String estadoSiat;
         private List<DetalleResponse> detalles = new ArrayList<>();
         private List<PagoResponse> pagos = new ArrayList<>();
     }
@@ -139,6 +189,33 @@ public final class VentaDtos {
     public static class CobroCreate {
         private Integer idCxc;
         private List<PagoCreditoItem> pagosCredito = new ArrayList<>();
+        /** Opcional: pago informado por el cliente que este cobro confirma. */
+        private Integer idPagoReportado;
+    }
+
+    /** HU-10: pago de crédito que el cliente informa desde la app (queda PENDIENTE). */
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PagoReportadoCreate {
+        private Integer idMetodoPago;
+        private BigDecimal montoPagado;
+        private String referencia;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class PagoReportadoResponse {
+        private Integer idPagoReportado;
+        private Integer idCxc;
+        private Integer idMetodoPago;
+        private BigDecimal monto;
+        private String referencia;
+        private String estado;
+        private LocalDateTime fechaReporte;
+        private LocalDateTime fechaConfirmacion;
     }
 
     @Getter
@@ -184,6 +261,18 @@ public final class VentaDtos {
     @Getter
     @Setter
     @NoArgsConstructor
+    public static class HistorialPagoResponse {
+        private Integer idCxc;
+        private Integer idVenta;
+        private Integer idPagoCredito;
+        private BigDecimal montoPagado;
+        private LocalDateTime fechaPago;
+        private CatalogoItem metodoPago;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
     public static class CuentaPorCobrarResponse {
         private Integer idCxc;
         private Integer idVenta;
@@ -194,6 +283,7 @@ public final class VentaDtos {
         private String estado;
         private VentaResponse venta;
         private List<PagoCreditoResponse> pagosCredito = new ArrayList<>();
+        private List<PagoReportadoResponse> pagosReportados = new ArrayList<>();
     }
 
     @Getter

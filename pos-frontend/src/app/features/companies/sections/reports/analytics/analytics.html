@@ -32,6 +32,12 @@
               }
             </select>
           </label>
+          @if (data && permissions.hasPermission('report:export')) {
+            <div class="report-export-actions">
+              <button class="btn btn-secondary" type="button" (click)="exportAnalytics('excel')">EXCEL</button>
+              <button class="btn btn-secondary" type="button" (click)="exportAnalytics('pdf')">PDF</button>
+            </div>
+          }
         </div>
       </header>
 

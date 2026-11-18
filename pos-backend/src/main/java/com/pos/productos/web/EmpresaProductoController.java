@@ -104,7 +104,7 @@ public class EmpresaProductoController {
 
     @PutMapping("/{idEmpresa}/categorias-cliente")
     public ClienteDtos.CategoriaResponse actualizarCategoriaColeccion(
-            @PathVariable Integer idEmpresa, @RequestBody ClienteDtos.CategoriaUpdate datos) {
+            @PathVariable Integer idEmpresa, @jakarta.validation.Valid @RequestBody ClienteDtos.CategoriaUpdate datos) {
         Integer id = datos.getIdCategoriaCliente();
         return clienteService.actualizarCategoria(SecurityUtils.currentUser(), idEmpresa, id, datos);
     }
@@ -113,7 +113,7 @@ public class EmpresaProductoController {
     public ClienteDtos.CategoriaResponse actualizarCategoria(
             @PathVariable Integer idEmpresa,
             @PathVariable Integer idCategoriaCliente,
-            @RequestBody ClienteDtos.CategoriaUpdate datos) {
+            @jakarta.validation.Valid @RequestBody ClienteDtos.CategoriaUpdate datos) {
         return clienteService.actualizarCategoria(SecurityUtils.currentUser(), idEmpresa, idCategoriaCliente, datos);
     }
 
@@ -129,5 +129,20 @@ public class EmpresaProductoController {
     public List<VentaDtos.CuentaPorCobrarResponse> cuentas(
             @PathVariable Integer idEmpresa, @PathVariable Integer idCliente) {
         return ventaService.cuentasPorCobrar(SecurityUtils.currentUser(), idEmpresa, idCliente);
+    }
+
+    /** HU-11: historial de compras del cliente (sin anuladas), con filtro opcional por rango de fechas. */
+    @GetMapping("/{idEmpresa}/clientes/{idCliente}/ventas")
+    public List<VentaDtos.VentaResponse> historialCompras(
+            @PathVariable Integer idEmpresa, @PathVariable Integer idCliente,
+            @RequestParam(required = false) java.time.LocalDate desde,
+            @RequestParam(required = false) java.time.LocalDate hasta) {
+        return ventaService.historialCliente(SecurityUtils.currentUser(), idEmpresa, idCliente, desde, hasta);
+    }
+
+    @GetMapping("/{idEmpresa}/clientes/{idCliente}/pagos-credito")
+    public List<VentaDtos.HistorialPagoResponse> historialPagos(
+            @PathVariable Integer idEmpresa, @PathVariable Integer idCliente) {
+        return ventaService.historialPagos(SecurityUtils.currentUser(), idEmpresa, idCliente);
     }
 }

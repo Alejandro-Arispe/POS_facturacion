@@ -75,9 +75,25 @@ public class UsuarioService {
         usuarioRepository.findByEmailIgnoreCase(datos.email()).ifPresent(existing -> {
             throw ApiException.badRequest("El correo electronico ya esta registrado.");
         });
+        if (datos.contrasena() == null || !datos.contrasena().matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{6,}$")) {
+            throw ApiException.badRequest("La contraseña debe tener al menos 6 caracteres e incluir una mayúscula, una minúscula y un número.");
+        }
+        String nombre = datos.nombre() == null ? "" : datos.nombre().strip();
+        String apellido = datos.apellido() == null ? "" : datos.apellido().strip();
+        String nombreCompleto = !nombre.isEmpty() && !apellido.isEmpty()
+                ? nombre + " " + apellido
+                : (datos.nombreCompleto() == null ? "" : datos.nombreCompleto().strip());
+        if (nombreCompleto.isEmpty()) {
+            throw ApiException.badRequest("El nombre y el apellido son obligatorios.");
+        }
+        if (nombre.length() > 75 || apellido.length() > 75) {
+            throw ApiException.badRequest("El nombre y el apellido admiten hasta 75 caracteres.");
+        }
 
         Persona persona = new Persona();
-        persona.setNombreCompleto(datos.nombreCompleto());
+        persona.setNombreCompleto(nombreCompleto);
+        persona.setNombre(nombre.isEmpty() ? null : nombre);
+        persona.setApellido(apellido.isEmpty() ? null : apellido);
         persona.setFechaNacimiento(datos.fechaNacimiento());
         persona.setGenero(datos.genero());
         persona.setTelefono(datos.telefono());

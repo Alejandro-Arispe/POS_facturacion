@@ -249,6 +249,21 @@ public class EmpresaService {
 				usuarioRol.getActivo());
 	}
 
+	@Transactional(readOnly = true)
+	public SuscripcionActivaResumenResponse miPlan(Integer idEmpresa) {
+		empresaAccess.requireEmpresaSinPlan(SecurityUtils.currentUser(), idEmpresa);
+		SuscripcionActivaResumenResponse activa = toSuscripcionResumen(idEmpresa);
+		if (activa != null) {
+			return activa;
+		}
+		return historialSuscripcionRepository.findByEmpresa_IdEmpresa(idEmpresa).stream()
+				.filter(hs -> hs.getFechaFin() != null && hs.getFechaFin().isBefore(LocalDate.now()))
+				.max(Comparator.comparing(HistorialSuscripcion::getFechaFin))
+				.map(hs -> new SuscripcionActivaResumenResponse("vencido", hs.getFechaFin(),
+						hs.getPlan() != null ? hs.getPlan().getNombre() : "Desconocido"))
+				.orElse(null);
+	}
+
 	private SuscripcionActivaResumenResponse toSuscripcionResumen(Integer idEmpresa) {
 		List<HistorialSuscripcion> activas = historialSuscripcionRepository.findActivasPorEmpresa(
 				idEmpresa, LocalDate.now());

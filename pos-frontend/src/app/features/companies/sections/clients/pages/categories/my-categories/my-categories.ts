@@ -144,6 +144,19 @@ export class CategoriasClientes {
       });
   }
 
+  protected eliminarCategoria(category: ClientCategory): void {
+    if (!confirm(`¿Eliminar la categoria "${category.nombre}"?`)) return;
+    this.companyService.eliminarCategoriaCliente(this.companyId, category.id).subscribe({
+      next: () => {
+        this.cargarCategorias();
+      },
+      error: (error) => {
+        // El listado no muestra errorRegistro (solo la pestaña de registro), por eso se avisa con alert.
+        alert(error?.error?.detail ?? 'No se pudo eliminar la categoria.');
+      },
+    });
+  }
+
   private cargarCategorias(): void {
     if (!this.companyId) {
       this.errorCategorias = 'No se encontro la empresa para cargar las categorias.';

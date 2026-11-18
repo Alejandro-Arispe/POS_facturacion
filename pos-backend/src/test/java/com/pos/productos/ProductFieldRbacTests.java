@@ -79,7 +79,7 @@ class ProductFieldRbacTests {
  }
  @Test void creationRequiresCreateFieldsAndNeverBorrowsUpdatePermission() throws Exception {
   permit("product:create","product:create:nombre","product:create:id_subcategoria","product:create:unidad_medida","product:update:precio");
-  String body="{\"nombre\":\"Nuevo\",\"id_subcategoria\":"+sub.getIdSubcategoria()+",\"unidad_medida\":\"Unidad\",\"precio\":30}";
+  String body="{\"nombre\":\"Nuevo\",\"id_subcategoria\":"+sub.getIdSubcategoria()+",\"unidad_medida\":\"Unidad\",\"precio\":30,\"codigo_producto_sin\":99100,\"codigo_unidad_medida_sin\":58}";
   mvc.perform(post("/api/empresas/"+company.getIdEmpresa()+"/productos").header("Authorization",auth(clerk)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
   permit("product:create","product:create:nombre","product:create:id_subcategoria","product:create:unidad_medida","product:create:precio");
   mvc.perform(post("/api/empresas/"+company.getIdEmpresa()+"/productos").header("Authorization",auth(clerk)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.id_producto").isNumber()).andExpect(jsonPath("$.precio").doesNotHaveJsonPath()).andExpect(jsonPath("$.nombre").doesNotHaveJsonPath());

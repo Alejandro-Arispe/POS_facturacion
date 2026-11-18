@@ -4,6 +4,15 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import { CompanyActiveSubscription, CompanyPermission } from './company-permissions.service';
 
+export interface ClientPaymentHistoryItem {
+  id_cxc: number;
+  id_venta: number;
+  id_pago_credito: number;
+  monto_pagado: number;
+  fecha_pago: string | null;
+  metodo_pago: { nombre?: string } | null;
+}
+
 export interface Company {
   idEmpresa?: string | number;
   id_empresa?: string | number;
@@ -364,6 +373,15 @@ export class CompanyService {
     return this.apiService.get<Company[]>('/api/empresas/mis-empresas');
   }
 
+  /** HU-29: plan activo o último vencido de la empresa. */
+  getMiPlan(
+    idEmpresa: string | number,
+  ): Observable<{ estado: string; fecha_fin: string | null; plan_nombre: string } | null> {
+    return this.apiService.get<{ estado: string; fecha_fin: string | null; plan_nombre: string } | null>(
+      `/api/empresas/${idEmpresa}/mi-plan`,
+    );
+  }
+
   getMisPermisos(
     idEmpresa: string | number,
     idSucursal?: string | number | null,
@@ -407,6 +425,10 @@ export class CompanyService {
       `/api/roles/${idRol}`,
       payload,
     );
+  }
+
+  eliminarRol(idRol: string | number): Observable<null> {
+    return this.apiService.delete<null>(`/api/roles/${idRol}`);
   }
 
   crearRol(idEmpresa: string | number, payload: CreateRoleRequest): Observable<CreateRoleResponse> {
@@ -477,6 +499,16 @@ export class CompanyService {
     return this.apiService.get<ClientRole[]>(`/api/empresas/${idEmpresa}/clientes`);
   }
 
+  /** HU-10: historial de pagos de credito del cliente. */
+  getHistorialPagosCliente(
+    idEmpresa: string | number,
+    idCliente: string | number,
+  ): Observable<ClientPaymentHistoryItem[]> {
+    return this.apiService.get<ClientPaymentHistoryItem[]>(
+      `/api/empresas/${idEmpresa}/clientes/${idCliente}/pagos-credito`,
+    );
+  }
+
   getCuentasPorCobrarCliente(
     idEmpresa: string | number,
     idCliente: string | number,
@@ -509,6 +541,11 @@ export class CompanyService {
       `/api/categorias-cliente/${idEmpresa}`,
       payload,
     );
+  }
+
+  /** HU-08: elimina una categoria de cliente (el backend la bloquea si tiene clientes). */
+  eliminarCategoriaCliente(idEmpresa: string | number, idCategoriaCliente: number): Observable<void> {
+    return this.apiService.delete<void>(`/api/categorias-cliente/${idEmpresa}/${idCategoriaCliente}`);
   }
 
   actualizarCategoriaCliente(

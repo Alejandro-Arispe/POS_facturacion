@@ -52,10 +52,10 @@ import jakarta.persistence.TypedQuery;
 public class ReportesService {
 
     /** Permiso que exige cualquier reporte (el mismo que usa el menu del frontend). */
-    private static final String PERMISO_REPORTES = "REPORTE_GENERAR";
+    private static final String PERMISO_REPORTES = "report:generate";
 
     /** Ventas que no cuentan en ningun reporte; la analitica y el QBE usan la misma lista. */
-    public static final String VENTA_VALIDA_JPQL = "upper(v.estado) not in ('ANULADA', 'CANCELADA')";
+    public static final String VENTA_VALIDA_JPQL = "upper(v.estado) not in ('ANULADA', 'CANCELADA', 'DEVUELTA')";
 
     private static final String METODO_CREDITO = "Crédito (pendiente de cobro)";
     private static final int LOTE_IN = 1000;
@@ -89,6 +89,7 @@ public class ReportesService {
               and """ + " " + VENTA_VALIDA_JPQL + "\n";
 
     private final EmpresaAccess empresaAccess;
+    private final com.pos.common.access.DataReadPolicy dataPolicy;
     private final EmpresaRepository empresaRepository;
     private final SucursalRepository sucursalRepository;
     private final ProductoRepository productoRepository;
@@ -99,13 +100,13 @@ public class ReportesService {
     private EntityManager entityManager;
 
     public ReportesService(
-            EmpresaAccess empresaAccess,
+            EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy,
             EmpresaRepository empresaRepository,
             SucursalRepository sucursalRepository,
             ProductoRepository productoRepository,
             GeminiClient geminiClient,
             PlatformTransactionManager transactionManager) {
-        this.empresaAccess = empresaAccess;
+        this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;
         this.empresaRepository = empresaRepository;
         this.sucursalRepository = sucursalRepository;
         this.productoRepository = productoRepository;
@@ -173,7 +174,7 @@ public class ReportesService {
     /** Resumen de ventas de un dia. Incluido en el plan gratuito (reportes diarios), por eso no exige plan. */
     @Transactional(readOnly = true)
     public Map<String, Object> resumenVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        requireDatos(usuario, empresaId, "sale:read", "nombre");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, Object[]> totales = totalesPorSucursal(empresaId, dia, dia);
 
@@ -209,7 +210,8 @@ public class ReportesService {
             Map<String, Object> sucursalDto = new LinkedHashMap<>();
             sucursalDto.put("id_sucursal", sucursal.getIdSucursal());
             sucursalDto.put("sucursal", sucursal.getNombre());
-            sucursalDto.put("ventas_dia", resumenMontos(cantidad, monto, unidades));
+            sucursalDto.put("ventas_dia", conDevoluciones(resumenMontos(cantidad, monto, unidades),
+                    devolucionesEn(empresaId, dia, dia, sucursal.getIdSucursal())));
             sucursalDto.put("top_productos", topPorSucursal.getOrDefault(sucursal.getIdSucursal(), List.of()));
             sucursalDtos.add(sucursalDto);
             totalVentas += cantidad;
@@ -220,14 +222,15 @@ public class ReportesService {
         response.put("id_empresa", empresaId);
         response.put("fecha", dia.toString());
         response.put("sucursales", sucursalDtos);
-        response.put("total_empresa", resumenMontos(totalVentas, montoVendido, productosVendidos));
+        response.put("total_empresa", conDevoluciones(resumenMontos(totalVentas, montoVendido, productosVendidos),
+                devolucionesEn(empresaId, dia, dia, null)));
         return response;
     }
 
     /** Detalle de ventas de un dia. Incluido en el plan gratuito (reportes diarios), por eso no exige plan. */
     @Transactional(readOnly = true)
     public Map<String, Object> detalleVentas(Usuario usuario, Integer empresaId, LocalDate fecha) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        requireDatos(usuario, empresaId, "sale:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> porSucursal = new HashMap<>();
         for (Object[] row : ventasConSucursal(empresaId, dia, dia)) {
@@ -269,6 +272,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> estadoInventario(Usuario usuario, Integer empresaId) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "inventory:read", "nombre");
         Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(filasStock(empresaId, false));
         List<Map<String, Object>> sucursalDtos = new ArrayList<>();
         Map<String, Object> total = resumenStock(List.of());
@@ -295,6 +299,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> movimientosInventario(Usuario usuario, Integer empresaId, LocalDate desde, LocalDate hasta) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "inventory_movement:read", "nombre", "id_subcategoria");
         LocalDate fin = hasta == null ? LocalDate.now() : hasta;
         LocalDate inicio = desde == null ? fin.minusDays(6) : desde;
         validarRango(inicio, fin);
@@ -328,6 +333,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> resumenCajas(Usuario usuario, Integer empresaId, LocalDate fecha) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "cash_register:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> sesionesPorSucursal = agruparPorSucursal(
                 filasSesionesCaja(empresaId, dia, dia, null, null, null));
@@ -376,6 +382,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> movimientosCaja(Usuario usuario, Integer empresaId, LocalDate fecha) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "cash_movement:read");
         LocalDate dia = fecha == null ? LocalDate.now() : fecha;
         Map<Integer, List<Map<String, Object>>> porSucursal = agruparPorSucursal(
                 filasMovimientosCaja(empresaId, dia, dia, null, null, null, null));
@@ -557,6 +564,13 @@ public class ReportesService {
     public ReporteDtos.RespuestaReporte ejecutar(Usuario usuario, Integer empresaId, String prompt) {
         requireReporte(usuario, empresaId, "reportes_avanzados");
         ReporteDtos.RespuestaInterpretacion interpretacion = interpretarPedido(prompt);
+        String id = interpretacion.getEspecificacion().getIdentificadorPlantilla();
+        if (id == null || id.isBlank()) id = "resumen_ventas";
+        String fuente = id.contains("inventario") ? "inventory_movement:read" : id.equals("alertas_stock") ? "inventory:read"
+                : id.equals("movimientos_caja") ? "cash_movement:read" : "sale:read";
+        requireDatos(usuario, empresaId, fuente);
+        if (id.contains("producto")) dataPolicy.productFields(dataPolicy.require(usuario, empresaId, null, "product:read"), "nombre", "id_subcategoria");
+        if (id.equals("ventas_detalle")) dataPolicy.require(usuario, empresaId, null, "client:read");
         return lectura.execute(status -> construirReporte(empresaId, interpretacion));
     }
 
@@ -731,6 +745,7 @@ public class ReportesService {
                 .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
         Integer idEmpresa = sucursal.getEmpresa().getIdEmpresa();
         requireReporte(usuario, idEmpresa, "predicciones");
+        dataPolicy.productFields(dataPolicy.require(usuario, idEmpresa, idSucursal, PERMISO_REPORTES, "inventory:read", "sale:read"), "nombre");
         LocalDate hoy = LocalDate.now();
         Map<String, Object> params = paramsRango(idEmpresa, hoy.minusDays(29), hoy);
         params.put("idSucursal", idSucursal);
@@ -750,6 +765,9 @@ public class ReportesService {
         List<ReporteDtos.ProductoAbastecimiento> result = new ArrayList<>();
         for (Stock stock : stocks) {
             Producto producto = stock.getProducto();
+            if (producto == null || !idEmpresa.equals(producto.getIdEmpresa())) {
+                continue;
+            }
             int vendido30 = vendidos.getOrDefault(producto.getIdProducto(), 0);
             int actual = stock.getCantidad() == null ? 0 : stock.getCantidad();
             double promedio = vendido30 / 30.0;
@@ -778,22 +796,25 @@ public class ReportesService {
             throw ApiException.notFound("Productos no encontrados.");
         }
         Integer idEmpresa = origen.get(0).getIdEmpresa();
+        if (origen.size() != new java.util.HashSet<>(ids).size()
+                || origen.stream().anyMatch(p -> !java.util.Objects.equals(idEmpresa, p.getIdEmpresa()))) {
+            throw ApiException.notFound("Productos no encontrados en una misma empresa.");
+        }
+        dataPolicy.productFields(dataPolicy.require(usuario, idEmpresa, null, "product:read", "inventory:read"),
+                "nombre", "precio", "unidad_medida", "codigo_barra", "id_subcategoria");
         empresaAccess.requirePlanFeature(usuario, idEmpresa, "predicciones");
-        Integer idSub = origen.get(0).getSubcategoria() == null ? null : origen.get(0).getSubcategoria().getIdSubcategoria();
-        List<Producto> candidatos = idSub == null
-                ? productoRepository.findByIdEmpresa(idEmpresa)
-                : productoRepository.findBySubcategoria_IdSubcategoria(idSub);
+        // HU-26: reglas de asociacion (Apriori de nivel 2) sobre las canastas de los ultimos 180 dias.
+        // Para cada producto Y fuera del carrito: confianza = ventas(X y Y) / ventas(X), con X en el carrito.
+        Map<Integer, Double[]> reglas = reglasDeAsociacion(idEmpresa, ids);
+        Map<Integer, Producto> porId = new HashMap<>();
+        if (!reglas.isEmpty()) {
+            for (Producto p : productoRepository.findByIdProductoIn(new ArrayList<>(reglas.keySet()))) porId.put(p.getIdProducto(), p);
+        }
         List<Producto> elegidos = new ArrayList<>();
-        for (Producto producto : candidatos) {
-            if (ids.contains(producto.getIdProducto())
-                    || !Boolean.TRUE.equals(producto.getActivo())
-                    || !idEmpresa.equals(producto.getIdEmpresa())) {
-                continue;
-            }
+        for (Integer candidato : reglas.keySet()) {
+            Producto producto = porId.get(candidato);
+            if (producto == null || !Boolean.TRUE.equals(producto.getActivo()) || !idEmpresa.equals(producto.getIdEmpresa())) continue;
             elegidos.add(producto);
-            if (elegidos.size() >= 8) {
-                break;
-            }
         }
         Map<Integer, Integer> stockPorProducto = new HashMap<>();
         if (!elegidos.isEmpty()) {
@@ -810,20 +831,76 @@ public class ReportesService {
         }
         List<ReporteDtos.ProductoRecomendado> recs = new ArrayList<>();
         for (Producto producto : elegidos) {
+            int stock = stockPorProducto.getOrDefault(producto.getIdProducto(), 0);
+            if (stock <= 0) continue; // Solo se sugieren productos con stock.
+            Double[] regla = reglas.get(producto.getIdProducto());
             ReporteDtos.ProductoRecomendado dto = new ReporteDtos.ProductoRecomendado();
             dto.setIdProducto(producto.getIdProducto());
             dto.setNombre(producto.getNombre());
             dto.setUnidadMedida(producto.getUnidadMedida());
             dto.setPrecio(producto.getPrecio() == null ? 0 : producto.getPrecio().doubleValue());
-            dto.setStock(stockPorProducto.getOrDefault(producto.getIdProducto(), 0));
+            dto.setStock(stock);
             dto.setCodigo(String.valueOf(producto.getIdProducto()));
             dto.setCodigoBarras(producto.getCodigoBarra());
+            dto.setImagen(producto.getImagen());
+            dto.setConfianza(round(regla[0]));
+            dto.setSoporte(round(regla[1]));
+            dto.setLift(round(regla[2]));
             recs.add(dto);
+            if (recs.size() >= MAX_RECOMENDACIONES) break;
         }
         ReporteDtos.RecomendacionResponse response = new ReporteDtos.RecomendacionResponse();
         response.setProductosAnalizados(ids);
         response.setRecomendaciones(recs);
         return response;
+    }
+
+    /** Maximo de sugerencias en el PDV ("Los clientes tambien compraron..."). */
+    private static final int MAX_RECOMENDACIONES = 3;
+    /** Una regla necesita aparecer en al menos este numero de ventas para considerarse. */
+    private static final int SOPORTE_MINIMO_VENTAS = 2;
+    private static final double CONFIANZA_MINIMA = 0.10;
+    private static final int DIAS_HISTORIAL_RECOMENDACION = 180;
+
+    /**
+     * Reglas X -> Y para los productos X del carrito. Devuelve, ordenado por confianza y lift, cada producto Y con
+     * [confianza, soporte, lift]. Si no hay suficientes ventas conjuntas la lista queda vacia y el PDV no muestra nada.
+     */
+    private Map<Integer, Double[]> reglasDeAsociacion(Integer idEmpresa, List<Integer> carrito) {
+        Map<String, Object> params = paramsRango(idEmpresa, LocalDate.now().minusDays(DIAS_HISTORIAL_RECOMENDACION), LocalDate.now());
+        Map<Integer, java.util.Set<Integer>> canastas = new HashMap<>();
+        for (Object[] row : consulta("select v.idVenta, d.idProducto" + FROM_LINEAS, Object[].class, params).getResultList()) {
+            canastas.computeIfAbsent(aInt(row[0]), k -> new java.util.HashSet<>()).add(aInt(row[1]));
+        }
+        int total = canastas.size();
+        if (total == 0) return Map.of();
+        Map<Integer, Integer> frecuencia = new HashMap<>();
+        for (var canasta : canastas.values()) for (Integer p : canasta) frecuencia.merge(p, 1, Integer::sum);
+        Map<Integer, Double[]> mejores = new HashMap<>();
+        for (Integer x : new java.util.HashSet<>(carrito)) {
+            int conX = frecuencia.getOrDefault(x, 0);
+            if (conX == 0) continue;
+            Map<Integer, Integer> conjuntas = new HashMap<>();
+            for (var canasta : canastas.values()) {
+                if (!canasta.contains(x)) continue;
+                for (Integer y : canasta) if (!carrito.contains(y)) conjuntas.merge(y, 1, Integer::sum);
+            }
+            for (var e : conjuntas.entrySet()) {
+                if (e.getValue() < SOPORTE_MINIMO_VENTAS) continue;
+                double confianza = (double) e.getValue() / conX;
+                if (confianza < CONFIANZA_MINIMA) continue;
+                double soporte = (double) e.getValue() / total;
+                double lift = confianza / ((double) frecuencia.get(e.getKey()) / total);
+                Double[] actual = mejores.get(e.getKey());
+                if (actual == null || confianza > actual[0]) mejores.put(e.getKey(), new Double[] {confianza, soporte, lift});
+            }
+        }
+        Map<Integer, Double[]> ordenado = new LinkedHashMap<>();
+        mejores.entrySet().stream()
+                .sorted((a, b) -> a.getValue()[0].equals(b.getValue()[0])
+                        ? Double.compare(b.getValue()[2], a.getValue()[2]) : Double.compare(b.getValue()[0], a.getValue()[0]))
+                .forEach(e -> ordenado.put(e.getKey(), e.getValue()));
+        return ordenado;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -833,6 +910,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> ventasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.VentasParamRequest filtros) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "sale:read");
         Empresa empresa = requireEmpresaExistente(empresaId);
         LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
         Map<String, Object> params = paramsRango(empresaId, rango[0], rango[1]);
@@ -891,18 +969,27 @@ public class ReportesService {
         aplicados.put("metodo_pago", textoFiltro(filtros.getIdMetodoPago(), "todos"));
         aplicados.put("producto", textoFiltro(filtros.getIdProducto(), "todos"));
         aplicados.put("personal", textoFiltro(filtros.getIdUsuario(), "todos"));
-        return respuestaParametrizada(empresa, aplicados, List.of(
+        List<Map<String, Object>> indicadores = new ArrayList<>(List.of(
                 indicador("cantidad_ventas", "Cantidad de ventas", detalle.size()),
                 indicador("monto_total", "Monto total", round(total)),
                 indicador("productos_vendidos",
                         filtros.getIdProducto() == null ? "Productos vendidos (unidades)" : "Unidades del producto vendidas",
-                        productosVendidos)),
-                detalle);
+                        productosVendidos)));
+        // HU-15/HU-22: las devoluciones parciales se restan para obtener las ventas netas. Solo aplica cuando el
+        // filtro es por periodo y sucursal: una devolucion no tiene metodo de pago, tipo de venta ni cajero propios.
+        if (filtros.getIdProducto() == null && filtros.getIdMetodoPago() == null && filtros.getIdTipoVenta() == null
+                && filtros.getIdUsuario() == null) {
+            double devoluciones = devolucionesEn(empresaId, rango[0], rango[1], filtros.getIdSucursal());
+            indicadores.add(indicador("devoluciones", "Devoluciones", round(devoluciones)));
+            indicadores.add(indicador("ventas_netas", "Ventas netas", round(total - devoluciones)));
+        }
+        return respuestaParametrizada(empresa, aplicados, indicadores, detalle);
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> inventarioParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.InventarioParamRequest filtros) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "inventory_movement:read", "nombre", "id_subcategoria");
         Empresa empresa = requireEmpresaExistente(empresaId);
         LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
         List<Map<String, Object>> movimientos = filasMovimientosInventario(empresaId, rango[0], rango[1],
@@ -944,6 +1031,7 @@ public class ReportesService {
     @Transactional(readOnly = true)
     public Map<String, Object> cajasParametrizado(Usuario usuario, Integer empresaId, ReporteDtos.CajasParamRequest filtros) {
         requireReporte(usuario, empresaId, "reportes_estandar");
+        requireDatos(usuario, empresaId, "cash_movement:read");
         Empresa empresa = requireEmpresaExistente(empresaId);
         LocalDate[] rango = rangoFiltros(filtros.getFechaInicial(), filtros.getFechaFinal());
         String estado = filtros.getEstadoSesion() == null || filtros.getEstadoSesion().isBlank()
@@ -1458,8 +1546,14 @@ public class ReportesService {
     // ---------------------------------------------------------------------------------------------
 
     private void requireReporte(Usuario usuario, Integer empresaId, String funcionalidadPlan) {
-        empresaAccess.requirePermiso(usuario, empresaId, PERMISO_REPORTES);
+        dataPolicy.require(usuario, empresaId, null, PERMISO_REPORTES);
         empresaAccess.requirePlanFeature(usuario, empresaId, funcionalidadPlan);
+    }
+
+    /** Permiso de lectura del recurso que alimenta el reporte y, si aplica, de los atributos de producto mostrados. */
+    private void requireDatos(Usuario usuario, Integer empresaId, String recurso, String... camposProducto) {
+        var scope = dataPolicy.require(usuario, empresaId, null, PERMISO_REPORTES, recurso);
+        dataPolicy.productFields(scope, camposProducto);
     }
 
     private Empresa requireEmpresaExistente(Integer empresaId) {
@@ -1486,6 +1580,33 @@ public class ReportesService {
             grupos.computeIfAbsent(aIntStatic(fila.get("id_sucursal")), k -> new ArrayList<>()).add(fila);
         }
         return grupos;
+    }
+
+    /**
+     * Monto devuelto (HU-15) en el periodo por devoluciones parciales. Las ventas devueltas por completo ya quedan
+     * fuera de los reportes (estado DEVUELTA), asi que sus devoluciones no se restan otra vez.
+     */
+    private double devolucionesEn(Integer empresaId, LocalDate desde, LocalDate hasta, Integer idSucursal) {
+        Map<String, Object> params = paramsRango(empresaId, desde, hasta);
+        StringBuilder jpql = new StringBuilder("""
+                select coalesce(sum(d.monto), 0) from Devolucion d, CajaSesion cs
+                join cs.caja c join c.sucursal s
+                where d.venta.idCajaSesion = cs.idCajaSesion
+                  and s.empresa.idEmpresa = :idEmpresa
+                  and d.fecha between :desde and :hasta
+                  and upper(d.venta.estado) not in ('ANULADA', 'CANCELADA', 'DEVUELTA')
+                """);
+        if (idSucursal != null) {
+            jpql.append(" and s.idSucursal = :idSucursal");
+            params.put("idSucursal", idSucursal);
+        }
+        return aDouble(consulta(jpql.toString(), Object.class, params).getSingleResult());
+    }
+
+    private static Map<String, Object> conDevoluciones(Map<String, Object> resumen, double devoluciones) {
+        resumen.put("devoluciones", round(devoluciones));
+        resumen.put("ventas_netas", round(((Number) resumen.get("monto_vendido")).doubleValue() - devoluciones));
+        return resumen;
     }
 
     private Map<String, Object> resumenMontos(int cantidad, double monto, int unidades) {

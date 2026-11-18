@@ -12,6 +12,7 @@ from .schemas import (
     AnalyticsResponse,
     DailyPoint,
     ForecastPoint,
+    ProductForecast,
     GroupStat,
     HeatCell,
     Insight,
@@ -276,6 +277,7 @@ def analyze(req: AnalyticsRequest) -> AnalyticsResponse:
         ],
         forecast=forecast,
         forecast_total=forecast_total,
+        product_forecast=_product_forecast(req, current, fit_daily.index),
         trend=trend,
         products=products,
         categories=categories,
@@ -285,6 +287,46 @@ def analyze(req: AnalyticsRequest) -> AnalyticsResponse:
         heatmap=heatmap,
         insights=insights,
     )
+
+
+def _product_forecast(req: AnalyticsRequest, current: pd.DataFrame, fit_days, top: int = 5) -> list[ProductForecast]:
+    """
+    Serie temporal por producto: unidades diarias -> tendencia lineal x factor del dia de la semana.
+    Proyecta los proximos `forecast_days` y devuelve los `top` con mayor ingreso proyectado.
+    Se recalcula con los datos mas recientes en cada consulta, asi el modelo siempre esta actualizado.
+    """
+    if current.empty or len(fit_days) < 7:
+        return []
+    days = list(fit_days)
+    horizon = req.forecast_days
+    results: list[ProductForecast] = []
+    for product, rows in current.groupby("product"):
+        units = rows.groupby("date")["quantity"].sum().reindex(days, fill_value=0).to_numpy(dtype=float)
+        revenue = float(rows["line_total"].sum())
+        total_units = float(units.sum())
+        if total_units <= 0:
+            continue
+        price = revenue / float(rows["quantity"].sum()) if float(rows["quantity"].sum()) else 0.0
+        x = np.arange(len(units), dtype=float)
+        slope, intercept = np.polyfit(x, units, 1) if units.std() > 0 else (0.0, float(units.mean()))
+        weekday_mean = pd.Series(units, index=pd.to_datetime(days)).groupby(lambda d: d.weekday()).mean()
+        overall = float(weekday_mean.mean()) or 1.0
+        projected = 0.0
+        for i in range(1, horizon + 1):
+            day = req.end + timedelta(days=i)
+            base = max(0.0, slope * (len(units) - 1 + (day - days[-1]).days) + intercept)
+            projected += max(0.0, base * float(weekday_mean.get(day.weekday(), overall)) / overall)
+        recent = float(units[-horizon:].sum())
+        results.append(ProductForecast(
+            product=str(product),
+            category=rows["category"].iloc[0],
+            units=round(projected, 1),
+            revenue=round(projected * price, 2),
+            recent_units=round(recent, 1),
+            change_pct=_pct(projected, recent),
+        ))
+    results.sort(key=lambda r: r.revenue, reverse=True)
+    return results[:top]
 
 
 def _insights(

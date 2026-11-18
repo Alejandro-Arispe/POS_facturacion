@@ -44,6 +44,11 @@
               (fieldChange)="change($event)"
               (imageChange)="image = $event"
             />
+            <app-siat-homologacion
+              [codes]="siat"
+              [disabled]="blocked || saving"
+              (codesChange)="siat = $event; siatTouched = true; success = ''"
+            />
             @if (image) {
               <p class="text-sm text-muted">Nueva imagen: {{ image.name }}</p>
             }

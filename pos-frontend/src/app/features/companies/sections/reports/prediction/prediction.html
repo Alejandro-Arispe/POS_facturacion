@@ -66,6 +66,12 @@
           <div class="result-header">
             <h2 class="title-lg">Predicción de abastecimiento</h2>
             <p class="text-muted">Proyección de productos para los próximos 30 días.</p>
+            @if (permissions.hasPermission('report:export')) {
+              <div class="report-export-actions">
+                <button class="btn btn-secondary" type="button" (click)="exportPrediction('excel')">EXCEL</button>
+                <button class="btn btn-secondary" type="button" (click)="exportPrediction('pdf')">PDF</button>
+              </div>
+            }
           </div>
 
           @if (predictionResults.length === 0) {

@@ -514,7 +514,12 @@ public class SucursalService {
 
 	@Transactional(readOnly = true)
 	public List<ClienteEmpresaResponse> obtenerClientes(Integer idEmpresa) {
-		empresaAccess.requirePermiso(SecurityUtils.currentUser(), idEmpresa,"client:read");
+		Usuario actual = SecurityUtils.currentUser();
+		// Un cliente (app movil) sin permiso de gestion solo recibe su propio registro.
+		boolean soloPropio = !empresaAccess.canPermiso(actual, idEmpresa, null, "client:read")
+				&& clienteRepository.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(actual.getIdUsuario(), idEmpresa)
+						.map(c -> Boolean.TRUE.equals(c.getActivo())).orElse(false);
+		if (!soloPropio) empresaAccess.requirePermiso(actual, idEmpresa,"client:read");
 		Rol rolCliente = rolRepository.findByNombreIgnoreCase("CLIENTE")
 				.orElseThrow(() -> ApiException.badRequest("No existe el rol CLIENTE."));
 
@@ -528,6 +533,7 @@ public class SucursalService {
 		List<ClienteEmpresaResponse> resultado = new ArrayList<>();
 		for (UsuarioRol usuarioRol : usuarioRolRepository.findActivosPorEmpresaYRolSinSucursal(
 				idEmpresa, rolCliente.getIdRol())) {
+			if (soloPropio && !actual.getIdUsuario().equals(usuarioRol.getUsuario().getIdUsuario())) continue;
 			Cliente cliente = clienteRepository.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(
 					usuarioRol.getUsuario().getIdUsuario(),idEmpresa).orElse(null);
 			BigDecimal saldo = BigDecimal.ZERO;
@@ -827,7 +833,8 @@ public class SucursalService {
 				cliente.getCodigoCliente(),
 				saldo,
 				cliente.getLimiteCredito(),
-				cliente.getActivo());
+				cliente.getActivo(),
+				cliente.getSaldoAFavor() == null ? BigDecimal.ZERO : cliente.getSaldoAFavor());
 	}
 
 	private String htmlInvitacionEmpleado(String nombre, String invitationLink) {

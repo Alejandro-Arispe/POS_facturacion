@@ -1,0 +1,39 @@
+@startuml diagrama3_factura_electronica
+skinparam monochrome true
+skinparam shadowing false
+autonumber
+participant "VentaService" as VS
+participant "SiatFacturaService" as SFS
+participant "SinSimulado\n(SIN Bolivia)" as SIN
+participant "FacturaPdfService" as PDF
+participant "EmailService" as EMAIL
+participant "FacturaRepository" as FR
+
+VS -> SFS : emitirFactura(venta)
+activate SFS
+SFS -> SFS : generarCUF(CUFD, nroFactura)
+SFS -> SFS : construirXML(venta, CUF)
+SFS -> SIN : enviarFactura(xml, codigoDescripcion)
+activate SIN
+alt SIN responde OK
+  SIN --> SFS : {estado: VALIDA, codigoRecepcion}
+  deactivate SIN
+  SFS -> PDF : generarPDF(factura, QR)
+  activate PDF
+  PDF --> SFS : byte[] pdf
+  deactivate PDF
+  SFS -> FR : save(factura VALIDA)
+  opt MAIL_ENABLED = true
+    SFS -> EMAIL : enviarFactura(cliente, pdf)
+    activate EMAIL
+    EMAIL --> SFS : enviado / FALLIDO
+    deactivate EMAIL
+  end
+  SFS --> VS : Factura VALIDA
+else SIN no responde / error
+  SIN --> SFS : timeout / error
+  SFS -> FR : save(factura PENDIENTE_ENVIO)\nnota contingencia
+  SFS --> VS : Factura PENDIENTE_ENVIO
+end
+deactivate SFS
+@enduml

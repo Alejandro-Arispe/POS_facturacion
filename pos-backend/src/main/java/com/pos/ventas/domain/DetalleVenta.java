@@ -52,4 +52,11 @@ public class DetalleVenta {
 
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
+
+    // Códigos homologados del producto al momento de la venta (SIAT simulado).
+    @Column(name = "codigo_producto_sin")
+    private Integer codigoProductoSin;
+
+    @Column(name = "codigo_unidad_medida_sin")
+    private Integer codigoUnidadMedidaSin;
 }

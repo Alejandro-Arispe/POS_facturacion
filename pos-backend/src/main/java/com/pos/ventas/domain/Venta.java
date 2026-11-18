@@ -59,4 +59,14 @@ public class Venta {
 
     @Column(name = "estado", nullable = false, length = 50)
     private String estado;
+
+    // Anulacion (HU-14): motivo obligatorio, quien y cuando.
+    @Column(name = "motivo_anulacion", length = 255)
+    private String motivoAnulacion;
+
+    @Column(name = "fecha_anulacion")
+    private LocalDateTime fechaAnulacion;
+
+    @Column(name = "id_usuario_anulacion")
+    private Integer idUsuarioAnulacion;
 }

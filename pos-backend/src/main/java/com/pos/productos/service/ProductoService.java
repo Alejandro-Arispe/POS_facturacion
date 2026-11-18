@@ -48,6 +48,11 @@ public class ProductoService {
     private final RbacResolver rbac;
     private final FieldAuthorization fields;
     private final ProductImageStorage images;
+    private final com.pos.siat.repo.SinProductoServicioRepository sinProductos;
+    private final com.pos.siat.repo.SinUnidadMedidaRepository sinUnidades;
+    private final com.pos.inventario.repo.StockRepository stocks;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pos.clientes.repo.ClienteRepository clientes;
 
     public ProductoService(
             EmpresaAccess empresaAccess,
@@ -56,7 +61,10 @@ public class ProductoService {
             ProductoRepository productoRepository,
             InventarioService inventarioService,
             UsuarioRolRepository usuarioRolRepository,
-            RbacResolver rbac, FieldAuthorization fields, ProductImageStorage images) {
+            RbacResolver rbac, FieldAuthorization fields, ProductImageStorage images,
+            com.pos.siat.repo.SinProductoServicioRepository sinProductos,
+            com.pos.siat.repo.SinUnidadMedidaRepository sinUnidades,
+            com.pos.inventario.repo.StockRepository stocks) {
         this.empresaAccess = empresaAccess;
         this.categoriaRepository = categoriaRepository;
         this.subcategoriaRepository = subcategoriaRepository;
@@ -64,6 +72,8 @@ public class ProductoService {
         this.inventarioService = inventarioService;
         this.usuarioRolRepository = usuarioRolRepository;
         this.rbac=rbac; this.fields=fields; this.images=images;
+        this.sinProductos=sinProductos; this.sinUnidades=sinUnidades;
+        this.stocks=stocks;
     }
 
     @Transactional(readOnly = true)
@@ -183,6 +193,7 @@ public class ProductoService {
         if (image!=null) supplied.add("imagen");
         fields.require(grants,"product","update",supplied);
         validateValues(datos,false);
+        validateSiat(datos,false);
         SubcategoriaProducto sub=datos.getProvided().contains("id_subcategoria") && datos.getIdSubcategoria()!=null
                 ? requireSubcategoriaEmpresa(datos.getIdSubcategoria(),p.getIdEmpresa()) : null;
         if (!Boolean.TRUE.equals(p.getActivo()) && Boolean.TRUE.equals(datos.getActivo())) empresaAccess.requireProductCapacity(p.getIdEmpresa());
@@ -211,8 +222,50 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public List<Map<String,Object>> listarPorEmpresa(Usuario usuario,Integer company) {
+        empresaAccess.requireEmpresa(usuario,company);
+        if (!rbac.resolve(usuario,company,null).allows("product:read")
+                && clientes.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(usuario.getIdUsuario(),company)
+                        .map(c -> Boolean.TRUE.equals(c.getActivo())).orElse(false)) {
+            return catalogoCliente(company);
+        }
         RbacResolver.Grants grants=authorize(usuario,company,"read");
-        return productoRepository.findByIdEmpresaOrderByNombreAsc(company).stream().map(p->toProducto(p,grants)).toList();
+        java.util.Set<Integer> conStock=stocks.findIdsProductoConStock(company);
+        return productoRepository.findByIdEmpresaOrderByNombreAsc(company).stream().map(p->{
+            Map<String,Object> row=toProducto(p,grants);
+            row.put("disponible",conStock.contains(p.getIdProducto()));
+            return row;
+        }).toList();
+    }
+
+    /**
+     * HU-04: vista del catálogo para un cliente de la empresa (sin permisos de staff). Solo productos activos y
+     * campos públicos. Usa una sola sucursal (la que tiene más productos con stock) para que "disponible"
+     * coincida con la validación de stock de POST /api/pedidos/empresas/{id}, que recibe esa id_sucursal.
+     */
+    private List<Map<String,Object>> catalogoCliente(Integer company) {
+        Map<Integer,java.util.Set<Integer>> porSucursal=new java.util.HashMap<>();
+        for (Object[] r : stocks.findSucursalProductoConStock(company)) {
+            porSucursal.computeIfAbsent((Integer) r[0],k -> new java.util.HashSet<>()).add((Integer) r[1]);
+        }
+        Integer sucursal=porSucursal.entrySet().stream()
+                .max(java.util.Comparator.<Map.Entry<Integer,java.util.Set<Integer>>>comparingInt(e -> e.getValue().size())
+                        .thenComparing(Map.Entry::getKey,java.util.Comparator.reverseOrder()))
+                .map(Map.Entry::getKey).orElse(null);
+        java.util.Set<Integer> conStock=sucursal==null?java.util.Set.of():porSucursal.get(sucursal);
+        return productoRepository.findByIdEmpresaOrderByNombreAsc(company).stream()
+                .filter(p -> Boolean.TRUE.equals(p.getActivo()))
+                .map(p -> {
+                    Map<String,Object> row=new LinkedHashMap<>();
+                    row.put("id_producto",p.getIdProducto());
+                    row.put("id_empresa",p.getIdEmpresa());
+                    row.put("nombre",p.getNombre());
+                    row.put("descripcion",p.getDescripcion());
+                    row.put("precio",p.getPrecio());
+                    row.put("imagen",p.getImagen());
+                    row.put("disponible",conStock.contains(p.getIdProducto()));
+                    row.put("id_sucursal",sucursal);
+                    return row;
+                }).toList();
     }
 
     @Transactional(readOnly = true)
@@ -278,6 +331,10 @@ public class ProductoService {
         fields.require(grants,"product","create",supplied);
         fields.require(grants,"product","create",ProductFields.REQUIRED_CREATE);
         validateValues(data,true);
+        validateSiat(data,true);
+        if (data.getStockInicial()!=null && data.getStockInicial()<0) throw ApiException.badRequest("El stock inicial no puede ser negativo.");
+        boolean conStockInicial=data.getStockInicial()!=null && data.getStockInicial()>0;
+        if (conStockInicial && data.getIdSucursal()==null) throw ApiException.badRequest("Selecciona la sucursal del stock inicial.");
         SubcategoriaProducto sub=requireSubcategoriaEmpresa(data.getIdSubcategoria(),company);
         if (!Boolean.FALSE.equals(data.getActivo())) empresaAccess.requireProductCapacity(company);
         String newImage=image==null?null:storeImage(image);
@@ -286,6 +343,7 @@ public class ProductoService {
         if (image!=null) p.setImagen(newImage);
         persist(p);
         inventarioService.sincronizarStocksPorProducto(p.getIdProducto(),company);
+        if (conStockInicial) inventarioService.registrarStockInicial(usuario,company,data.getIdSucursal(),p.getIdProducto(),data.getStockInicial());
         return toProducto(p,grants);
     }
 
@@ -330,7 +388,30 @@ public class ProductoService {
         if (value==null || value.signum()<0 || value.scale()>2 || value.compareTo(new BigDecimal("9999999999.99"))>0)
             throw ApiException.badRequest("El importe debe ser no negativo y tener hasta dos decimales.");
     }
+    /** Homologación SIAT: en el alta ambos códigos son obligatorios; en la edición se validan si se envían. */
+    private void validateSiat(ProductoDtos.ProductoUpdate d,boolean create) {
+        Set<String> sent=d.getProvidedSiat();
+        if (create && (d.getCodigoProductoSin()==null || d.getCodigoUnidadMedidaSin()==null))
+            throw ApiException.badRequest("Selecciona el código de producto/servicio SIN y la unidad de medida SIN.");
+        if (sent.contains("codigo_producto_sin")) {
+            var sin=sinProductos.findById(d.getCodigoProductoSin()==null?-1:d.getCodigoProductoSin())
+                    .orElseThrow(() -> ApiException.badRequest("Código de producto/servicio SIN no válido."));
+            // La actividad económica sale del catálogo si no se envía explícitamente.
+            if (!sent.contains("codigo_actividad") || d.getCodigoActividad()==null || d.getCodigoActividad().isBlank())
+                d.setCodigoActividad(sin.getCodigoActividad());
+        }
+        if (sent.contains("codigo_unidad_medida_sin") && (d.getCodigoUnidadMedidaSin()==null || !sinUnidades.existsById(d.getCodigoUnidadMedidaSin())))
+            throw ApiException.badRequest("Unidad de medida SIN no válida.");
+        if (sent.contains("codigo_actividad")) text(d.getCodigoActividad(),10,false,"codigo_actividad");
+    }
+
     private void apply(Producto p,ProductoDtos.ProductoUpdate d,SubcategoriaProducto sub) {
+        for (String key:d.getProvidedSiat()) switch (key) {
+            case "codigo_actividad" -> p.setCodigoActividad(d.getCodigoActividad()==null?null:d.getCodigoActividad().strip());
+            case "codigo_producto_sin" -> p.setCodigoProductoSin(d.getCodigoProductoSin());
+            case "codigo_unidad_medida_sin" -> p.setCodigoUnidadMedidaSin(d.getCodigoUnidadMedidaSin());
+            default -> { }
+        }
         for (String key:d.getProvided()) switch (key) {
             case "nombre" -> p.setNombre(d.getNombre().strip());
             case "descripcion" -> p.setDescripcion(d.getDescripcion());
@@ -421,6 +502,9 @@ public class ProductoService {
         fields.project(result,grants,"product","costo",p.getCosto());
         fields.project(result,grants,"product","imagen",p.getImagen());
         fields.project(result,grants,"product","activo",p.getActivo());
+        result.put("codigo_actividad",p.getCodigoActividad());
+        result.put("codigo_producto_sin",p.getCodigoProductoSin());
+        result.put("codigo_unidad_medida_sin",p.getCodigoUnidadMedidaSin());
         if (fields.allows(grants,"product","read","id_subcategoria")) {
             result.put("id_subcategoria",p.getSubcategoria()==null?null:p.getSubcategoria().getIdSubcategoria());
             result.put("subcategoria",p.getSubcategoria()==null?null:toSubcategoria(p.getSubcategoria()));

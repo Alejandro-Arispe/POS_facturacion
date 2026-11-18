@@ -18,6 +18,8 @@ public interface HistorialSuscripcionRepository extends JpaRepository<HistorialS
 
 	List<HistorialSuscripcion> findByEmpresa_IdEmpresa(Integer idEmpresa);
 
+	boolean existsByPlan_IdPlan(Integer idPlan);
+
 	List<HistorialSuscripcion> findByEmpresa_IdEmpresaAndEstado(Integer idEmpresa, String estado);
 
 	@Query("""

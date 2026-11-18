@@ -67,6 +67,10 @@ public class Cliente {
     @Column(name = "limite_credito", precision = 12, scale = 2)
     private BigDecimal limiteCredito = BigDecimal.ZERO;
 
+    /** Saldo a favor por devoluciones (HU-15); se usa como medio de pago en la siguiente compra. */
+    @Column(name = "saldo_a_favor", precision = 12, scale = 2)
+    private BigDecimal saldoAFavor = BigDecimal.ZERO;
+
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
 }

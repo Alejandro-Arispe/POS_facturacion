@@ -187,7 +187,7 @@ public class AdminDashboardService {
                     where v.idCajaSesion = cs.idCajaSesion
                       and s.empresa.idEmpresa = :idEmpresa
                       and v.fecha between :desde and :hasta
-                      and v.estado <> 'ANULADA'
+                      and v.estado not in ('ANULADA', 'DEVUELTA')
                     """, Venta.class)
                     .setParameter("idEmpresa", idEmpresa)
                     .setParameter("desde", desde)
@@ -202,7 +202,7 @@ public class AdminDashboardService {
                   and s.empresa.idEmpresa = :idEmpresa
                   and s.idSucursal = :idSucursal
                   and v.fecha between :desde and :hasta
-                  and v.estado <> 'ANULADA'
+                  and v.estado not in ('ANULADA', 'DEVUELTA')
                 """, Venta.class)
                 .setParameter("idEmpresa", idEmpresa)
                 .setParameter("idSucursal", idSucursal)

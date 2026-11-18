@@ -43,9 +43,11 @@ public class ClienteService {
     public ClienteDtos.CategoriaResponse crearCategoria(Usuario usuario, Integer idEmpresa, ClienteDtos.CategoriaCreate datos) {
         empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:create");
         validateCategory(datos.getDescuentoBase(),datos.getPlazoCredito(),datos.getLimiteCredito());
+        if (datos.getNombre() == null || datos.getNombre().isBlank())
+            throw ApiException.badRequest("El nombre de la categoría es obligatorio.");
         CategoriaCliente categoria = new CategoriaCliente();
         categoria.setIdEmpresa(idEmpresa);
-        categoria.setNombre(datos.getNombre());
+        categoria.setNombre(datos.getNombre().trim());
         categoria.setDescripcion(datos.getDescripcion());
         categoria.setPlazoCredito(datos.getPlazoCredito() == null ? 0 : datos.getPlazoCredito());
         categoria.setDescuentoBase(nvl(datos.getDescuentoBase()));
@@ -56,13 +58,21 @@ public class ClienteService {
 
     @Transactional(readOnly = true)
     public List<ClienteDtos.CategoriaResponse> listarCategorias(Usuario usuario, Integer idEmpresa) {
-        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
+        // La app movil del cliente consulta las categorias de su empresa para mostrar su limite y descuento.
+        if (!esClienteActivo(usuario, idEmpresa)) empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
         return categoriaRepository.findByIdEmpresa(idEmpresa).stream().map(this::toCategoria).toList();
+    }
+
+    /** Cliente activo de la empresa: puede leer las categorias (solo lectura), no el resto de la gestion. */
+    private boolean esClienteActivo(Usuario usuario, Integer idEmpresa) {
+        return usuario != null && idEmpresa != null
+                && clienteRepository.findFirstByIdUsuarioAndIdEmpresaOrderByIdClienteAsc(usuario.getIdUsuario(), idEmpresa)
+                        .map(c -> Boolean.TRUE.equals(c.getActivo())).orElse(false);
     }
 
     @Transactional(readOnly = true)
     public ClienteDtos.CategoriaResponse obtenerCategoria(Usuario usuario, Integer idEmpresa, Integer idCategoria) {
-        empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
+        if (!esClienteActivo(usuario, idEmpresa)) empresaAccess.requirePermiso(usuario, idEmpresa,"client_category:read");
         CategoriaCliente categoria = categoriaRepository.findById(idCategoria)
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
         if (!idEmpresa.equals(categoria.getIdEmpresa())) {
@@ -78,9 +88,9 @@ public class ClienteService {
         validateCategory(datos.getDescuentoBase(),datos.getPlazoCredito(),datos.getLimiteCredito());
         CategoriaCliente categoria = categoriaRepository.findByIdCategoriaClienteAndIdEmpresa(idCategoria, idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
-        if (datos.getNombre() != null) {
-            categoria.setNombre(datos.getNombre());
-        }
+        if (datos.getNombre() == null || datos.getNombre().isBlank())
+            throw ApiException.badRequest("El nombre de la categoría es obligatorio.");
+        categoria.setNombre(datos.getNombre().trim());
         if (datos.getDescripcion() != null) {
             categoria.setDescripcion(datos.getDescripcion());
         }
@@ -97,6 +107,17 @@ public class ClienteService {
             categoria.setActivo(datos.getActivo());
         }
         return toCategoria(categoriaRepository.save(categoria));
+    }
+
+    /** Elimina una categoría de cliente; se bloquea si tiene clientes asignados. */
+    @Transactional
+    public void eliminarCategoria(Usuario usuario, Integer idEmpresa, Integer idCategoria) {
+        empresaAccess.requirePermiso(usuario, idEmpresa, "client_category:update");
+        CategoriaCliente categoria = categoriaRepository.findByIdCategoriaClienteAndIdEmpresa(idCategoria, idEmpresa)
+                .orElseThrow(() -> ApiException.notFound("Categoria de cliente no encontrada."));
+        if (clienteRepository.existsByCategoriaCliente_IdCategoriaCliente(idCategoria))
+            throw new ApiException(org.springframework.http.HttpStatus.CONFLICT, "No se puede eliminar la categoría: tiene clientes asignados.");
+        categoriaRepository.delete(categoria);
     }
 
     @Transactional
@@ -217,6 +238,7 @@ public class ClienteService {
         dto.setIdCategoriaCliente(cliente.getCategoriaCliente() == null ? null : cliente.getCategoriaCliente().getIdCategoriaCliente());
         dto.setCodigoCliente(cliente.getCodigoCliente());
         dto.setSaldoCredito(cliente.getSaldoCredito());
+        dto.setSaldoAFavor(cliente.getSaldoAFavor() == null ? BigDecimal.ZERO : cliente.getSaldoAFavor());
         dto.setLimiteCredito(cliente.getLimiteCredito());
         dto.setActivo(cliente.getActivo());
         return dto;

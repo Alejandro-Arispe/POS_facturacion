@@ -332,7 +332,7 @@ export class CreditCollections implements OnInit {
         next: (clients) => {
           this.clients = clients
             .map((client) => this.mapClient(client))
-            .filter((client) => client.active)
+            .filter((client) => client.active && client.balance > 0)
             .sort((first, second) => second.balance - first.balance);
           this.selectedClient = null;
           this.receivables = [];

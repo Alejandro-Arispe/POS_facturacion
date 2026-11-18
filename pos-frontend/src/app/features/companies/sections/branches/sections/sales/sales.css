@@ -970,3 +970,81 @@ body.dark-theme .sale-detail-panel td:nth-child(5) { color: #2dd4bf; }
 .readonly-badge {
   font-style: italic;
 }
+
+/* Pago por QR simulado */
+.qr-payment {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed var(--color-border, #cbd5e1);
+  border-radius: 12px;
+}
+
+.qr-payment-image {
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.qr-payment-text {
+  margin: 0;
+  text-align: center;
+}
+
+/* Imagenes de producto en el POS */
+.product-result .product-thumb {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--color-surface, #fff);
+}
+
+.product-result .product-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-result .product-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.detail-product {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* Postventa: anulacion y devolucion */
+.post-sale-modal { max-width: 640px; }
+.post-sale-qty { width: 84px; }
+.post-sale-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.post-sale-refund { display: grid; gap: 6px; margin: 0 0 12px; border: 0; padding: 0; }
+
+/* QR Simple y tarjeta simulada (HU-13) */
+.qr-bank { display: grid; gap: 4px; width: min(280px, 100%); }
+.card-payment { grid-column: 1 / -1; display: grid; gap: 10px; padding: 16px; border: 1px dashed var(--color-border, #cbd5e1); border-radius: 12px; }
+.card-terminal { margin: 0; font-size: 0.8rem; color: var(--color-text-soft); }
+.card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.card-number, .card-holder { grid-column: 1 / -1; }
+
+.recommendation-confidence { color: var(--color-success, #07845c) !important; font-weight: 600; }
+
+/* Reconocimiento por camara (HU-27) */
+.vision-modal { max-width: 560px; }
+.vision-video { width: 100%; max-height: 320px; border-radius: 12px; background: #000; object-fit: cover; }
