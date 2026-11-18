@@ -55,7 +55,7 @@ public class ReportesService {
     private static final String PERMISO_REPORTES = "report:generate";
 
     /** Ventas que no cuentan en ningun reporte; la analitica y el QBE usan la misma lista. */
-    public static final String VENTA_VALIDA_JPQL = "upper(v.estado) not in ('ANULADA', 'CANCELADA')";
+    public static final String VENTA_VALIDA_JPQL = "upper(v.estado) not in ('ANULADA', 'CANCELADA', 'DEVUELTA')";
 
     private static final String METODO_CREDITO = "Crédito (pendiente de cobro)";
     private static final int LOTE_IN = 1000;

@@ -50,7 +50,7 @@ public class AnaliticaService {
 			 where s.id_empresa = :idEmpresa and p.id_empresa=:idEmpresa
 			   and v.fecha >= :desde
 			   and v.fecha < :hasta
-			   and upper(coalesce(v.estado, '')) not in ('ANULADA', 'CANCELADA')
+			   and upper(coalesce(v.estado, '')) not in ('ANULADA', 'CANCELADA', 'DEVUELTA')
 			""";
 
 	/** Pagos de cada venta: el reparto por metodo de pago usa lo pagado con cada uno (igual que los reportes). */
@@ -65,7 +65,7 @@ public class AnaliticaService {
 			 where s.id_empresa = :idEmpresa
 			   and v.fecha >= :desde
 			   and v.fecha < :hasta
-			   and upper(coalesce(v.estado, '')) not in ('ANULADA', 'CANCELADA')
+			   and upper(coalesce(v.estado, '')) not in ('ANULADA', 'CANCELADA', 'DEVUELTA')
 			""";
 
 	private static final String SQL_STOCK = """

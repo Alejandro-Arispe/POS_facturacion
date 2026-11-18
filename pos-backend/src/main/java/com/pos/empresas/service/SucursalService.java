@@ -827,7 +827,8 @@ public class SucursalService {
 				cliente.getCodigoCliente(),
 				saldo,
 				cliente.getLimiteCredito(),
-				cliente.getActivo());
+				cliente.getActivo(),
+				cliente.getSaldoAFavor() == null ? BigDecimal.ZERO : cliente.getSaldoAFavor());
 	}
 
 	private String htmlInvitacionEmpleado(String nombre, String invitationLink) {

@@ -1029,3 +1029,16 @@ body.dark-theme .sale-detail-panel td:nth-child(5) { color: #2dd4bf; }
   border-radius: 8px;
   object-fit: cover;
 }
+
+/* Postventa: anulacion y devolucion */
+.post-sale-modal { max-width: 640px; }
+.post-sale-qty { width: 84px; }
+.post-sale-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.post-sale-refund { display: grid; gap: 6px; margin: 0 0 12px; border: 0; padding: 0; }
+
+/* QR Simple y tarjeta simulada (HU-13) */
+.qr-bank { display: grid; gap: 4px; width: min(280px, 100%); }
+.card-payment { grid-column: 1 / -1; display: grid; gap: 10px; padding: 16px; border: 1px dashed var(--color-border, #cbd5e1); border-radius: 12px; }
+.card-terminal { margin: 0; font-size: 0.8rem; color: var(--color-text-soft); }
+.card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.card-number, .card-holder { grid-column: 1 / -1; }

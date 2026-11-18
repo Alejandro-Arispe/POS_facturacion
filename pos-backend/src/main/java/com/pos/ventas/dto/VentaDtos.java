@@ -52,6 +52,36 @@ public final class VentaDtos {
     @Setter
     @NoArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class AnulacionCreate {
+        private String motivo;
+        /** Motivo SIN para anular la factura (1 a 4); por defecto 1. */
+        private Integer codigoMotivoSin;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class DevolucionItem {
+        private Integer idProducto;
+        private Integer cantidad;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class DevolucionCreate {
+        private List<DevolucionItem> items = new ArrayList<>();
+        /** EFECTIVO o SALDO_A_FAVOR. */
+        private String tipoReembolso;
+        private String motivo;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class VentaCreate {
         private Integer idTipoVenta;
         private Integer idCliente;
@@ -136,6 +166,7 @@ public final class VentaDtos {
         private String tipoVentaNombre;
         private Integer idFactura;
         private String cuf;
+        private String motivoAnulacion;
         private String estadoSiat;
         private List<DetalleResponse> detalles = new ArrayList<>();
         private List<PagoResponse> pagos = new ArrayList<>();

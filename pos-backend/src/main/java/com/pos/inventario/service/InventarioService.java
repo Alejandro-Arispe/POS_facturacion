@@ -173,6 +173,17 @@ public class InventarioService {
         applyMovement(usuario,company,branch,input,true);
     }
 
+    /** Reingreso de stock por anulacion o devolucion de una venta (HU-14/HU-15). Sin endpoint HTTP propio. */
+    @Transactional
+    public void registrarEntradaPostVenta(Usuario usuario,Integer company,Integer branch,Integer product,int quantity,String tipoNombre,String observacion) {
+        var type=tipoMovimientoRepository.findByNombreIgnoreCase(tipoNombre)
+            .orElseThrow(() -> ApiException.badRequest("Tipo de inventario "+tipoNombre+" no configurado."));
+        if (!"entrada".equalsIgnoreCase(type.getDireccion())) throw ApiException.badRequest("El movimiento "+tipoNombre+" debe ser de entrada.");
+        var input=new InventarioDtos.MovimientoCreate(); input.setIdProducto(product); input.setCantidad(quantity);
+        input.setIdTipoMovimiento(type.getIdTipoMovimiento()); input.setObservacion(observacion);
+        applyMovement(usuario,company,branch,input,true);
+    }
+
     private InventarioDtos.MovimientoResponse applyMovement(Usuario usuario,Integer idEmpresa,Integer idSucursal,InventarioDtos.MovimientoCreate payload,boolean sale) {
         if (payload.getCantidad() == null || payload.getCantidad() <= 0) {
             throw ApiException.badRequest("La cantidad debe ser mayor a cero.");
@@ -186,6 +197,8 @@ public class InventarioService {
         TipoMovimiento tipo = tipoMovimientoRepository.findById(payload.getIdTipoMovimiento())
                 .orElseThrow(() -> ApiException.notFound("Tipo de movimiento no encontrado."));
         if (!sale && "Venta".equalsIgnoreCase(tipo.getNombre())) throw ApiException.badRequest("Las salidas de venta se generan al registrar la venta.");
+        if (!sale && java.util.Set.of("anulacion de venta","devolucion de venta").contains(tipo.getNombre().toLowerCase(Locale.ROOT)))
+            throw ApiException.badRequest("Este movimiento se genera al anular o devolver una venta.");
         if (!Boolean.TRUE.equals(producto.getActivo())) throw ApiException.badRequest("El producto está inactivo.");
         String direccion = (tipo.getDireccion() == null ? "" : tipo.getDireccion()).trim().toLowerCase(Locale.ROOT);
         if (!direccion.equals("entrada") && !direccion.equals("salida")) {

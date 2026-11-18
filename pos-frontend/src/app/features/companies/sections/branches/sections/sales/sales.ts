@@ -74,6 +74,8 @@ interface ClientOption {
   nombre: string;
   correo: string;
   categoriaId?: number | null;
+  /** Saldo a favor por devoluciones (HU-15), usable como medio de pago. */
+  saldoAFavor?: number;
 }
 
 interface SaleTypeOption {
@@ -100,7 +102,25 @@ interface SalePaymentRow {
   monto: number | null;
   /** Pago por QR simulado: el cajero confirma que el cliente ya pago. */
   qrConfirmado?: boolean;
+  /** Pago con tarjeta simulado (HU-13): los datos nunca salen del navegador ni se guardan. */
+  tarjeta?: CardForm;
 }
+
+interface CardForm {
+  numero: string;
+  titular: string;
+  vencimiento: string;
+  cvv: string;
+  procesando: boolean;
+  error: string;
+  /** Codigo de autorizacion devuelto por el adquirente simulado. */
+  autorizacion: string | null;
+  marca: string;
+  ultimos4: string;
+}
+
+/** Bancos que operan QR Simple interoperable en Bolivia (simulado). */
+const QR_BANCOS = ['Banco Unión', 'Banco Nacional de Bolivia (BNB)', 'Banco Mercantil Santa Cruz', 'Banco de Crédito (BCP)'];
 
 interface CashMovementItem {
   id: number;
@@ -111,6 +131,27 @@ interface CashMovementItem {
   metodoPagoId: number | null;
   metodoPago: string;
   fecha: string;
+}
+
+interface PostSaleItem {
+  idProducto: number;
+  descripcion: string;
+  disponible: number;
+  precio: number;
+  cantidad: number;
+}
+
+/** Dialogo de postventa: anular la venta completa (HU-14) o devolver productos (HU-15). */
+interface PostSaleDialog {
+  mode: 'anular' | 'devolver';
+  sale: SaleHistoryRow;
+  motivo: string;
+  reembolso: 'EFECTIVO' | 'SALDO_A_FAVOR';
+  items: PostSaleItem[];
+  vence: string | null;
+  loading: boolean;
+  saving: boolean;
+  error: string;
 }
 
 interface SaleHistoryRow {
@@ -161,6 +202,7 @@ export class Sales implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly companyId = this.route.snapshot.paramMap.get('id') ?? '';
+  protected companyName = '';
   protected readonly branchId = this.route.snapshot.paramMap.get('branchId') ?? '';
   protected readonly cashRegisterId = this.route.snapshot.paramMap.get('cashRegisterId') ?? '';
   protected readonly maxPaymentRows = 3;
@@ -225,6 +267,8 @@ export class Sales implements OnInit {
   // HU-11: Historial de compras de clientes y detalle de venta
   protected historySelectedClientId: number | string = 'all';
   protected selectedSaleDetail: SaleHistoryRow | null = null;
+  protected postSale: PostSaleDialog | null = null;
+  protected postSaleMessage = '';
   protected isSaleDetailModalOpen = false;
 
   // HU: Movimiento de caja en PDV (Botones Ingreso y Egreso con caja abierta)
@@ -366,6 +410,97 @@ export class Sales implements OnInit {
     });
   }
 
+  // --- Postventa: anulacion (HU-14) y devolucion (HU-15) ------------------------------------------
+  protected canPostSale(sale: SaleHistoryRow): boolean {
+    return this.hasPermission('sale:void') && (sale.estado || '').toUpperCase() !== 'DEVUELTA';
+  }
+
+  protected openAnnulSale(sale: SaleHistoryRow): void {
+    this.postSaleMessage = '';
+    this.postSale = { mode: 'anular', sale, motivo: '', reembolso: 'EFECTIVO', items: [], vence: null,
+      loading: false, saving: false, error: '' };
+  }
+
+  protected openReturnSale(sale: SaleHistoryRow): void {
+    this.postSaleMessage = '';
+    const dialog: PostSaleDialog = { mode: 'devolver', sale, motivo: '', reembolso: 'EFECTIVO',
+      items: [], vence: null, loading: true, saving: false, error: '' };
+    this.postSale = dialog;
+    this.apiService.get<{ vence: string; productos: Array<{ id_producto: number; descripcion: string; cantidad_disponible: number; precio_unitario_neto: number }> }>(
+      `/api/ventas/${sale.id}/devoluciones`,
+    ).subscribe({
+      next: (resumen) => {
+        dialog.vence = resumen.vence;
+        dialog.items = resumen.productos
+          .filter((p) => p.cantidad_disponible > 0)
+          .map((p) => ({
+            idProducto: p.id_producto,
+            descripcion: sale.detalles.find((d) => Number(d.id_producto) === p.id_producto)?.producto?.nombre ?? p.descripcion ?? `Producto #${p.id_producto}`,
+            disponible: p.cantidad_disponible,
+            precio: Number(p.precio_unitario_neto),
+            cantidad: 0,
+          }));
+        dialog.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        dialog.loading = false;
+        dialog.error = error?.error?.detail ?? 'No se pudo cargar la venta para la devolución.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  protected get postSaleReturnTotal(): number {
+    return this.roundCurrency((this.postSale?.items ?? []).reduce((acc, i) => acc + i.precio * (Number(i.cantidad) || 0), 0));
+  }
+
+  protected returnAll(): void {
+    this.postSale?.items.forEach((i) => (i.cantidad = i.disponible));
+  }
+
+  protected closePostSale(): void {
+    if (!this.postSale?.saving) this.postSale = null;
+  }
+
+  protected confirmPostSale(): void {
+    const dialog = this.postSale;
+    if (!dialog || dialog.saving) return;
+    dialog.error = '';
+    if (dialog.motivo.trim().length < 5) {
+      dialog.error = 'Escribe el motivo (al menos 5 caracteres).';
+      return;
+    }
+    const items = dialog.items
+      .filter((i) => Number(i.cantidad) > 0)
+      .map((i) => ({ id_producto: i.idProducto, cantidad: Math.min(Number(i.cantidad), i.disponible) }));
+    if (dialog.mode === 'devolver' && items.length === 0) {
+      dialog.error = 'Indica al menos un producto y la cantidad a devolver.';
+      return;
+    }
+    dialog.saving = true;
+    const request$ = dialog.mode === 'anular'
+      ? this.apiService.post<{ mensaje: string }, { motivo: string }>(`/api/ventas/${dialog.sale.id}/anular`, { motivo: dialog.motivo.trim() })
+      : this.apiService.post<{ mensaje: string }, unknown>(`/api/ventas/${dialog.sale.id}/devoluciones`, {
+          items, tipo_reembolso: dialog.reembolso, motivo: dialog.motivo.trim(),
+        });
+    request$.subscribe({
+      next: (response) => {
+        this.postSale = null;
+        this.postSaleMessage = response.mensaje;
+        this.loadSalesHistory();
+        this.loadRegisterData();
+        this.cargarEfectivoEsperado();
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        dialog.saving = false;
+        dialog.error = error?.error?.detail ?? 'No se pudo completar la operación.';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
   protected openSaleDetailModal(sale: SaleHistoryRow): void {
     this.selectedSaleDetail = sale;
     this.isSaleDetailModalOpen = true;
@@ -377,6 +512,14 @@ export class Sales implements OnInit {
   }
 
   ngOnInit(): void {
+    // Nombre del comercio para el QR de cobro.
+    this.companyService.getMisEmpresas().subscribe({
+      next: (companies) => {
+        const company = companies.find((c) => String(c.idEmpresa ?? c.id_empresa ?? c.id) === this.companyId);
+        this.companyName = company?.nombre ?? '';
+      },
+      error: () => (this.companyName = ''),
+    });
     this.validarSesionActiva();
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -797,16 +940,31 @@ export class Sales implements OnInit {
   }
 
   protected isPaymentMethodDisabled(paymentRow: SalePaymentRow, method: PaymentMethodOption): boolean {
+    if (this.isSaldoAFavorMethod(method) && this.selectedClientSaldoAFavor <= 0) return true;
     return this.salePaymentRows.some((row) => row.id !== paymentRow.id && row.metodoPagoId === method.id);
+  }
+
+  protected isSaldoAFavorMethod(method: PaymentMethodOption): boolean {
+    return method.nombre.trim().toUpperCase() === 'SALDO A FAVOR';
+  }
+
+  protected get selectedClientSaldoAFavor(): number {
+    return this.clients.find((c) => c.id === this.selectedClientId)?.saldoAFavor ?? 0;
   }
 
   protected updatePaymentAmount(row: SalePaymentRow, value: number | string | null): void {
     row.monto = this.normalizeMoney(value);
     row.qrConfirmado = false;
+    // Un cambio de monto invalida la autorizacion de tarjeta ya obtenida.
+    if (row.tarjeta?.autorizacion) row.tarjeta = this.emptyCard();
   }
 
   // --- Pago por QR (simulado) -------------------------------------------------------------------
   protected readonly qrImages = new Map<number, string>();
+  /** Datos visibles del cobro QR por fila: banco, referencia y vencimiento. */
+  protected readonly qrInfo = new Map<number, { banco: string; referencia: string; vence: Date }>();
+  protected qrBanco = QR_BANCOS[0];
+  protected readonly qrBancos = QR_BANCOS;
 
   protected isQrRow(row: SalePaymentRow): boolean {
     const method = this.paymentMethods.find((m) => m.id === row.metodoPagoId);
@@ -816,7 +974,75 @@ export class Sales implements OnInit {
   protected changePaymentMethod(row: SalePaymentRow, methodId: number | null): void {
     row.metodoPagoId = methodId;
     row.qrConfirmado = false;
+    row.tarjeta = this.isCardRow(row) ? this.emptyCard() : undefined;
     if (this.isQrRow(row)) void this.generateQr(row);
+  }
+
+  // --- Pago con tarjeta simulado (HU-13) --------------------------------------------------------
+  protected isCardRow(row: SalePaymentRow): boolean {
+    const method = this.paymentMethods.find((m) => m.id === row.metodoPagoId);
+    return method?.nombre.trim().toUpperCase() === 'TARJETA';
+  }
+
+  private emptyCard(): CardForm {
+    return { numero: '', titular: '', vencimiento: '', cvv: '', procesando: false, error: '', autorizacion: null, marca: '', ultimos4: '' };
+  }
+
+  protected cardBrand(numero: string): string {
+    const n = numero.replace(/\D/g, '');
+    if (/^4/.test(n)) return 'Visa';
+    if (/^(5[1-5]|2[2-7])/.test(n)) return 'Mastercard';
+    if (/^3[47]/.test(n)) return 'American Express';
+    return '';
+  }
+
+  protected formatCardNumber(card: CardForm, value: string): void {
+    const digits = value.replace(/\D/g, '').slice(0, 16);
+    card.numero = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+    card.marca = this.cardBrand(digits);
+    card.error = '';
+  }
+
+  /** Simula la autorizacion del adquirente (ATC/Linkser): valida Luhn, vencimiento y CVV. */
+  protected authorizeCard(row: SalePaymentRow): void {
+    const card = row.tarjeta;
+    if (!card || card.procesando) return;
+    const digits = card.numero.replace(/\D/g, '');
+    const [mm, yy] = card.vencimiento.split('/').map((v) => Number(v));
+    const now = new Date();
+    const expired = !mm || !yy || mm < 1 || mm > 12 || new Date(2000 + yy, mm, 1) <= new Date(now.getFullYear(), now.getMonth(), 1);
+    if (digits.length < 15 || !this.luhn(digits)) card.error = 'Número de tarjeta inválido.';
+    else if (!card.titular.trim()) card.error = 'Ingresa el nombre del titular.';
+    else if (expired) card.error = 'Fecha de vencimiento inválida o tarjeta vencida (MM/AA).';
+    else if (!/^\d{3,4}$/.test(card.cvv)) card.error = 'CVV inválido.';
+    else if (!(Number(row.monto) > 0)) card.error = 'Ingresa el monto a cobrar con tarjeta.';
+    if (card.error) return;
+    card.procesando = true;
+    // Tarjetas de prueba que terminan en 0002 simulan un rechazo del banco emisor.
+    setTimeout(() => {
+      card.procesando = false;
+      if (digits.endsWith('0002')) {
+        card.error = 'Transacción rechazada por el banco emisor (fondos insuficientes).';
+      } else {
+        card.autorizacion = String(Math.floor(100000 + Math.random() * 900000));
+        card.ultimos4 = digits.slice(-4);
+        card.marca = this.cardBrand(digits) || 'Tarjeta';
+        // No se conservan los datos sensibles despues de autorizar.
+        card.numero = '•••• •••• •••• ' + card.ultimos4;
+        card.cvv = '';
+      }
+      this.cdr.markForCheck();
+    }, 1200);
+  }
+
+  private luhn(digits: string): boolean {
+    let sum = 0;
+    for (let i = 0; i < digits.length; i++) {
+      let d = Number(digits[digits.length - 1 - i]);
+      if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+      sum += d;
+    }
+    return sum % 10 === 0;
   }
 
   protected confirmQrPayment(row: SalePaymentRow): void {
@@ -825,12 +1051,21 @@ export class Sales implements OnInit {
     this.registerFieldErrors = [];
   }
 
-  /** Genera un QR cualquiera: no se conecta a ningun banco, solo simula el cobro. */
-  private async generateQr(row: SalePaymentRow): Promise<void> {
+  /**
+   * Genera un QR Simple interoperable (simulado): no se conecta a ningun banco. Lleva banco, comercio,
+   * monto, moneda y referencia, con vigencia de 5 minutos como los QR de cobro en Bolivia.
+   */
+  protected async generateQr(row: SalePaymentRow): Promise<void> {
     // qrcode se carga solo cuando se usa para no engordar el paquete inicial.
     const QRCode = (await import('qrcode')).default;
-    const reference = `POS-PAGO-SIMULADO-${Date.now().toString(36).toUpperCase()}`;
-    this.qrImages.set(row.id, await QRCode.toDataURL(reference, { margin: 1, width: 220 }));
+    const referencia = `QRS-${Date.now().toString(36).toUpperCase()}`;
+    const vence = new Date(Date.now() + 5 * 60 * 1000);
+    const payload = JSON.stringify({
+      tipo: 'QR_SIMPLE', banco: this.qrBanco, comercio: this.companyName || 'Comercio',
+      monto: this.normalizeMoney(row.monto), moneda: 'BOB', referencia, vence: vence.toISOString(),
+    });
+    this.qrInfo.set(row.id, { banco: this.qrBanco, referencia, vence });
+    this.qrImages.set(row.id, await QRCode.toDataURL(payload, { margin: 1, width: 220 }));
     this.cdr.markForCheck();
   }
 
@@ -955,6 +1190,11 @@ export class Sales implements OnInit {
 
     if (this.salePaymentRows.some((row) => this.isQrRow(row) && !row.qrConfirmado)) {
       this.registerError = 'Confirma el pago por QR cuando el cliente haya escaneado el codigo.';
+      return;
+    }
+
+    if (this.salePaymentRows.some((row) => this.isCardRow(row) && !row.tarjeta?.autorizacion)) {
+      this.registerError = 'Autoriza el cobro con tarjeta antes de registrar la venta.';
       return;
     }
 
@@ -1457,6 +1697,7 @@ export class Sales implements OnInit {
       nombre: client.usuario.persona?.nombre_completo ?? 'Sin nombre',
       correo: client.usuario.email,
       categoriaId: client.cliente?.id_categoria_cliente ?? null,
+      saldoAFavor: Number((client.cliente as { saldo_a_favor?: number } | undefined)?.saldo_a_favor ?? 0),
     };
   }
 
