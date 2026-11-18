@@ -157,6 +157,33 @@ public final class VentaDtos {
     public static class CobroCreate {
         private Integer idCxc;
         private List<PagoCreditoItem> pagosCredito = new ArrayList<>();
+        /** Opcional: pago informado por el cliente que este cobro confirma. */
+        private Integer idPagoReportado;
+    }
+
+    /** HU-10: pago de crédito que el cliente informa desde la app (queda PENDIENTE). */
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PagoReportadoCreate {
+        private Integer idMetodoPago;
+        private BigDecimal montoPagado;
+        private String referencia;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    public static class PagoReportadoResponse {
+        private Integer idPagoReportado;
+        private Integer idCxc;
+        private Integer idMetodoPago;
+        private BigDecimal monto;
+        private String referencia;
+        private String estado;
+        private LocalDateTime fechaReporte;
+        private LocalDateTime fechaConfirmacion;
     }
 
     @Getter
@@ -224,6 +251,7 @@ public final class VentaDtos {
         private String estado;
         private VentaResponse venta;
         private List<PagoCreditoResponse> pagosCredito = new ArrayList<>();
+        private List<PagoReportadoResponse> pagosReportados = new ArrayList<>();
     }
 
     @Getter

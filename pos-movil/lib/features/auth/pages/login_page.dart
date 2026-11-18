@@ -119,7 +119,7 @@ class _LoginFormState extends State<LoginForm> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed(AppRouter.profile);
+      Navigator.of(context).pushReplacementNamed(AppRouter.home);
     } on ApiException catch (error) {
       _showError(error.message);
     } catch (_) {

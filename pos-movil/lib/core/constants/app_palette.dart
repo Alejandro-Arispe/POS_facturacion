@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 
+/// Tokens del tema claro del frontend Angular (pos-frontend/src/styles.css).
 class AppPalette {
   const AppPalette._();
 
-  static const Color bg = Color(0xFFC7DD72);
-  static const Color bgSoft = Color(0xFFD8E89A);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surface2 = Color(0xFFF7F7F4);
+  static const Color bg = Color(0xFFF7F8FA); // --color-bg
+  static const Color bgSoft = Color(0xFFF3F5F8); // --color-bg-soft
+  static const Color surface = Color(0xFFFFFFFF); // --color-surface
+  static const Color surface2 = Color(0xFFF8FAFC); // --color-surface-2
 
-  static const Color primary = Color(0xFFF4A62A);
-  static const Color primaryHover = Color(0xFFDE931D);
+  static const Color primary = Color(0xFF356BDB); // --pos-brand
+  static const Color primaryHover = Color(0xFF2758BF); // --pos-brand-hover
+  static const Color primarySoft = Color(0xFFEDF3FF); // --pos-brand-soft
 
-  static const Color text = Color(0xFF2D2D2D);
-  static const Color textSoft = Color(0xFF6B7280);
+  static const Color text = Color(0xFF283342); // --color-text
+  static const Color textSoft = Color(0xFF566170); // --color-text-soft
 
-  static const Color border = Color(0xFFE5E7EB);
-  static const Color success = Color(0xFF22C55E);
-  static const Color danger = Color(0xFFEF4444);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color info = Color(0xFF3B82F6);
+  static const Color border = Color(0xFFE5E8EE); // --color-border
+  static const Color success = Color(0xFF07845C); // --color-success
+  static const Color danger = Color(0xFFC73842); // --color-danger
+  static const Color warning = Color(0xFFC56B17); // --color-warning
+  static const Color info = Color(0xFF356BDB); // --color-info
+
+  /// --radius-sm / --radius-md
+  static const double radiusSm = 8;
+  static const double radiusMd = 12;
 }

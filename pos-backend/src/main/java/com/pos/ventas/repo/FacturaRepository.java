@@ -13,6 +13,8 @@ public interface FacturaRepository extends JpaRepository<Factura, Integer> {
 
     Optional<Factura> findByVenta_IdVenta(Integer idVenta);
 
+    List<Factura> findByVenta_IdClienteInOrderByFechaEmisionDesc(java.util.Collection<Integer> idsCliente);
+
     Optional<Factura> findByCuf(String cuf);
 
     @Query("""

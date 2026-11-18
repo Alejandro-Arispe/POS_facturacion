@@ -309,10 +309,9 @@ class _CreditsPageState extends State<CreditsPage> with SingleTickerProviderStat
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          Navigator.of(context).pushNamed(
-            AppRouter.creditDetail,
-            arguments: credit,
-          );
+          Navigator.of(context)
+              .pushNamed(AppRouter.creditDetail, arguments: credit)
+              .then((_) => _loadCredits());
         },
         child: Padding(
           padding: const EdgeInsets.all(16),

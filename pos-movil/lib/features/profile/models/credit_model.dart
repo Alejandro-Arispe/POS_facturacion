@@ -167,6 +167,18 @@ class AccountReceivable {
   final String estado;
   final SaleCredit venta;
   final List<CreditPayment> pagosCredito;
+  final List<ReportedPayment> pagosReportados;
+
+  /// Suma de pagos informados por el cliente que el personal aún no confirmó.
+  double get montoInformadoPendiente => pagosReportados
+      .where((p) => p.pendiente)
+      .fold(0.0, (s, p) => s + p.monto);
+
+  /// Lo que todavía se puede informar como pago (saldo menos pagos pendientes de confirmar).
+  double get saldoPorInformar {
+    final v = saldoPendiente - montoInformadoPendiente;
+    return v < 0 ? 0 : v;
+  }
 
   const AccountReceivable({
     required this.idCxc,
@@ -178,7 +190,21 @@ class AccountReceivable {
     required this.estado,
     required this.venta,
     required this.pagosCredito,
+    this.pagosReportados = const [],
   });
+
+  AccountReceivable conPagoReportado(ReportedPayment pago) => AccountReceivable(
+        idCxc: idCxc,
+        idVenta: idVenta,
+        montoCredito: montoCredito,
+        saldoPendiente: saldoPendiente,
+        fechaInicio: fechaInicio,
+        fechaVencimiento: fechaVencimiento,
+        estado: estado,
+        venta: venta,
+        pagosCredito: pagosCredito,
+        pagosReportados: [pago, ...pagosReportados],
+      );
 
   factory AccountReceivable.fromJson(Map<String, dynamic> json) {
     final saleJson = json['venta'];
@@ -195,6 +221,39 @@ class AccountReceivable {
       pagosCredito: paymentsJson != null
           ? paymentsJson.map((p) => CreditPayment.fromJson(p as Map<String, dynamic>)).toList()
           : [],
+      pagosReportados: (json['pagos_reportados'] as List? ?? const [])
+          .map((p) => ReportedPayment.fromJson(p as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+/// Pago informado por el cliente desde la app (POST /api/creditos/me/{id}/pagar).
+/// Queda PENDIENTE hasta que el personal lo confirma en caja; recién ahí baja el saldo.
+class ReportedPayment {
+  final int idPagoReportado;
+  final double monto;
+  final String estado;
+  final String? referencia;
+  final DateTime? fechaReporte;
+
+  const ReportedPayment({
+    required this.idPagoReportado,
+    required this.monto,
+    required this.estado,
+    this.referencia,
+    this.fechaReporte,
+  });
+
+  bool get pendiente => estado.toUpperCase() == 'PENDIENTE';
+
+  factory ReportedPayment.fromJson(Map<String, dynamic> json) {
+    return ReportedPayment(
+      idPagoReportado: int.tryParse(json['id_pago_reportado']?.toString() ?? '') ?? 0,
+      monto: double.tryParse(json['monto']?.toString() ?? '') ?? 0.0,
+      estado: json['estado']?.toString() ?? '',
+      referencia: json['referencia']?.toString(),
+      fechaReporte: DateTime.tryParse(json['fecha_reporte']?.toString() ?? ''),
     );
   }
 }

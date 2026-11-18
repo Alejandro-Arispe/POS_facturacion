@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import 'constants/api_constants.dart';
@@ -88,6 +90,27 @@ class ApiService {
       final response = await _dio.patch(endpoint, data: body);
       return response.data;
     } on DioException catch (error) {
+      throw _handleError(error);
+    }
+  }
+
+  /// Descarga un archivo binario (p. ej. un PDF). Los errores del backend llegan como bytes JSON.
+  Future<List<int>> getBytes(String endpoint) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        endpoint,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return response.data ?? const [];
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      if (data is List<int>) {
+        try {
+          error.response!.data = jsonDecode(utf8.decode(data));
+        } on FormatException {
+          // Cuerpo no JSON: se usa el mensaje genérico.
+        }
+      }
       throw _handleError(error);
     }
   }

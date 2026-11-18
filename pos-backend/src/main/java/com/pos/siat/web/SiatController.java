@@ -53,6 +53,24 @@ public class SiatController {
         return motivos.findAll(Sort.by("codigoMotivoSin"));
     }
 
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.ventas.service.InvoiceReadService invoiceRead;
+
+    /** HU-16: facturas del cliente autenticado. */
+    @GetMapping("/api/facturas/me")
+    public List<Map<String, Object>> misFacturas() {
+        return invoiceRead.mine();
+    }
+
+    /** HU-16/18: PDF de una factura propia del cliente autenticado. */
+    @GetMapping("/api/facturas/me/{idFactura}/pdf")
+    public org.springframework.http.ResponseEntity<byte[]> miFacturaPdf(@PathVariable Integer idFactura) {
+        var pdf = invoiceRead.minePdf(idFactura);
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "attachment; filename=\"" + pdf.nombre() + "\"")
+                .body(pdf.bytes());
+    }
+
     @GetMapping("/api/facturas/{idFactura}")
     public Map<String, Object> detalle(@PathVariable Integer idFactura) {
         return facturas.detalle(SecurityUtils.currentUser(), idFactura);

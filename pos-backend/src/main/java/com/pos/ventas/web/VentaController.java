@@ -23,6 +23,12 @@ public class VentaController {
         this.ventaService = ventaService;
     }
 
+    /** HU-11: compras del cliente autenticado. */
+    @GetMapping("/me")
+    public List<VentaDtos.VentaResponse> misVentas() {
+        return ventaService.misVentas(SecurityUtils.currentUser());
+    }
+
     @GetMapping("/tipos-venta")
     public List<VentaDtos.CatalogoItem> tiposVenta() {
         return ventaService.listarTiposVenta();

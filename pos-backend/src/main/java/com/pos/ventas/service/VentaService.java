@@ -82,6 +82,9 @@ public class VentaService {
     @org.springframework.beans.factory.annotation.Autowired private com.pos.common.security.PasswordService passwordService;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.auditoria.service.BitacoraService bitacoraService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.pos.ventas.repo.PagoCreditoReportadoRepository pagosReportados;
+
     public VentaService(
             EmpresaAccess empresaAccess, SalePricing pricing, com.pos.common.access.RbacResolver rbac, com.pos.ventas.repo.PedidoClienteDetalleRepository orderDetails,
             TipoVentaRepository tipoVentaRepository,
@@ -446,6 +449,18 @@ public class VentaService {
         if (totalPagado.compareTo(saldoAnterior) > 0) {
             throw ApiException.badRequest("El total pagado no puede ser mayor al saldo pendiente.");
         }
+        if (payload.getIdPagoReportado() != null) {
+            com.pos.ventas.domain.PagoCreditoReportado reportado = pagosReportados.findById(payload.getIdPagoReportado())
+                    .filter(r -> cuenta.getIdCxc().equals(r.getIdCxc()))
+                    .orElseThrow(() -> ApiException.notFound("Pago informado no encontrado para esta cuenta."));
+            if (!com.pos.ventas.domain.PagoCreditoReportado.PENDIENTE.equals(reportado.getEstado())) {
+                throw ApiException.badRequest("El pago informado ya fue confirmado.");
+            }
+            reportado.setEstado(com.pos.ventas.domain.PagoCreditoReportado.CONFIRMADO);
+            reportado.setIdUsuarioConfirma(usuario.getIdUsuario());
+            reportado.setFechaConfirmacion(LocalDateTime.now());
+            pagosReportados.save(reportado);
+        }
         TipoMovimientoCaja tipoIngreso = tipoMovimientoCajaRepository.findByNombreIgnoreCase("INGRESO")
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Tipo de movimiento de caja INGRESO no configurado."));
 
@@ -521,6 +536,71 @@ public class VentaService {
         return response;
     }
 
+    /**
+     * HU-10: el cliente informa un pago de su propio crédito. No modifica el saldo ni la caja: queda PENDIENTE
+     * hasta que el personal registra el cobro en caja con id_pago_reportado.
+     */
+    @Transactional
+    public VentaDtos.PagoReportadoResponse reportarPago(Usuario usuario, Integer idCxc, VentaDtos.PagoReportadoCreate payload) {
+        empresaAccess.requireUsuarioActivo(usuario);
+        CuentaPorCobrar cuenta = cuentaPorCobrarRepository.findForUpdate(idCxc)
+                .orElseThrow(() -> ApiException.notFound("Cuenta por cobrar no encontrada."));
+        Integer idCliente = cuenta.getVenta().getIdCliente();
+        boolean own = idCliente != null && clienteRepository.findById(idCliente)
+                .map(c -> java.util.Objects.equals(c.getIdUsuario(), usuario.getIdUsuario())).orElse(false);
+        if (!own) throw ApiException.notFound("Cuenta por cobrar no encontrada.");
+        if (payload == null || payload.getIdMetodoPago() == null) throw ApiException.badRequest("Debe indicar el método de pago.");
+        SalePricing.money(payload.getMontoPagado(), "pago");
+        if (payload.getMontoPagado() == null || payload.getMontoPagado().compareTo(BigDecimal.ZERO) <= 0) {
+            throw ApiException.badRequest("El monto pagado debe ser mayor a cero.");
+        }
+        MetodoPago metodo = metodoPagoRepository.findById(payload.getIdMetodoPago())
+                .orElseThrow(() -> ApiException.notFound("Método de pago no encontrado."));
+        String nombre = (metodo.getNombre() == null ? "" : metodo.getNombre()).trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("QR", "TARJETA", "TRANSFERENCIA").contains(nombre)) {
+            throw ApiException.badRequest("El método de pago " + metodo.getNombre() + " no se puede informar desde la app.");
+        }
+        BigDecimal disponible = nvl(cuenta.getSaldoPendiente()).subtract(nvl(pagosReportados.sumPendienteByCxc(idCxc)));
+        if ("PAGADA".equals(cuenta.getEstado()) || payload.getMontoPagado().compareTo(disponible) > 0) {
+            throw ApiException.badRequest("El monto supera el saldo pendiente (descontando pagos ya informados).");
+        }
+        String referencia = payload.getReferencia() == null ? null : payload.getReferencia().trim();
+        if (referencia != null && referencia.length() > 100) throw ApiException.badRequest("La referencia no puede superar 100 caracteres.");
+        com.pos.ventas.domain.PagoCreditoReportado reportado = new com.pos.ventas.domain.PagoCreditoReportado();
+        reportado.setIdCxc(idCxc);
+        reportado.setIdUsuario(usuario.getIdUsuario());
+        reportado.setIdMetodoPago(payload.getIdMetodoPago());
+        reportado.setMonto(payload.getMontoPagado());
+        reportado.setReferencia(referencia == null || referencia.isEmpty() ? null : referencia);
+        reportado.setFechaReporte(LocalDateTime.now());
+        return toPagoReportado(pagosReportados.save(reportado));
+    }
+
+    private VentaDtos.PagoReportadoResponse toPagoReportado(com.pos.ventas.domain.PagoCreditoReportado r) {
+        VentaDtos.PagoReportadoResponse dto = new VentaDtos.PagoReportadoResponse();
+        dto.setIdPagoReportado(r.getIdPagoReportado());
+        dto.setIdCxc(r.getIdCxc());
+        dto.setIdMetodoPago(r.getIdMetodoPago());
+        dto.setMonto(r.getMonto());
+        dto.setReferencia(r.getReferencia());
+        dto.setEstado(r.getEstado());
+        dto.setFechaReporte(r.getFechaReporte());
+        dto.setFechaConfirmacion(r.getFechaConfirmacion());
+        return dto;
+    }
+
+    /** HU-11: compras del cliente autenticado (ventas de todos sus perfiles de cliente). */
+    @Transactional(readOnly = true)
+    public List<VentaDtos.VentaResponse> misVentas(Usuario usuario) {
+        empresaAccess.requireUsuarioActivo(usuario);
+        return clienteRepository.findByIdUsuario(usuario.getIdUsuario()).stream()
+                .flatMap(c -> ventaRepository.findByIdCliente(c.getIdCliente()).stream())
+                .sorted(java.util.Comparator.comparing(com.pos.ventas.domain.Venta::getFecha,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .map(this::toVentaResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<VentaDtos.CuentaPorCobrarResponse> cuentasPorCobrar(Usuario usuario, Integer idEmpresa, Integer idCliente) {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
@@ -551,6 +631,8 @@ public class VentaService {
             dto.setVenta(toVentaResponse(cuenta.getVenta()));
             dto.setPagosCredito(pagoCreditoRepository.findByCuentaPorCobrar_IdCxc(cuenta.getIdCxc())
                     .stream().map(this::toPagoCredito).toList());
+            dto.setPagosReportados(pagosReportados.findByIdCxcOrderByFechaReporteDesc(cuenta.getIdCxc())
+                    .stream().map(this::toPagoReportado).toList());
             result.add(dto);
         }
         return result;

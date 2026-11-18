@@ -34,6 +34,28 @@ class DemoAccountSeederTests {
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate transactions;
     @Autowired PasswordService passwords;
+    @Autowired com.pos.productos.service.ProductoService productos;
+
+    @Test
+    void clientWithoutStaffPermissionsSeesPublicCatalogForOneBranch() {
+        Integer id = seeder.seed(createOwner(true)).companyId();
+        Integer idUsuario = jdbc.queryForObject(
+                "select min(id_usuario) from cliente where id_empresa = ? and activo = true", Integer.class, id);
+        Usuario client = em.find(Usuario.class, idUsuario);
+
+        var rows = productos.listarPorEmpresa(client, id);
+
+        assertThat(rows).isNotEmpty().allSatisfy(row -> assertThat(row)
+                .containsKeys("id_producto", "nombre", "precio", "disponible", "id_sucursal")
+                .doesNotContainKey("costo"));
+        Integer sucursal = (Integer) rows.get(0).get("id_sucursal");
+        assertThat(sucursal).isNotNull();
+        for (var row : rows) {
+            boolean conStock = count("select count(*) from stock where id_producto = ? and id_sucursal = ? and cantidad > 0",
+                    row.get("id_producto"), sucursal) > 0;
+            assertThat(row.get("disponible")).isEqualTo(conStock);
+        }
+    }
 
     @Test
     void createsBalancedDatasetAndPreservesEditsOnRepeatedExecution() {

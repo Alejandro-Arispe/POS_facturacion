@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_palette.dart';
+import '../../creditos/pago_credito_page.dart';
 import '../models/credit_model.dart';
 
-class CreditDetailPage extends StatelessWidget {
+class CreditDetailPage extends StatefulWidget {
   final AccountReceivable credit;
 
   const CreditDetailPage({
     super.key,
     required this.credit,
   });
+
+  @override
+  State<CreditDetailPage> createState() => _CreditDetailPageState();
+}
+
+class _CreditDetailPageState extends State<CreditDetailPage> {
+  late AccountReceivable credit = widget.credit;
+
+  Future<void> _pagar() async {
+    final pago = await Navigator.of(context).push<ReportedPayment>(
+      MaterialPageRoute(builder: (_) => PagoCreditoPage(credit: credit)),
+    );
+    if (pago != null && mounted) setState(() => credit = credit.conPagoReportado(pago));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +144,30 @@ class CreditDetailPage extends StatelessWidget {
                 _buildDateDetail('Fecha Vencimiento', credit.fechaVencimiento),
               ],
             ),
+            if (credit.montoInformadoPendiente > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppPalette.warning.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppPalette.radiusSm),
+                ),
+                child: Text(
+                  'Pagos informados pendientes de confirmar: Bs ${credit.montoInformadoPendiente.toStringAsFixed(2)}.\n'
+                  'Saldo por informar: Bs ${credit.saldoPorInformar.toStringAsFixed(2)}.',
+                  style: const TextStyle(color: AppPalette.warning, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+            if (credit.saldoPendiente > 0) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: credit.saldoPorInformar > 0 ? _pagar : null,
+                icon: const Icon(Icons.payments_outlined),
+                label: const Text('Pagar'),
+              ),
+            ],
           ],
         ),
       ),

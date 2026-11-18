@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../core/constants/app_palette.dart';
 import 'router.dart';
@@ -53,7 +54,7 @@ class MyApp extends StatelessWidget {
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppPalette.primary,
-            foregroundColor: AppPalette.text,
+            foregroundColor: Colors.white,
             disabledBackgroundColor: AppPalette.primary.withValues(alpha: 0.5),
             disabledForegroundColor: AppPalette.textSoft,
             minimumSize: const Size.fromHeight(48),
@@ -66,7 +67,41 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
-        textTheme: Theme.of(context).textTheme.apply(
+        cardTheme: CardThemeData(
+          color: AppPalette.surface,
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppPalette.radiusMd),
+            side: const BorderSide(color: AppPalette.border),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: AppPalette.surface,
+          indicatorColor: AppPalette.primarySoft,
+          surfaceTintColor: Colors.transparent,
+          iconTheme: WidgetStateProperty.resolveWith(
+            (states) => IconThemeData(
+              color: states.contains(WidgetState.selected)
+                  ? AppPalette.primary
+                  : AppPalette.textSoft,
+            ),
+          ),
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => TextStyle(
+              fontSize: 12,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+              color: states.contains(WidgetState.selected)
+                  ? AppPalette.primary
+                  : AppPalette.textSoft,
+            ),
+          ),
+        ),
+        // Tipografía del frontend: Manrope (--font-family-base).
+        textTheme: GoogleFonts.manropeTextTheme(Theme.of(context).textTheme)
+            .apply(
           bodyColor: AppPalette.text,
           displayColor: AppPalette.text,
         ),
