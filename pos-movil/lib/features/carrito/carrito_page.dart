@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/router.dart';
 import '../../core/api_service.dart';
 import '../../core/constants/app_palette.dart';
 import '../catalogo/producto_model.dart';
@@ -22,14 +23,20 @@ class CarritoPage extends StatelessWidget {
           title: const Text('Pedido registrado'),
           content: Text(
             idPedido == null
-                ? 'Tu pedido fue enviado.'
-                : 'Tu pedido N° $idPedido fue enviado. Te avisaremos cuando la empresa lo procese.',
+                ? 'Tu pedido fue enviado. Síguelo en la pestaña Pedidos.'
+                : 'Tu pedido N° $idPedido fue enviado. Síguelo en la pestaña Pedidos.',
             textAlign: TextAlign.center,
           ),
           actions: [
             TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Aceptar')),
           ],
         ),
+      );
+      if (!context.mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRouter.home,
+        (route) => false,
+        arguments: 0,
       );
     } on ApiException catch (e) {
       messenger

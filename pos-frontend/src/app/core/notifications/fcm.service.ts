@@ -92,14 +92,23 @@ export class FcmService {
       await Promise.all(
         idsEmpresa.map((empresaId) => {
           console.log(`[FCM WEB] Registrando token uid_usuario=${uid_usuario} id_empresa=${empresaId}`);
+          const headers: Record<string, string> = {};
+          const accessToken = this.authService.getAccessToken();
+          if (accessToken) {
+            headers['Authorization'] = `Bearer ${accessToken}`;
+          }
           return axios
-            .post(`${base}/notifications/register-token`, {
-              token: currentToken,
-              uid_usuario: uid_usuario,
-              rol: rol,
-              plataforma: 'web',
-              id_empresa: empresaId,
-            })
+            .post(
+              `${base}/notifications/register-token`,
+              {
+                token: currentToken,
+                uid_usuario: uid_usuario,
+                rol: rol,
+                plataforma: 'web',
+                id_empresa: empresaId,
+              },
+              { headers },
+            )
             .then(() => {
               console.log(`[FCM WEB] Token registrado OK para id_empresa=${empresaId}`);
             })

@@ -21,7 +21,10 @@ import { FcmService } from '../../../core/notifications/fcm.service';
 import { NotificationDetailModalComponent } from '../notification-center/notification-detail-modal/notification-detail-modal.component';
 import { NotificationCenterComponent } from '../notification-center/notification-center.component';
 import { NotificationToastComponent } from '../notification-center/notification-toast/notification-toast.component';
-import { NotificationDetailModel } from '../notification-center/stock-alerts/stock-alerts';
+import {
+  NotificationDetailModel,
+  notificationAuthHeaders,
+} from '../notification-center/stock-alerts/stock-alerts';
 
 @Component({
   selector: 'app-navbar',
@@ -72,7 +75,11 @@ export class Navbar implements OnInit, OnDestroy {
     return titles.find(([path]) => url.includes(path))?.[1] ?? 'Punto de venta';
   }
 
-  protected get accountLabel(): string {
+  /** Cacheado para evitar NG0100 (MI → email) en el primer CD. */
+  protected readonly accountLabel: string = this.resolveAccountLabel();
+  protected readonly accountInitials: string = this.accountLabel.substring(0, 2).toUpperCase();
+
+  private resolveAccountLabel(): string {
     try {
       const token = this.authService.getAccessToken();
       if (!token) return 'Mi cuenta';
@@ -82,10 +89,6 @@ export class Navbar implements OnInit, OnDestroy {
     } catch {
       return 'Mi cuenta';
     }
-  }
-
-  protected get accountInitials(): string {
-    return this.accountLabel.substring(0, 2).toUpperCase();
   }
 
   protected get searchResults(): Array<{ label: string; commands: string[] }> {
@@ -271,7 +274,9 @@ export class Navbar implements OnInit, OnDestroy {
     try {
       const base = this.fcmService.getApiBase();
       const responses = await Promise.all([
-        fetch(`${base}/notifications/history/empresas/${companyId}`),
+        fetch(`${base}/notifications/history/empresas/${companyId}`, {
+          headers: notificationAuthHeaders(),
+        }),
       ]);
 
       const payloads = await Promise.all(

@@ -61,27 +61,33 @@ export class NotificationCenterComponent implements OnInit, OnDestroy {
 
   async load(initialLoad = false) {
     const previousIds = new Set(this.knownNotificationIds);
-    const idsEmpresa = await this.fcmService.obtenerEmpresasContexto();
-    const historyItems = await fetchStockAlertHistory(this.apiBase, idsEmpresa);
+    try {
+      const idsEmpresa = await this.fcmService.obtenerEmpresasContexto();
+      const historyItems = await fetchStockAlertHistory(this.apiBase, idsEmpresa);
 
-    const nextItems = historyItems
-      .map((it: any) => normalizeStockNotification(it))
-      .sort((left: any, right: any) => right.sortAt.getTime() - left.sortAt.getTime());
+      const nextItems = historyItems
+        .map((it: any) => normalizeStockNotification(it))
+        .sort((left: any, right: any) => right.sortAt.getTime() - left.sortAt.getTime());
 
-    this.items = nextItems;
-    this.knownNotificationIds.clear();
-    for (const item of this.items) {
-      this.knownNotificationIds.add(String(item.id));
-    }
-
-    this.emitUnreadCount();
-
-    if (!initialLoad) {
-      const latestNewUnreadStock = findLatestNewUnreadStockAlert(this.items, previousIds);
-
-      if (latestNewUnreadStock) {
-        this.incomingNotification.emit(latestNewUnreadStock);
+      this.items = nextItems;
+      this.knownNotificationIds.clear();
+      for (const item of this.items) {
+        this.knownNotificationIds.add(String(item.id));
       }
+
+      this.emitUnreadCount();
+
+      if (!initialLoad) {
+        const latestNewUnreadStock = findLatestNewUnreadStockAlert(this.items, previousIds);
+
+        if (latestNewUnreadStock) {
+          this.incomingNotification.emit(latestNewUnreadStock);
+        }
+      }
+    } catch (err) {
+      console.error('[notifications] No se pudo cargar el historial:', err);
+      this.items = [];
+      this.emitUnreadCount();
     }
   }
 

@@ -13,6 +13,7 @@ import {
   CompanyPermissionCode,
   CompanyPermissionsService,
 } from '../../../../../../core/services/company-permissions.service';
+import { apiConflictSession, apiErrorMessage } from '../../../../../../core/utils/api-error';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
 
@@ -208,9 +209,36 @@ export class CashRegister implements OnInit {
           );
         },
         error: (error) => {
-          this.errorAperturaModal =
-            error?.error?.detail ??
-            'No se pudo abrir la caja. Verifica que no tengas otra sesión abierta.';
+          const message = apiErrorMessage(
+            error,
+            'No se pudo abrir la caja. Verifica que no tengas otra sesión abierta.',
+          );
+          const { idCaja, idCajaSesion } = apiConflictSession(error);
+
+          // Backend 409: ya hay sesión abierta (tuya o de esta caja) — detail llega como objeto.
+          if (idCaja && idCajaSesion) {
+            const ir = confirm(
+              `${message}. ¿Entrar a esa sesión abierta en el POS?`,
+            );
+            if (ir) {
+              this.isModalAperturaOpen = false;
+              void this.router.navigate(
+                [
+                  '/company',
+                  this.companyId,
+                  'branch',
+                  this.branchId,
+                  'cash-register',
+                  idCaja,
+                  'sales',
+                ],
+                { queryParams: { sessionId: idCajaSesion, section: 'sales' } },
+              );
+              return;
+            }
+          }
+
+          this.errorAperturaModal = message;
         },
       });
   }

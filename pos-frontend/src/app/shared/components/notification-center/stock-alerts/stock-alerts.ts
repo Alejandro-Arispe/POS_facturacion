@@ -1,5 +1,11 @@
 import axios from 'axios';
 
+/** Cabeceras Bearer para llamadas axios/fetch fuera de HttpClient. */
+export function notificationAuthHeaders(): Record<string, string> {
+  const token = sessionStorage.getItem('access_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export interface NotificationDetailField {
   label: string;
   value: string;
@@ -38,8 +44,11 @@ export async function fetchStockAlertHistory(apiBase: string, empresaIds: number
     return [];
   }
 
+  const headers = notificationAuthHeaders();
   const responses = await Promise.all(
-    empresaIds.map((idEmpresa) => axios.get(`${apiBase}/notifications/history/empresas/${idEmpresa}`)),
+    empresaIds.map((idEmpresa) =>
+      axios.get(`${apiBase}/notifications/history/empresas/${idEmpresa}`, { headers }),
+    ),
   );
 
   return responses.flatMap((res) => res.data.items || []);
@@ -50,7 +59,7 @@ export async function markStockAlertAsRead(apiBase: string, id: string | number 
     return;
   }
 
-  await axios.post(`${apiBase}/notifications/mark-read`, { id });
+  await axios.post(`${apiBase}/notifications/mark-read`, { id }, { headers: notificationAuthHeaders() });
 }
 
 export function shouldHandleStockAlertEvent(type: any): boolean {

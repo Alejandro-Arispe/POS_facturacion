@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../features/catalogo/catalogo_page.dart';
-import '../features/inicio/inicio_page.dart';
 import '../features/mis_compras/compras_page.dart';
 import '../features/mis_facturas/facturas_page.dart';
+import '../features/mis_pedidos/pedidos_page.dart';
 import '../features/profile/pages/profile_page.dart';
 
 /// Contenedor principal tras el login con la navegación inferior.
@@ -19,26 +19,26 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   late int _index = widget.initialIndex;
 
-  static const _pages = <Widget>[
-    InicioPage(),
-    CatalogoPage(),
-    ComprasPage(),
-    FacturasPage(),
-    ProfilePage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      const PedidosPage(),
+      const CatalogoPage(),
+      const ComprasPage(),
+      FacturasPage(active: _index == 3),
+      const ProfilePage(),
+    ];
+
     return Scaffold(
-      body: IndexedStack(index: _index, children: _pages),
+      body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Inicio',
+            icon: Icon(Icons.local_shipping_outlined),
+            selectedIcon: Icon(Icons.local_shipping),
+            label: 'Pedidos',
           ),
           NavigationDestination(
             icon: Icon(Icons.storefront_outlined),
