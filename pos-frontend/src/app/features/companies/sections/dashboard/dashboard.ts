@@ -12,6 +12,7 @@ import { Navbar } from '../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../shared/components/sidebar/sidebar';
 import { Icon, IconName } from '../../../../shared/components/icon/icon';
 import { dailySales, DailySale } from './dashboard-data';
+import { PredictionWidget } from './prediction-widget';
 
 type DashboardState = 'loading' | 'ready' | 'empty' | 'error';
 interface RankedClient {
@@ -63,7 +64,7 @@ interface Metric {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, MoneyPipe, TranslatePipe, Navbar, Sidebar, Icon],
+  imports: [CommonModule, RouterLink, MoneyPipe, TranslatePipe, Navbar, Sidebar, Icon, PredictionWidget],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })

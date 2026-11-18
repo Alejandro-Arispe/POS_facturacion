@@ -187,6 +187,7 @@ public class VentaService {
 
         Set<Integer> idsMetodos = new HashSet<>();
         BigDecimal totalPagado = BigDecimal.ZERO;
+        BigDecimal montoSaldoAFavor = BigDecimal.ZERO;
         for (VentaDtos.PagoCreate pago : pagosPayload) {
             if (pago == null) throw ApiException.badRequest("Pago inválido.");
             SalePricing.money(pago.getMonto(),"pago");
@@ -199,8 +200,9 @@ public class VentaService {
             if (pago.getMonto() == null || pago.getMonto().compareTo(BigDecimal.ZERO) <= 0) {
                 throw ApiException.badRequest("El monto de cada pago debe ser mayor a cero.");
             }
-            metodoPagoRepository.findById(pago.getIdMetodoPago())
+            MetodoPago metodoPago = metodoPagoRepository.findById(pago.getIdMetodoPago())
                     .orElseThrow(() -> ApiException.notFound("Metodo de pago " + pago.getIdMetodoPago() + " no encontrado."));
+            if (esSaldoAFavor(metodoPago)) montoSaldoAFavor = montoSaldoAFavor.add(pago.getMonto());
             totalPagado = totalPagado.add(pago.getMonto());
         }
         if (!pagosPayload.isEmpty() && totalPagado.compareTo(quote.total()) != 0) {
@@ -217,6 +219,16 @@ public class VentaService {
                     .orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
             if (!Boolean.TRUE.equals(cliente.getActivo()) || !belongsToCompany(cliente,idEmpresa))
                 throw ApiException.notFound("Cliente no encontrado en esta empresa.");
+        }
+        // HU-15: el saldo a favor por devoluciones se usa como medio de pago del mismo cliente.
+        if (montoSaldoAFavor.signum() > 0) {
+            if (cliente == null) throw ApiException.badRequest("El pago con saldo a favor requiere seleccionar al cliente.");
+            cliente = clienteRepository.lockById(cliente.getIdCliente()).orElseThrow(() -> ApiException.notFound("Cliente no encontrado."));
+            BigDecimal disponible = nvl(cliente.getSaldoAFavor());
+            if (montoSaldoAFavor.compareTo(disponible) > 0)
+                throw ApiException.badRequest("El cliente solo tiene Bs " + disponible + " de saldo a favor.");
+            cliente.setSaldoAFavor(disponible.subtract(montoSaldoAFavor));
+            clienteRepository.save(cliente);
         }
         Usuario adminAutorizador = null;
         if (esCredito) {
@@ -320,7 +332,9 @@ public class VentaService {
                 ventaPago.setMonto(pago.getMonto());
                 ventaPago.setFecha(LocalDateTime.now());
                 ventaPagoRepository.save(ventaPago);
-                if (tipoIngreso != null) {
+                // El saldo a favor no es dinero que entra a la caja.
+                boolean saldoAFavor = metodoPagoRepository.findById(pago.getIdMetodoPago()).map(this::esSaldoAFavor).orElse(false);
+                if (tipoIngreso != null && !saldoAFavor) {
                     MovimientoCaja movimientoCaja = new MovimientoCaja();
                     movimientoCaja.setIdMetodoPago(pago.getIdMetodoPago());
                     movimientoCaja.setTipoMovimientoCaja(tipoIngreso);
@@ -686,6 +700,10 @@ public class VentaService {
     private boolean branchAllowed(Usuario user,Integer company,Integer branch,String code) {
         return empresaAccess.canPermiso(user,company,branch,code);
     }
+    private boolean esSaldoAFavor(MetodoPago metodo) {
+        return metodo != null && "SALDO A FAVOR".equalsIgnoreCase(metodo.getNombre());
+    }
+
     private boolean belongsToCompany(Cliente client,Integer company) {
         return company.equals(client.getIdEmpresa());
     }
@@ -702,6 +720,7 @@ public class VentaService {
         dto.setTotal(venta.getTotal());
         dto.setFecha(venta.getFecha());
         dto.setEstado(venta.getEstado());
+        dto.setMotivoAnulacion(venta.getMotivoAnulacion());
         dto.setTipoVentaNombre(venta.getTipoVenta() == null ? null : venta.getTipoVenta().getNombre());
         facturaRepository.findByVenta_IdVenta(venta.getIdVenta()).ifPresent(factura -> {
             dto.setIdFactura(factura.getIdFactura());

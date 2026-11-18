@@ -230,6 +230,7 @@ public class ClienteService {
         dto.setIdCategoriaCliente(cliente.getCategoriaCliente() == null ? null : cliente.getCategoriaCliente().getIdCategoriaCliente());
         dto.setCodigoCliente(cliente.getCodigoCliente());
         dto.setSaldoCredito(cliente.getSaldoCredito());
+        dto.setSaldoAFavor(cliente.getSaldoAFavor() == null ? BigDecimal.ZERO : cliente.getSaldoAFavor());
         dto.setLimiteCredito(cliente.getLimiteCredito());
         dto.setActivo(cliente.getActivo());
         return dto;

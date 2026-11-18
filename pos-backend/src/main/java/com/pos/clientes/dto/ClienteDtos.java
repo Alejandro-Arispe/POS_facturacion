@@ -91,6 +91,7 @@ public final class ClienteDtos {
         private String codigoCliente;
         private BigDecimal saldoCredito;
         private BigDecimal limiteCredito;
+        private BigDecimal saldoAFavor;
         private Boolean activo;
     }
 }

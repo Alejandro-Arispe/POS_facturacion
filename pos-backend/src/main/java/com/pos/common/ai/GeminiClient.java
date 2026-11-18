@@ -27,15 +27,19 @@ public class GeminiClient {
 
 	private final String apiKey;
 	private final String model;
+	/** Modelo para consultas con imagenes (reconocimiento por camara): rapido y multimodal. */
+	private final String visionModel;
 	private final ObjectMapper objectMapper;
 	private final RestClient restClient;
 
 	public GeminiClient(
 			@Value("${app.ai.gemini.api-key:}") String apiKey,
-			@Value("${app.ai.gemini.model:gemini-3.5-flash}") String model,
+			@Value("${app.ai.gemini.model:gemini-3.8-flash}") String model,
+			@Value("${app.ai.gemini.vision-model:gemini-3.1-flash-lite}") String visionModel,
 			ObjectMapper objectMapper) {
 		this.apiKey = apiKey == null ? "" : apiKey.trim();
 		this.model = model;
+		this.visionModel = visionModel;
 		this.objectMapper = objectMapper;
 		SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
 		factory.setConnectTimeout(5_000);
@@ -51,33 +55,59 @@ public class GeminiClient {
 		return model;
 	}
 
+	public String getVisionModel() {
+		return visionModel;
+	}
+
 	/**
 	 * Pide a Gemini una respuesta en JSON. Devuelve vacio si no hay clave o si la llamada falla,
 	 * para que el llamador use su alternativa sin romper la operacion.
 	 */
 	public Optional<JsonNode> generarJson(String instrucciones, String mensaje) {
+		return generarJson(instrucciones, List.of(Map.of("text", mensaje)));
+	}
+
+	/** Parte de imagen para una consulta multimodal (Gemini acepta imagenes en linea en base64). */
+	public static Map<String, Object> imagen(String mimeType, byte[] contenido) {
+		return Map.of("inlineData", Map.of("mimeType", mimeType,
+				"data", java.util.Base64.getEncoder().encodeToString(contenido)));
+	}
+
+	public static Map<String, Object> texto(String texto) {
+		return Map.of("text", texto);
+	}
+
+	/** Igual que {@link #generarJson(String, String)} pero con varias partes (texto e imagenes). */
+	public Optional<JsonNode> generarJson(String instrucciones, List<Map<String, Object>> partes) {
+		return generarJson(model, instrucciones, partes);
+	}
+
+	/** Consulta con un modelo concreto (por ejemplo, el de vision). */
+	public Optional<JsonNode> generarJson(String modelo, String instrucciones, List<Map<String, Object>> partes) {
 		if (!isEnabled()) {
 			return Optional.empty();
 		}
 		Map<String, Object> cuerpo = Map.of(
 				"systemInstruction", Map.of("parts", List.of(Map.of("text", instrucciones))),
-				"contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", mensaje)))),
+				"contents", List.of(Map.of("role", "user", "parts", partes)),
 				"generationConfig", Map.of(
 						"temperature", 0.1,
 						"responseMimeType", "application/json"));
 		// Google responde 503 cuando el modelo esta saturado: se reintenta unas veces antes de rendirse.
 		for (int intento = 1; intento <= MAX_INTENTOS; intento++) {
 			try {
-				JsonNode respuesta = restClient.post()
-						.uri("/models/{model}:generateContent", model)
+				// Se lee como texto: Google a veces responde sin Content-Type JSON.
+				String crudo = restClient.post()
+						.uri("/models/{model}:generateContent", modelo)
 						.header("x-goog-api-key", apiKey)
 						.contentType(MediaType.APPLICATION_JSON)
 						.body(cuerpo)
 						.retrieve()
-						.body(JsonNode.class);
-				if (respuesta == null) {
+						.body(String.class);
+				if (crudo == null || crudo.isBlank()) {
 					return Optional.empty();
 				}
+				JsonNode respuesta = objectMapper.readTree(crudo);
 				String texto = respuesta.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("");
 				if (texto.isBlank()) {
 					return Optional.empty();
