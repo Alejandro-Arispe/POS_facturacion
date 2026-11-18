@@ -120,7 +120,7 @@ public class ReconocimientoProductoService {
         partes.add(GeminiClient.imagen(tipo, contenido));
 
         long inicio = System.currentTimeMillis();
-        JsonNode respuesta = gemini.generarJson(INSTRUCCIONES, partes)
+        JsonNode respuesta = gemini.generarJson(gemini.getVisionModel(), INSTRUCCIONES, partes)
                 .orElseThrow(() -> new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                         "Gemini no respondió. Intenta de nuevo o busca el producto por nombre."));
         long milisegundos = System.currentTimeMillis() - inicio;
@@ -146,7 +146,7 @@ public class ReconocimientoProductoService {
         coincidencias.sort((a, b) -> Double.compare((Double) b.get("confianza"), (Double) a.get("confianza")));
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("modelo", gemini.getModel());
+        result.put("modelo", gemini.getVisionModel());
         result.put("tiempo_ms", milisegundos);
         result.put("coincidencias", coincidencias);
         if (coincidencias.isEmpty()) {

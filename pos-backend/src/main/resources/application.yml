@@ -71,7 +71,9 @@ app:
   ai:
     gemini:
       api-key: ${GEMINI_API_KEY:}
-      model: ${GEMINI_MODEL:gemini-2.5-flash}
+      model: ${GEMINI_MODEL:gemini-3.8-flash}
+      # Modelo para el reconocimiento por camara (imagenes): rapido y multimodal.
+      vision-model: ${GEMINI_VISION_MODEL:gemini-3.1-flash-lite}
   analytics:
     url: ${ANALYTICS_URL:http://localhost:8001}
     api-key: ${ANALYTICS_API_KEY:}
