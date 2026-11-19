@@ -19,6 +19,7 @@ import com.pos.common.access.EmpresaAccess;
 import com.pos.common.exception.ApiException;
 import com.pos.inventario.domain.Stock;
 import com.pos.inventario.repo.StockRepository;
+import com.pos.notifications.service.NotificationService;
 import com.pos.productos.domain.Producto;
 import com.pos.productos.repo.ProductoRepository;
 import com.pos.usuarios.domain.Usuario;
@@ -45,6 +46,7 @@ public class PedidoService {
     private final ClienteRepository clienteRepository;
     private final ProductoRepository productoRepository;
     private final StockRepository stockRepository;
+    private final NotificationService notificationService;
 
     public PedidoService(
             EmpresaAccess empresaAccess,
@@ -52,13 +54,15 @@ public class PedidoService {
             PedidoClienteDetalleRepository detalleRepository,
             ClienteRepository clienteRepository,
             ProductoRepository productoRepository,
-            StockRepository stockRepository) {
+            StockRepository stockRepository,
+            NotificationService notificationService) {
         this.empresaAccess = empresaAccess;
         this.pedidoRepository = pedidoRepository;
         this.detalleRepository = detalleRepository;
         this.clienteRepository = clienteRepository;
         this.productoRepository = productoRepository;
         this.stockRepository = stockRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -128,7 +132,20 @@ public class PedidoService {
         pedido.setSubtotalEstimado(subtotal);
         pedido.setDescuentoEstimado(descuento);
         pedido.setTotalEstimado(subtotal.subtract(descuento));
-        return toResponse(pedidoRepository.save(pedido));
+        pedido = pedidoRepository.save(pedido);
+        try {
+            String nombreCliente = usuario.getPersona() != null && usuario.getPersona().getNombreCompleto() != null
+                    ? usuario.getPersona().getNombreCompleto() : "Cliente #" + cliente.getIdCliente();
+            notificationService.enviarAlerta(
+                    idEmpresa,
+                    "🛒 Pedido nuevo #" + pedido.getIdPedido(),
+                    "Cliente: " + nombreCliente + " — Total estimado: Bs " + pedido.getTotalEstimado(),
+                    Map.of(
+                            "id_empresa", String.valueOf(idEmpresa),
+                            "id_sucursal", String.valueOf(pedido.getIdSucursal())));
+        } catch (Exception ignored) {
+        }
+        return toResponse(pedido);
     }
 
     @Transactional(readOnly = true)
@@ -215,7 +232,24 @@ public class PedidoService {
             default -> {
             }
         }
-        return toResponse(pedidoRepository.save(pedido));
+        pedido = pedidoRepository.save(pedido);
+        Integer idPedidoFinal = pedido.getIdPedido();
+        String estadoFinal = pedido.getEstado();
+        clienteRepository.findById(pedido.getIdCliente()).ifPresent(cliente -> {
+            try {
+                notificationService.enviarNotificacionUsuario(
+                        cliente.getIdUsuario(),
+                        idEmpresa,
+                        "Pedido #" + idPedidoFinal + " actualizado",
+                        "Estado: " + estadoFinal,
+                        Map.of(
+                                "id_empresa", String.valueOf(idEmpresa),
+                                "id_usuario", String.valueOf(cliente.getIdUsuario()),
+                                "estado", estadoFinal));
+            } catch (Exception ignored) {
+            }
+        });
+        return toResponse(pedido);
     }
 
     private boolean branchAllowed(Usuario user,PedidoCliente order,String action) {

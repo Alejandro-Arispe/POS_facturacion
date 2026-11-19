@@ -390,8 +390,27 @@ public class VentaService {
                                 "estado", cuenta.getEstado()));
             } catch (Exception ignored) {
             }
+            try {
+                notificationService.enviarAlerta(
+                        idEmpresa,
+                        "💳 Nuevo crédito: " + nombreCliente(cliente),
+                        "Monto: Bs " + venta.getTotal() + " — Venta #" + venta.getIdVenta(),
+                        Map.of(
+                                "id_empresa", String.valueOf(idEmpresa),
+                                "id_cxc", String.valueOf(cuenta.getIdCxc()),
+                                "monto_credito", String.valueOf(cuenta.getMontoCredito()),
+                                "saldo_pendiente", String.valueOf(cuenta.getSaldoPendiente())));
+            } catch (Exception ignored) {
+            }
         }
         return toVentaResponse(ventaRepository.findById(venta.getIdVenta()).orElse(venta));
+    }
+
+    private String nombreCliente(Cliente cliente) {
+        return usuarioRepository.findById(cliente.getIdUsuario())
+                .map(Usuario::getPersona)
+                .map(p -> p.getNombreCompleto())
+                .orElse("Cliente #" + cliente.getIdCliente());
     }
 
     /** HU-09: valida que quien autoriza sea administrador de la empresa (modelo RBAC) y sus credenciales. */
@@ -529,6 +548,19 @@ public class VentaService {
                                     "id_cxc", String.valueOf(idCxc),
                                     "id_empresa", String.valueOf(idEmpresaSesion),
                                     "id_usuario", String.valueOf(cliente.getIdUsuario()),
+                                    "monto_pagado", String.valueOf(totalPagadoFinal),
+                                    "saldo_pendiente", String.valueOf(saldoPendienteFinal),
+                                    "estado", estadoFinal));
+                } catch (Exception ignored) {
+                }
+                try {
+                    notificationService.enviarAlerta(
+                            idEmpresaSesion,
+                            "✅ Pago recibido: " + nombreCliente(cliente),
+                            "Pagó Bs " + totalPagadoFinal + " — Saldo pendiente: Bs " + saldoPendienteFinal,
+                            Map.of(
+                                    "id_empresa", String.valueOf(idEmpresaSesion),
+                                    "id_cxc", String.valueOf(idCxc),
                                     "monto_pagado", String.valueOf(totalPagadoFinal),
                                     "saldo_pendiente", String.valueOf(saldoPendienteFinal),
                                     "estado", estadoFinal));

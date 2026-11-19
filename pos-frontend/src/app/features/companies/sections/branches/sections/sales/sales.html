@@ -79,7 +79,7 @@
               }
               @if (registerFieldErrors.length) {
                 <ul class="feedback feedback-error" aria-label="Errores de validacion de la factura">
-                  @for (fieldError of registerFieldErrors; track fieldError) {
+                  @for (fieldError of registerFieldErrors; track $index) {
                     <li>{{ fieldError }}</li>
                   }
                 </ul>

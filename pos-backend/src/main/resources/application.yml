@@ -77,6 +77,11 @@ app:
   analytics:
     url: ${ANALYTICS_URL:http://localhost:8001}
     api-key: ${ANALYTICS_API_KEY:}
+  firebase:
+    # JSON de la cuenta de servicio de Firebase (proyecto atemporal-f0125).
+    # Local: ../claves/firebase-key.json (carpeta ignorada por git). Docker: montado en /run/secrets.
+    # Si el archivo no existe, el push queda desactivado (solo historial + WebSocket).
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:../claves/firebase-key.json}
   superadmin:
     email: ${SUPERADMIN_EMAIL:alejandro@gmail.com}
     password: ${SUPERADMIN_PASSWORD:}

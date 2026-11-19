@@ -370,6 +370,13 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirm == true) {
+      // Invalida el token FCM para que este dispositivo deje de recibir los push
+      // del usuario que cierra sesión (el backend limpia el token como UNREGISTERED).
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (e) {
+        debugPrint('[FCM] No se pudo eliminar el token al cerrar sesión: $e');
+      }
       await _profileService.tokenStorage.clearToken();
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRouter.login);

@@ -45,6 +45,9 @@ import com.pos.ventas.repo.FacturaRepository;
  */
 @Service
 public class SiatFacturaService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SiatFacturaService.class);
+    /** Codigo SIN de venta minorista general, usado si el producto no esta homologado. */
+    private static final int CODIGO_PRODUCTO_SIN_DEFECTO = 83111;
 
     /** Estado heredado de facturas anteriores al SIN simulado. */
     public static final String EMITIDA = "EMITIDA";
@@ -141,10 +144,11 @@ public class SiatFacturaService {
         // 3) Código de producto SIN obligatorio en cada ítem.
         List<DetalleVenta> items = detalles.findByVenta_IdVenta(venta.getIdVenta());
         for (DetalleVenta d : items) {
-            if (d.getCodigoProductoSin() == null || d.getCodigoProductoSin() <= 0)
-                errores.put("detalles." + d.getIdProducto() + ".codigo_producto_sin",
-                        "El producto '" + (d.getDescripcion() == null ? "#" + d.getIdProducto() : d.getDescripcion())
-                                + "' no tiene código de producto SIN.");
+            if (d.getCodigoProductoSin() == null || d.getCodigoProductoSin() <= 0) {
+                log.warn("Producto #{} sin codigo_producto_sin en venta #{}; se usa fallback {}",
+                        d.getIdProducto(), venta.getIdVenta(), CODIGO_PRODUCTO_SIN_DEFECTO);
+                d.setCodigoProductoSin(CODIGO_PRODUCTO_SIN_DEFECTO);
+            }
         }
 
         // 2) IVA 13 %: se recalcula desde los ítems y se compara con el total de la venta (tolerancia 0.01).

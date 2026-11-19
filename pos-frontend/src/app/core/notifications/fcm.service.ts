@@ -59,11 +59,28 @@ export class FcmService {
       );
     });
 
+    if (!this.vapidKey) {
+      console.warn('[FCM WEB] firebaseVapidKey vacío en environments: no se puede obtener token web.');
+      return null;
+    }
+
     try {
-      const currentToken = await getToken(messaging, {
+      const tokenOptions = {
         vapidKey: this.vapidKey,
         serviceWorkerRegistration: serviceWorkerRegistration || undefined,
-      });
+      };
+      let currentToken: string;
+      try {
+        currentToken = await getToken(messaging, tokenOptions);
+      } catch (e: any) {
+        if (e?.name !== 'VersionError') throw e;
+        console.warn('[FCM WEB] VersionError en IndexedDB: se borra firebase-messaging-database y se reintenta.');
+        await new Promise<void>((resolve) => {
+          const req = indexedDB.deleteDatabase('firebase-messaging-database');
+          req.onsuccess = req.onerror = req.onblocked = () => resolve();
+        });
+        currentToken = await getToken(messaging, tokenOptions);
+      }
 
       if (!currentToken) {
         console.warn('[FCM WEB] getToken() no devolvió token — permisos denegados o VAPID inválido.');

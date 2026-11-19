@@ -46,8 +46,11 @@ services:
       GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-3.1-flash-lite}
       SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
+      FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase-key.json
     volumes:
       - media:/app/media
+      # Cuenta de servicio de Firebase (push). Copiarla al servidor en claves/firebase-key.json; no se sube a git.
+      - ${FIREBASE_KEY_FILE:-../claves/firebase-key.json}:/run/secrets/firebase-key.json:ro
       - xmls:/app/XMLS
 
   # El frontend se compila fuera del servidor (ng build necesita mas memoria que una instancia de 2 GB):
