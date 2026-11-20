@@ -325,8 +325,9 @@ export class ProductService {
     return this.apiService.get<TipoVenta[]>('/api/ventas/tipos-venta');
   }
 
-  getMetodosPago(): Observable<MetodoPago[]> {
-    return this.apiService.get<MetodoPago[]>('/api/ventas/metodos-pago');
+  getMetodosPago(incluirCheque = false): Observable<MetodoPago[]> {
+    const query = incluirCheque ? '?incluir_cheque=true' : '';
+    return this.apiService.get<MetodoPago[]>(`/api/ventas/metodos-pago${query}`);
   }
 
   getMovimientosSucursal(

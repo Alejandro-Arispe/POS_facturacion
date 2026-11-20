@@ -140,8 +140,9 @@ class ApiService {
       message = 'Tiempo de conexion agotado';
     } else if (error.type == DioExceptionType.receiveTimeout) {
       message = 'Tiempo de respuesta agotado';
-    } else if (error.type == DioExceptionType.unknown) {
-      message = 'Error de conexion';
+    } else if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.unknown) {
+      message = 'Error de conexion con el servidor';
     }
 
     return ApiException(message);

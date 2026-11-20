@@ -2,10 +2,12 @@ package com.pos.notifications.service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,9 @@ import com.pos.notifications.domain.NotificacionHistorial;
 import com.pos.notifications.dto.NotificationDtos;
 import com.pos.notifications.repo.DispositivoTokenRepository;
 import com.pos.notifications.repo.NotificacionHistorialRepository;
+import com.pos.usuarios.domain.Usuario;
+import com.pos.usuarios.domain.UsuarioRol;
+import com.pos.usuarios.repo.UsuarioRolRepository;
 import com.pos.websocket.ClienteWebSocketHub;
 
 @Service
@@ -26,14 +31,60 @@ public class NotificationService {
     private final com.pos.common.access.EmpresaAccess access;
     private final NotificacionHistorialRepository historialRepository;
     private final ClienteWebSocketHub clienteWebSocketHub;
+    private final FcmPushService push;
+    private final UsuarioRolRepository usuarioRolRepository;
 
     public NotificationService(
             DispositivoTokenRepository tokenRepository, NotificationReadPolicy readPolicy, com.pos.common.access.EmpresaAccess access,
             NotificacionHistorialRepository historialRepository,
-            ClienteWebSocketHub clienteWebSocketHub) {
+            ClienteWebSocketHub clienteWebSocketHub,
+            FcmPushService push,
+            UsuarioRolRepository usuarioRolRepository) {
         this.tokenRepository = tokenRepository; this.readPolicy=readPolicy; this.access=access;
         this.historialRepository = historialRepository;
         this.clienteWebSocketHub = clienteWebSocketHub;
+        this.push = push;
+        this.usuarioRolRepository = usuarioRolRepository;
+    }
+
+    /**
+     * Personal de la empresa (no clientes) que tiene permiso para ver esta alerta,
+     * aplicando la misma politica que el historial ({@link NotificationReadPolicy}).
+     */
+    private List<DispositivoToken> tokensPersonalAutorizado(Integer idEmpresa, Map<String, Object> payload) {
+        Map<Integer, Usuario> usuarios = new LinkedHashMap<>();
+        for (UsuarioRol ur : usuarioRolRepository.findPersonalExcluyendoRoles(idEmpresa, List.of("CLIENTE"))) {
+            if (Boolean.TRUE.equals(ur.getActivo()) && ur.getUsuario() != null) {
+                usuarios.putIfAbsent(ur.getUsuario().getIdUsuario(), ur.getUsuario());
+            }
+        }
+        Set<String> uids = new HashSet<>();
+        for (Usuario u : usuarios.values()) {
+            try {
+                if (readPolicy.visible(u, idEmpresa, payload)) {
+                    uids.add(String.valueOf(u.getIdUsuario()));
+                }
+            } catch (Exception ignored) {
+                // Un usuario con permisos inconsistentes no debe bloquear la alerta al resto.
+            }
+        }
+        return uids.isEmpty() ? List.of() : tokenRepository.findByUidUsuarioIn(uids);
+    }
+
+    private static List<String> tokenValues(List<DispositivoToken> tokens) {
+        return tokens.stream().map(DispositivoToken::getToken).toList();
+    }
+
+    private Map<String, Object> pushResult(NotificacionHistorial historial, List<DispositivoToken> tokens) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("push_enabled", push.isEnabled());
+        result.put("queued", push.isEnabled() ? tokens.size() : 0);
+        if (!push.isEnabled()) {
+            result.put("reason", "fcm_disabled");
+        }
+        result.put("historial_id", historial.getId());
+        result.put("tokens", tokens.size());
+        return result;
     }
 
     @Transactional
@@ -80,7 +131,6 @@ public class NotificationService {
         historial.setFecha(LocalDateTime.now());
         historialRepository.save(historial);
 
-        List<DispositivoToken> tokens = tokenRepository.findByIdEmpresa(idEmpresa);
         if (payload != null && payload.get("id_usuario") != null) {
             clienteWebSocketHub.send(payload.get("id_usuario").toString(), Map.of(
                     "tipo", "alerta",
@@ -88,13 +138,13 @@ public class NotificationService {
                     "mensaje", mensaje,
                     "payload", payload));
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("sent", 0);
-        result.put("failed", 0);
-        result.put("reason", "fcm_stub");
-        result.put("historial_id", historial.getId());
-        result.put("tokens", tokens.size());
-        return result;
+        Map<String, Object> pushPayload = historial.getPayload();
+        List<DispositivoToken> tokens = tokensPersonalAutorizado(idEmpresa, pushPayload);
+        Map<String, Object> data = new LinkedHashMap<>(readPolicy.payload(pushPayload));
+        data.put("tipo", "ALERTA");
+        data.put("historial_id", historial.getId());
+        push.sendAfterCommit(tokenValues(tokens), titulo, mensaje, data);
+        return pushResult(historial, tokens);
     }
 
     @Transactional
@@ -116,13 +166,11 @@ public class NotificationService {
                 "titulo", titulo,
                 "mensaje", mensaje,
                 "payload", notificationPayload(payload,idEmpresa,idUsuario)));
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("sent", 0);
-        result.put("failed", 0);
-        result.put("reason", "fcm_stub");
-        result.put("historial_id", historial.getId());
-        result.put("tokens", tokens.size());
-        return result;
+        Map<String, Object> data = new LinkedHashMap<>(readPolicy.payload(historial.getPayload()));
+        data.put("tipo", "ALERTA");
+        data.put("historial_id", historial.getId());
+        push.sendAfterCommit(tokenValues(tokens), titulo, mensaje, data);
+        return pushResult(historial, tokens);
     }
 
     @Transactional(readOnly = true)

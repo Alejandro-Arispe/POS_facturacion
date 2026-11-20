@@ -500,7 +500,7 @@ export class ParameterizedReports implements OnInit {
       },
     });
 
-    this.productService.getMetodosPago().subscribe({
+    this.productService.getMetodosPago(true).subscribe({
       next: (methods) => {
         this.paymentMethodsList = methods;
         this.paymentMethodOptions = ['Todos', ...this.uniqueLabels(methods.map((method) => method.nombre))];

@@ -79,7 +79,7 @@
               }
               @if (registerFieldErrors.length) {
                 <ul class="feedback feedback-error" aria-label="Errores de validacion de la factura">
-                  @for (fieldError of registerFieldErrors; track fieldError) {
+                  @for (fieldError of registerFieldErrors; track $index) {
                     <li>{{ fieldError }}</li>
                   }
                 </ul>
@@ -519,7 +519,38 @@
                         />
                       </div>
 
-                      @if (isQrRow(paymentRow)) {
+                      @if (paymentRow.cheque; as cheque) {
+                        <app-cheque-payment-fields [payment]="cheque" />
+                      }
+
+                      @if (isQrRow(paymentRow) && billeteraConfig.qr_habilitado) {
+                        <div class="qr-payment" role="group" aria-label="Pago con QR de la billetera">
+                          @if (qrBusy.has(paymentRow.id)) {
+                            <p class="qr-payment-text">Generando QR en la billetera…</p>
+                          } @else if (qrImages.get(paymentRow.id); as qr) {
+                            <img class="qr-payment-image" [src]="qr" alt="QR para pagar con la billetera" width="220" height="220" />
+                          }
+                          @if (qrInfo.get(paymentRow.id); as info) {
+                            <p class="qr-payment-text">
+                              <strong>Paga con tu Billetera</strong><br />
+                              Cobro a {{ companyName || 'este comercio' }} por <strong>Bs {{ formatCurrency(paymentRow.monto ?? 0) }}</strong><br />
+                              <small>Ref. {{ info.referencia }} · Válido hasta {{ info.vence | date: 'HH:mm' }}</small>
+                            </p>
+                          }
+                          @if (paymentRow.qrConfirmado) {
+                            <p class="feedback feedback-success">
+                              Pago recibido ✓{{ qrPayer.get(paymentRow.id) ? ' · ' + qrPayer.get(paymentRow.id) : '' }}
+                            </p>
+                          } @else if (!qrBusy.has(paymentRow.id)) {
+                            @if (paymentRow.cobroId) {
+                              <p class="text-muted">Esperando el pago… se confirma solo.</p>
+                            }
+                            <button class="btn btn-secondary" type="button" (click)="generateQr(paymentRow)">
+                              {{ paymentRow.cobroId ? 'Generar otro QR' : 'Generar QR' }}
+                            </button>
+                          }
+                        </div>
+                      } @else if (isQrRow(paymentRow)) {
                         <div class="qr-payment" role="group" aria-label="Pago por QR Simple">
                           <label class="qr-bank">
                             <span class="label">Banco del QR</span>
@@ -816,9 +847,9 @@
                           id="paymentMethod"
                           name="paymentMethod"
                           [(ngModel)]="selectedPaymentMethodId"
-                          [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
+                          [disabled]="loadingPaymentMethods || movementPaymentMethods.length === 0"
                         >
-                          @for (paymentMethod of paymentMethods; track paymentMethod.id) {
+                          @for (paymentMethod of movementPaymentMethods; track paymentMethod.id) {
                             <option [ngValue]="paymentMethod.id">{{ paymentMethod.nombre }}</option>
                           }
                         </select>
@@ -972,6 +1003,14 @@
           <span class="summary-label">METODOS DE PAGO</span>
           <span class="summary-value">{{ selectedSaleDetail.metodosPago }}</span>
         </div>
+        @if (selectedSaleDetail.cheque; as cheque) {
+          <div class="summary-item span-full">
+            <span class="summary-label">CHEQUE</span>
+            <span class="summary-value">
+              {{ cheque.banco }} · N.º {{ cheque.numero }} · Emitido el {{ cheque.fecha_emision | date:'dd/MM/yyyy' }}
+            </span>
+          </div>
+        }
       </div>
 
       <div class="table-shell detail-table-shell">

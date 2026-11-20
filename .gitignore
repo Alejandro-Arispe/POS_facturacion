@@ -2,3 +2,8 @@
 # Secretos de despliegue
 deploy/.env
 deploy/web/
+
+# Credenciales de Firebase (cuenta de servicio del backend) - NUNCA subir
+claves/
+*firebase-adminsdk*.json
+**/firebase-service-account*.json

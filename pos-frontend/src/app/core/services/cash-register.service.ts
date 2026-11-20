@@ -134,9 +134,22 @@ export interface SaleDetailRequest {
   descripcion: string;
 }
 
+export interface ChequePaymentDetails {
+  banco: string;
+  numero: string;
+  fecha_emision: string;
+}
+
+export interface ChequePaymentRequest extends ChequePaymentDetails {
+  cobrado: boolean;
+}
+
 export interface SalePaymentRequest {
   id_metodo_pago: number;
   monto: number;
+  /** Id del cobro QR de la Billetera (solo metodo QR con la pasarela configurada). */
+  referencia_billetera?: string;
+  cheque?: ChequePaymentRequest;
 }
 
 export interface CreateSaleRequest {
@@ -205,6 +218,7 @@ export interface SaleHistoryPaymentItem {
   id_metodo_pago: number;
   monto: number;
   fecha: string;
+  cheque?: ChequePaymentDetails;
   metodo_pago?: {
     id_metodo_pago: number;
     nombre: string;
@@ -238,6 +252,7 @@ export interface SaleHistoryResponse {
 export interface CreditPaymentRequestItem {
   id_metodo_pago: number;
   monto_pagado: string;
+  cheque?: ChequePaymentRequest;
 }
 
 export interface RegisterCreditPaymentRequest {
@@ -250,6 +265,7 @@ export interface RegisteredCreditPaymentItem {
   id_metodo_pago: number;
   monto_pagado: string | number;
   fecha_pago: string;
+  cheque?: ChequePaymentDetails;
   metodo_pago: {
     id_metodo_pago: number;
     nombre: string;

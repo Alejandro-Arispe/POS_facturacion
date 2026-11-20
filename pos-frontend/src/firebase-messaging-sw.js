@@ -2,12 +2,12 @@ importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: "AIzaSyA-wTcvwf5gh8mtYFaYXN8VeY-kxYiQ8v8",
-  authDomain: "pos-si2.firebaseapp.com",
-  projectId: "pos-si2",
-  storageBucket: "pos-si2.firebasestorage.app",
-  messagingSenderId: "181449830908",
-  appId: "1:181449830908:web:eab5f979040782aa218279"
+  apiKey: "AIzaSyB52zwwfpkRUkhaQoacF62xCeE_R2mB2pY",
+  authDomain: "atemporal-f0125.firebaseapp.com",
+  projectId: "atemporal-f0125",
+  storageBucket: "atemporal-f0125.firebasestorage.app",
+  messagingSenderId: "314117413244",
+  appId: "1:314117413244:web:47cfea19f16e77ef35acf9"
 });
 
 const messaging = firebase.messaging();
@@ -18,7 +18,11 @@ messaging.onBackgroundMessage(function(payload) {
     body: payload.notification?.body || '',
     data: payload.data || {},
   };
-  self.registration.showNotification(title, options);
+  // Si el mensaje trae "notification", el SDK de Firebase ya muestra el banner;
+  // mostrarlo aqui tambien producia notificaciones duplicadas.
+  if (!payload.notification) {
+    self.registration.showNotification(title, options);
+  }
 
   self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
     for (const client of windowClients) {

@@ -3,6 +3,8 @@ package com.pos.ventas.service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -34,6 +36,7 @@ import com.pos.usuarios.domain.Usuario;
 import com.pos.usuarios.repo.UsuarioRolRepository;
 import com.pos.ventas.domain.AutorizacionCredito;
 import com.pos.ventas.domain.CuentaPorCobrar;
+import com.pos.ventas.domain.DatosCheque;
 import com.pos.ventas.domain.DetalleVenta;
 import com.pos.ventas.domain.MetodoPago;
 import com.pos.ventas.domain.PagoCredito;
@@ -78,6 +81,7 @@ public class VentaService {
     private final com.pos.siat.service.SiatFacturaService siatFacturaService;
     private final com.pos.ventas.repo.FacturaRepository facturaRepository;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.ventas.repo.AutorizacionCreditoRepository autorizacionCreditoRepository;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.billetera.service.BilleteraService billeteraService;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.usuarios.repo.UsuarioRepository usuarioRepository;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.common.security.PasswordService passwordService;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.auditoria.service.BitacoraService bitacoraService;
@@ -142,16 +146,11 @@ public class VentaService {
     }
 
     @Transactional(readOnly = true)
-    public List<VentaDtos.CatalogoItem> listarMetodosPago() {
-        List<VentaDtos.CatalogoItem> items = new ArrayList<>();
-        for (MetodoPago metodo : metodoPagoRepository.findAll()) {
-            VentaDtos.CatalogoItem item = new VentaDtos.CatalogoItem();
-            item.setIdMetodoPago(metodo.getIdMetodoPago());
-            item.setNombre(metodo.getNombre());
-            item.setDescripcion(metodo.getDescripcion());
-            items.add(item);
-        }
-        return items;
+    public List<VentaDtos.CatalogoItem> listarMetodosPago(boolean incluirCheque) {
+        return metodoPagoRepository.findAll().stream()
+                .filter(metodo -> incluirCheque || !metodo.esCheque())
+                .map(this::toMetodo)
+                .toList();
     }
 
     @Transactional
@@ -185,7 +184,7 @@ public class VentaService {
             throw ApiException.badRequest("Una venta a credito no debe enviar pagos ni metodo de pago.");
         }
 
-        Set<Integer> idsMetodos = new HashSet<>();
+        Map<Integer, MetodoPago> metodosVenta = new HashMap<>();
         BigDecimal totalPagado = BigDecimal.ZERO;
         BigDecimal montoSaldoAFavor = BigDecimal.ZERO;
         for (VentaDtos.PagoCreate pago : pagosPayload) {
@@ -194,7 +193,7 @@ public class VentaService {
             if (pago.getIdMetodoPago() == null || pago.getIdMetodoPago() <= 0) {
                 throw ApiException.badRequest("Metodo de pago invalido.");
             }
-            if (!idsMetodos.add(pago.getIdMetodoPago())) {
+            if (metodosVenta.containsKey(pago.getIdMetodoPago())) {
                 throw ApiException.badRequest("No se puede repetir el mismo metodo de pago en una venta.");
             }
             if (pago.getMonto() == null || pago.getMonto().compareTo(BigDecimal.ZERO) <= 0) {
@@ -202,6 +201,11 @@ public class VentaService {
             }
             MetodoPago metodoPago = metodoPagoRepository.findById(pago.getIdMetodoPago())
                     .orElseThrow(() -> ApiException.notFound("Metodo de pago " + pago.getIdMetodoPago() + " no encontrado."));
+            if (metodoPago.esCheque() && !"CONTADO".equals(nombreTipo)) {
+                throw ApiException.badRequest("El cheque se admite en ventas al contado y abonos a crédito.");
+            }
+            validarCheque(metodoPago, pago.getCheque());
+            metodosVenta.put(pago.getIdMetodoPago(), metodoPago);
             if (esSaldoAFavor(metodoPago)) montoSaldoAFavor = montoSaldoAFavor.add(pago.getMonto());
             totalPagado = totalPagado.add(pago.getMonto());
         }
@@ -325,15 +329,24 @@ public class VentaService {
                 .orElseThrow(() -> ApiException.badRequest("Tipo de movimiento INGRESO no configurado."));
         if (!esCredito) {
             for (VentaDtos.PagoCreate pago : pagosPayload) {
+                MetodoPago metodo = metodosVenta.get(pago.getIdMetodoPago());
                 VentaPago ventaPago = new VentaPago();
                 ventaPago.setIdVenta(venta.getIdVenta());
                 ventaPago.setIdMetodoPago(pago.getIdMetodoPago());
                 ventaPago.setVenta(venta);
                 ventaPago.setMonto(pago.getMonto());
                 ventaPago.setFecha(LocalDateTime.now());
+                ventaPago.setCheque(datosCheque(pago.getCheque()));
                 ventaPagoRepository.save(ventaPago);
+                // Pasarela QR de la Billetera: el pago QR debe estar confirmado (PAGADO) y se usa una sola vez.
+                // Si la falla, se revierte toda la venta por estar en la misma transaccion.
+                if (billeteraService.qrHabilitado() && "QR".equalsIgnoreCase(metodo.getNombre().trim())) {
+                    if (pago.getReferenciaBilletera() == null || pago.getReferenciaBilletera().isBlank())
+                        throw ApiException.badRequest("El pago QR debe confirmarse con la billetera.");
+                    billeteraService.consumirParaVenta(pago.getReferenciaBilletera(), pago.getMonto(), idEmpresa, venta.getIdVenta());
+                }
                 // El saldo a favor no es dinero que entra a la caja.
-                boolean saldoAFavor = metodoPagoRepository.findById(pago.getIdMetodoPago()).map(this::esSaldoAFavor).orElse(false);
+                boolean saldoAFavor = esSaldoAFavor(metodo);
                 if (tipoIngreso != null && !saldoAFavor) {
                     MovimientoCaja movimientoCaja = new MovimientoCaja();
                     movimientoCaja.setIdMetodoPago(pago.getIdMetodoPago());
@@ -350,14 +363,14 @@ public class VentaService {
 
         if (Boolean.TRUE.equals(payload.getFacturaLinea())) {
             // Facturación en línea SIAT (simulada): el método de pago informado es el de mayor monto.
-            String metodoPrincipal = pagosPayload.stream()
-                    .max(java.util.Comparator.comparing(VentaDtos.PagoCreate::getMonto))
-                    .flatMap(p -> metodoPagoRepository.findById(p.getIdMetodoPago()))
-                    .map(MetodoPago::getNombre).orElse(null);
-            siatFacturaService.emitir(venta, sesion, cliente,
+            List<String> metodosPorMonto = pagosPayload.stream()
+                    .sorted(Comparator.comparing(VentaDtos.PagoCreate::getMonto).reversed())
+                    .map(pago -> metodosVenta.get(pago.getIdMetodoPago()).getNombre())
+                    .toList();
+            siatFacturaService.emitirConMetodosPago(venta, sesion, cliente,
                     new com.pos.siat.service.SiatFacturaService.Comprador(
                             payload.getCodigoTipoDocumento(), payload.getNumeroDocumento(), payload.getRazonSocial()),
-                    metodoPrincipal);
+                    metodosPorMonto);
         }
 
         if (adminAutorizador != null) {
@@ -390,8 +403,27 @@ public class VentaService {
                                 "estado", cuenta.getEstado()));
             } catch (Exception ignored) {
             }
+            try {
+                notificationService.enviarAlerta(
+                        idEmpresa,
+                        "💳 Nuevo crédito: " + nombreCliente(cliente),
+                        "Monto: Bs " + venta.getTotal() + " — Venta #" + venta.getIdVenta(),
+                        Map.of(
+                                "id_empresa", String.valueOf(idEmpresa),
+                                "id_cxc", String.valueOf(cuenta.getIdCxc()),
+                                "monto_credito", String.valueOf(cuenta.getMontoCredito()),
+                                "saldo_pendiente", String.valueOf(cuenta.getSaldoPendiente())));
+            } catch (Exception ignored) {
+            }
         }
         return toVentaResponse(ventaRepository.findById(venta.getIdVenta()).orElse(venta));
+    }
+
+    private String nombreCliente(Cliente cliente) {
+        return usuarioRepository.findById(cliente.getIdUsuario())
+                .map(Usuario::getPersona)
+                .map(p -> p.getNombreCompleto())
+                .orElse("Cliente #" + cliente.getIdCliente());
     }
 
     /** HU-09: valida que quien autoriza sea administrador de la empresa (modelo RBAC) y sus credenciales. */
@@ -442,7 +474,7 @@ public class VentaService {
         }
         Set<Integer> ids = new HashSet<>();
         BigDecimal totalPagado = BigDecimal.ZERO;
-        Set<String> permitidos = Set.of("EFECTIVO", "QR", "TARJETA", "TRANSFERENCIA");
+        Set<String> permitidos = Set.of("EFECTIVO", "QR", "TARJETA", "TRANSFERENCIA", MetodoPago.CHEQUE);
         for (VentaDtos.PagoCreditoItem pago : pagos) {
             if (pago == null || pago.getIdMetodoPago()==null) throw ApiException.badRequest("Pago inválido.");
             SalePricing.money(pago.getMontoPagado(),"pago");
@@ -455,6 +487,7 @@ public class VentaService {
             if (!permitidos.contains(nombre)) {
                 throw ApiException.badRequest("El metodo de pago " + metodo.getNombre() + " no esta permitido para pagos de credito.");
             }
+            validarCheque(metodo, pago.getCheque());
             if (pago.getMontoPagado() == null || pago.getMontoPagado().compareTo(BigDecimal.ZERO) <= 0) {
                 throw ApiException.badRequest("El monto pagado debe ser mayor a cero.");
             }
@@ -469,6 +502,12 @@ public class VentaService {
                     .orElseThrow(() -> ApiException.notFound("Pago informado no encontrado para esta cuenta."));
             if (!com.pos.ventas.domain.PagoCreditoReportado.PENDIENTE.equals(reportado.getEstado())) {
                 throw ApiException.badRequest("El pago informado ya fue confirmado.");
+            }
+            if (pagos.stream().anyMatch(pago -> pago.getCheque() != null)
+                    && pagos.stream().noneMatch(pago -> pago.getCheque() == null
+                            && pago.getIdMetodoPago().equals(reportado.getIdMetodoPago())
+                            && pago.getMontoPagado().compareTo(reportado.getMonto()) == 0)) {
+                throw ApiException.badRequest("Incluye el importe y el método del pago informado para confirmarlo.");
             }
             reportado.setEstado(com.pos.ventas.domain.PagoCreditoReportado.CONFIRMADO);
             reportado.setIdUsuarioConfirma(usuario.getIdUsuario());
@@ -487,6 +526,7 @@ public class VentaService {
             creado.setIdMetodoPago(pago.getIdMetodoPago());
             creado.setMontoPagado(pago.getMontoPagado());
             creado.setFechaPago(ahora);
+            creado.setCheque(datosCheque(pago.getCheque()));
             pagosCreados.add(pagoCreditoRepository.save(creado));
 
             MovimientoCaja movimiento = new MovimientoCaja();
@@ -529,6 +569,19 @@ public class VentaService {
                                     "id_cxc", String.valueOf(idCxc),
                                     "id_empresa", String.valueOf(idEmpresaSesion),
                                     "id_usuario", String.valueOf(cliente.getIdUsuario()),
+                                    "monto_pagado", String.valueOf(totalPagadoFinal),
+                                    "saldo_pendiente", String.valueOf(saldoPendienteFinal),
+                                    "estado", estadoFinal));
+                } catch (Exception ignored) {
+                }
+                try {
+                    notificationService.enviarAlerta(
+                            idEmpresaSesion,
+                            "✅ Pago recibido: " + nombreCliente(cliente),
+                            "Pagó Bs " + totalPagadoFinal + " — Saldo pendiente: Bs " + saldoPendienteFinal,
+                            Map.of(
+                                    "id_empresa", String.valueOf(idEmpresaSesion),
+                                    "id_cxc", String.valueOf(idCxc),
                                     "monto_pagado", String.valueOf(totalPagadoFinal),
                                     "saldo_pendiente", String.valueOf(saldoPendienteFinal),
                                     "estado", estadoFinal));
@@ -694,6 +747,7 @@ public class VentaService {
                 row.setMontoPagado(pago.getMontoPagado());
                 row.setFechaPago(pago.getFechaPago());
                 row.setMetodoPago(pago.getMetodoPago());
+                row.setCheque(pago.getCheque());
                 result.add(row);
             }
         }
@@ -729,6 +783,31 @@ public class VentaService {
     private boolean branchAllowed(Usuario user,Integer company,Integer branch,String code) {
         return empresaAccess.canPermiso(user,company,branch,code);
     }
+    private void validarCheque(MetodoPago metodo, VentaDtos.ChequeCreate cheque) {
+        if (!metodo.esCheque()) {
+            if (cheque != null) {
+                throw ApiException.badRequest("Los datos del cheque requieren el método de pago CHEQUE.");
+            }
+            return;
+        }
+        if (cheque == null || cheque.banco() == null || cheque.banco().isBlank()
+                || cheque.banco().strip().length() > 100 || cheque.numero() == null || cheque.numero().isBlank()
+                || cheque.numero().strip().length() > 50 || cheque.fechaEmision() == null) {
+            throw ApiException.badRequest("Indica el banco, el número y la fecha de emisión del cheque.");
+        }
+        if (!Boolean.TRUE.equals(cheque.cobrado())) {
+            throw ApiException.badRequest("Confirma que el cheque fue cobrado antes de registrar el pago.");
+        }
+    }
+
+    private DatosCheque datosCheque(VentaDtos.ChequeCreate cheque) {
+        return cheque == null ? null : new DatosCheque(cheque.banco().strip(), cheque.numero().strip(), cheque.fechaEmision());
+    }
+
+    private VentaDtos.ChequeDetalle detalleCheque(DatosCheque cheque) {
+        return cheque == null ? null : new VentaDtos.ChequeDetalle(cheque.getBanco(), cheque.getNumero(), cheque.getFechaEmision());
+    }
+
     private boolean esSaldoAFavor(MetodoPago metodo) {
         return metodo != null && "SALDO A FAVOR".equalsIgnoreCase(metodo.getNombre());
     }
@@ -789,6 +868,7 @@ public class VentaService {
             item.setIdMetodoPago(pago.getIdMetodoPago());
             item.setMonto(pago.getMonto());
             item.setFecha(pago.getFecha());
+            item.setCheque(detalleCheque(pago.getCheque()));
             metodoPagoRepository.findById(pago.getIdMetodoPago()).ifPresent(metodo -> item.setMetodoPago(toMetodo(metodo)));
             pagos.add(item);
         }
@@ -814,6 +894,7 @@ public class VentaService {
         dto.setIdMetodoPago(pago.getIdMetodoPago());
         dto.setMontoPagado(pago.getMontoPagado());
         dto.setFechaPago(pago.getFechaPago());
+        dto.setCheque(detalleCheque(pago.getCheque()));
         metodoPagoRepository.findById(pago.getIdMetodoPago()).ifPresent(metodo -> dto.setMetodoPago(toMetodo(metodo)));
         return dto;
     }

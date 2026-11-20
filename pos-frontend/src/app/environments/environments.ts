@@ -3,13 +3,13 @@ export const environments = {
     production: false,
     apiBaseUrl: 'http://localhost:8000',
     firebase: {
-        apiKey: "AIzaSyA-wTcvwf5gh8mtYFaYXN8VeY-kxYiQ8v8",
-        authDomain: "pos-si2.firebaseapp.com",
-        projectId: "pos-si2",
-        storageBucket: "pos-si2.firebasestorage.app",
-        messagingSenderId: "181449830908",
-        appId: "1:181449830908:web:eab5f979040782aa218279"
+        apiKey: "AIzaSyB52zwwfpkRUkhaQoacF62xCeE_R2mB2pY",
+        authDomain: "atemporal-f0125.firebaseapp.com",
+        projectId: "atemporal-f0125",
+        storageBucket: "atemporal-f0125.firebasestorage.app",
+        messagingSenderId: "314117413244",
+        appId: "1:314117413244:web:47cfea19f16e77ef35acf9"
     },
-    firebaseVapidKey: 'BJAcsjp2Tkhjbt4L-u8J_cWzEkn6Q1FU_BvgZYaK4Iaz62ubsvOB16iFF8ljWn2U-aaPuwYM3M25WtqvZCHRpTw'
+    firebaseVapidKey: 'BPynAukpiB0LHXB057C6tm2qx5_KtrN314CrYbX4z7X37ul0pUdS3p8UkaLI_FivaX5c_QlP3Yr8_u357CjBpB8'
 
 };

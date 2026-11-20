@@ -24,6 +24,8 @@ import {
   CashRegisterClosingSummaryResponse,
   SaleHistoryResponse,
   SaleHistoryDetailItem,
+  ChequePaymentDetails,
+  ChequePaymentRequest,
   CashRegisterService,
 } from '../../../../../../core/services/cash-register.service';
 import {
@@ -36,10 +38,17 @@ import { ApiService } from '../../../../../../core/services/api.service';
 import { OrderService, Order } from '../../../../../../core/services/order.service';
 import { apiErrorMessage } from '../../../../../../core/utils/api-error';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
+import { BilleteraConfig, BilleteraService } from '../../../../../../core/services/billetera.service';
 import { SecureSrc } from '../../../../../../shared/directives/secure-src';
 import { InvoicePrintService } from '../../../../../../core/services/invoice-print.service';
 import { TIPOS_DOCUMENTO_SIN } from '../../../../../../core/services/siat.service';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
+import {
+  ChequePaymentFields,
+  chequePaymentError,
+  emptyChequePayment,
+  isChequePaymentMethod,
+} from '../../../../../../shared/components/cheque-payment-fields/cheque-payment-fields';
 
 type SessionViewMode = 'sales' | 'movements';
 type SalesTab = 'register' | 'payment' | 'history';
@@ -118,8 +127,11 @@ interface SalePaymentRow {
   monto: number | null;
   /** Pago por QR simulado: el cajero confirma que el cliente ya pago. */
   qrConfirmado?: boolean;
+  /** Id del cobro QR en la Billetera; se envia al registrar la venta. */
+  cobroId?: string;
   /** Pago con tarjeta simulado (HU-13): los datos nunca salen del navegador ni se guardan. */
   tarjeta?: CardForm;
+  cheque?: ChequePaymentRequest;
 }
 
 interface CardForm {
@@ -193,6 +205,7 @@ interface SaleHistoryRow {
   estadoFactura: string | null;
   metodosPago: string;
   metodosPagoIds: string;
+  cheque?: ChequePaymentDetails;
   articulos: number;
   subtotal: number;
   descuentoTotal: number;
@@ -207,7 +220,7 @@ type ProductStockRecord = StockSucursalProducto & {
 
 @Component({
   selector: 'app-sales',
-  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar, SecureSrc],
+  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar, SecureSrc, ChequePaymentFields],
   templateUrl: './sales.html',
   styleUrl: './sales.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -328,7 +341,9 @@ export class Sales implements OnInit {
         const efectivo = res.resumen_por_metodo_pago?.find(
           (m) => m.metodo_pago?.toUpperCase() === 'EFECTIVO',
         );
-        this.efectivoEsperadoCaja = efectivo?.monto_esperado ?? res.monto_esperado_total ?? 0;
+        const cheque = res.resumen_por_metodo_pago?.find((m) => m.metodo_pago?.toUpperCase() === 'CHEQUE');
+        this.efectivoEsperadoCaja = efectivo?.monto_esperado
+          ?? ((res.monto_esperado_total ?? 0) - (cheque?.monto_esperado ?? 0));
         this.cdr.markForCheck();
       },
       error: () => {},
@@ -350,7 +365,7 @@ export class Sales implements OnInit {
     }
 
     const efectivoMetodo = this.paymentMethods.find((m) => m.nombre.toUpperCase() === 'EFECTIVO');
-    this.quickMovementMetodoPagoId = efectivoMetodo ? efectivoMetodo.id : (this.paymentMethods[0]?.id ?? null);
+    this.quickMovementMetodoPagoId = efectivoMetodo?.id ?? this.movementPaymentMethods[0]?.id ?? null;
 
     this.isQuickMovementModalOpen = true;
     this.cdr.markForCheck();
@@ -389,7 +404,7 @@ export class Sales implements OnInit {
     let idMetodo = this.quickMovementMetodoPagoId;
     if (!idMetodo) {
       const efectivo = this.paymentMethods.find((m) => m.nombre.toUpperCase() === 'EFECTIVO');
-      idMetodo = efectivo ? efectivo.id : (this.paymentMethods[0]?.id ?? 1);
+      idMetodo = efectivo?.id ?? this.movementPaymentMethods[0]?.id ?? 1;
     }
 
     this.savingQuickMovement = true;
@@ -543,6 +558,7 @@ export class Sales implements OnInit {
   }
 
   ngOnInit(): void {
+    this.loadBilleteraConfig();
     // Nombre del comercio para el QR de cobro.
     this.companyService.getMisEmpresas().subscribe({
       next: (companies) => {
@@ -1026,6 +1042,7 @@ export class Sales implements OnInit {
   }
 
   protected removePaymentRow(row: SalePaymentRow): void {
+    if (row.cobroId) this.discardQr(row);
     if (this.salePaymentRows.length === 1) {
       this.salePaymentRows = [this.createPaymentRow(this.salePaymentRows[0]?.id)];
       return;
@@ -1039,12 +1056,21 @@ export class Sales implements OnInit {
   }
 
   protected get canAddPaymentRow(): boolean {
-    return this.salePaymentRows.length < this.maxPaymentRows && this.salePaymentRows.length < this.paymentMethods.length;
+    return this.salePaymentRows.length < this.maxPaymentRows
+      && this.salePaymentRows.length < this.paymentMethods.length;
   }
 
   protected isPaymentMethodDisabled(paymentRow: SalePaymentRow, method: PaymentMethodOption): boolean {
     if (this.isSaldoAFavorMethod(method) && this.selectedClientSaldoAFavor <= 0) return true;
     return this.salePaymentRows.some((row) => row.id !== paymentRow.id && row.metodoPagoId === method.id);
+  }
+
+  protected get movementPaymentMethods(): PaymentMethodOption[] {
+    return this.paymentMethods.filter((method) => !isChequePaymentMethod(method.nombre));
+  }
+
+  protected isChequeRow(row: SalePaymentRow): boolean {
+    return this.paymentMethods.some((method) => method.id === row.metodoPagoId && isChequePaymentMethod(method.nombre));
   }
 
   protected isSaldoAFavorMethod(method: PaymentMethodOption): boolean {
@@ -1057,6 +1083,9 @@ export class Sales implements OnInit {
 
   protected updatePaymentAmount(row: SalePaymentRow, value: number | string | null): void {
     row.monto = this.normalizeMoney(value);
+    if (row.cheque) row.cheque = { ...row.cheque, cobrado: false };
+    // Con la billetera, el QR se emite por un monto fijo: si cambia, se cancela y se genera otro.
+    if (this.billeteraConfig.qr_habilitado && row.cobroId && !row.qrConfirmado) this.discardQr(row);
     row.qrConfirmado = false;
     // Un cambio de monto invalida la autorizacion de tarjeta ya obtenida.
     if (row.tarjeta?.autorizacion) row.tarjeta = this.emptyCard();
@@ -1069,15 +1098,107 @@ export class Sales implements OnInit {
   protected qrBanco = QR_BANCOS[0];
   protected readonly qrBancos = QR_BANCOS;
 
+  // --- Pasarela QR de la Billetera ---------------------------------------------------------------
+  private readonly billetera = inject(BilleteraService);
+  /** Si el servidor no tiene la billetera configurada se usan el QR y la tarjeta simulados. */
+  protected billeteraConfig: BilleteraConfig = { qr_habilitado: false, tarjeta_habilitada: false };
+  protected readonly qrBusy = new Set<number>();
+  private readonly qrPollers = new Map<number, ReturnType<typeof setInterval>>();
+  private billeteraCleanup = this.destroyRef.onDestroy(() => {
+    this.qrPollers.forEach((timer) => clearInterval(timer));
+    this.qrPollers.clear();
+  });
+
+  private loadBilleteraConfig(): void {
+    this.billetera.config().subscribe({
+      next: (config) => {
+        this.billeteraConfig = config;
+        this.cdr.markForCheck();
+      },
+      error: () => (this.billeteraConfig = { qr_habilitado: false, tarjeta_habilitada: false }),
+    });
+  }
+
+  /** Crea el cobro en la billetera y consulta su estado cada 2 s hasta que se pague o venza. */
+  private createWalletQr(row: SalePaymentRow): void {
+    this.discardQr(row);
+    const monto = this.normalizeMoney(row.monto);
+    if (!(monto > 0) || !this.companyId) return;
+    this.qrBusy.add(row.id);
+    this.billetera
+      .crearCobro(Number(this.companyId), this.branchId ? Number(this.branchId) : null, monto, this.companyName || 'Venta POS')
+      .subscribe({
+        next: (cobro) => {
+          this.qrBusy.delete(row.id);
+          row.cobroId = cobro.id;
+          this.qrImages.set(row.id, cobro.qr_imagen);
+          this.qrInfo.set(row.id, { banco: 'Billetera', referencia: cobro.referencia, vence: new Date(cobro.vence) });
+          this.qrPollers.set(row.id, setInterval(() => this.checkWalletQr(row), 2000));
+          this.cdr.markForCheck();
+        },
+        error: (error) => {
+          this.qrBusy.delete(row.id);
+          this.registerError = error?.error?.detail ?? 'No se pudo crear el cobro QR en la billetera.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  private checkWalletQr(row: SalePaymentRow): void {
+    if (!row.cobroId) return this.stopQrPolling(row);
+    this.billetera.estado(row.cobroId).subscribe({
+      next: (estado) => {
+        if (estado.estado === 'PAID') {
+          row.qrConfirmado = true;
+          this.qrPayer.set(row.id, estado.pagado_por);
+          this.stopQrPolling(row);
+        } else if (estado.estado === 'EXPIRED' || estado.estado === 'CANCELLED') {
+          this.stopQrPolling(row);
+          this.qrImages.delete(row.id);
+          row.cobroId = undefined;
+          this.registerError = 'El QR venció o se canceló. Genera uno nuevo.';
+        }
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        /* Error transitorio de red: se reintenta en el siguiente ciclo. */
+      },
+    });
+  }
+
+  /** Quien pago cada QR (nombre que informa la billetera). */
+  protected readonly qrPayer = new Map<number, string>();
+
+  private stopQrPolling(row: SalePaymentRow): void {
+    clearInterval(this.qrPollers.get(row.id));
+    this.qrPollers.delete(row.id);
+  }
+
+  /** Cancela en la billetera un QR pendiente (monto cambiado, otro metodo o venta cancelada). */
+  private discardQr(row: SalePaymentRow): void {
+    this.stopQrPolling(row);
+    if (row.cobroId && !row.qrConfirmado) this.billetera.cancelar(row.cobroId).subscribe({ error: () => undefined });
+    row.cobroId = undefined;
+    this.qrImages.delete(row.id);
+    this.qrInfo.delete(row.id);
+    this.qrPayer.delete(row.id);
+  }
+
   protected isQrRow(row: SalePaymentRow): boolean {
     const method = this.paymentMethods.find((m) => m.id === row.metodoPagoId);
     return method?.nombre.trim().toUpperCase() === 'QR';
   }
 
   protected changePaymentMethod(row: SalePaymentRow, methodId: number | null): void {
+    if (row.cobroId) this.discardQr(row);
     row.metodoPagoId = methodId;
     row.qrConfirmado = false;
     row.tarjeta = this.isCardRow(row) ? this.emptyCard() : undefined;
+    row.cheque = undefined;
+    if (this.isChequeRow(row)) {
+      row.cheque = emptyChequePayment();
+      if (this.salePaymentRows.length === 1) row.monto = this.total;
+    }
     if (this.isQrRow(row)) void this.generateQr(row);
   }
 
@@ -1121,6 +1242,36 @@ export class Sales implements OnInit {
     else if (!(Number(row.monto) > 0)) card.error = 'Ingresa el monto a cobrar con tarjeta.';
     if (card.error) return;
     card.procesando = true;
+    if (this.billeteraConfig.tarjeta_habilitada) {
+      // Autorizacion real con la tarjeta virtual de la Billetera (los datos solo pasan por el backend).
+      this.billetera
+        .autorizarTarjeta({
+          id_empresa: Number(this.companyId), id_sucursal: this.branchId ? Number(this.branchId) : null,
+          numero: digits, mes: mm, anio: 2000 + yy, cvv: card.cvv, titular: card.titular.trim(),
+          monto: this.normalizeMoney(row.monto), comercio: this.companyName || 'POS',
+        })
+        .subscribe({
+          next: (r) => {
+            card.procesando = false;
+            if (r.status === 'APPROVED') {
+              card.autorizacion = r.approvalCode ?? '';
+              card.ultimos4 = r.cardLast4 ?? digits.slice(-4);
+              card.marca = this.cardBrand(digits) || 'Tarjeta';
+              card.numero = '•••• •••• •••• ' + card.ultimos4;
+              card.cvv = '';
+            } else {
+              card.error = r.message || 'Transacción rechazada.';
+            }
+            this.cdr.markForCheck();
+          },
+          error: (error) => {
+            card.procesando = false;
+            card.error = error?.error?.detail ?? 'No se pudo autorizar la tarjeta.';
+            this.cdr.markForCheck();
+          },
+        });
+      return;
+    }
     // Tarjetas de prueba que terminan en 0002 simulan un rechazo del banco emisor.
     setTimeout(() => {
       card.procesando = false;
@@ -1159,6 +1310,7 @@ export class Sales implements OnInit {
    * monto, moneda y referencia, con vigencia de 5 minutos como los QR de cobro en Bolivia.
    */
   protected async generateQr(row: SalePaymentRow): Promise<void> {
+    if (this.billeteraConfig.qr_habilitado) return this.createWalletQr(row);
     // qrcode se carga solo cuando se usa para no engordar el paquete inicial.
     const QRCode = (await import('qrcode')).default;
     const referencia = `QRS-${Date.now().toString(36).toUpperCase()}`;
@@ -1302,10 +1454,18 @@ export class Sales implements OnInit {
       return;
     }
 
+    const chequeRow = this.salePaymentRows.find((row) => this.isChequeRow(row));
+    if (chequeRow) {
+      this.registerError = chequePaymentError(chequeRow.cheque);
+      if (this.registerError) return;
+    }
+
     const paymentRows = this.salePaymentRows
       .map((row) => ({
         id_metodo_pago: row.metodoPagoId ?? null,
         monto: this.normalizeMoney(row.monto),
+        referencia_billetera: this.isQrRow(row) ? row.cobroId : undefined,
+        cheque: row.cheque,
       }))
       .filter((row) => row.id_metodo_pago !== null || row.monto > 0);
 
@@ -1355,6 +1515,8 @@ export class Sales implements OnInit {
       pagos: paymentRows.map((row) => ({
         id_metodo_pago: Number(row.id_metodo_pago),
         monto: row.monto,
+        ...(row.referencia_billetera ? { referencia_billetera: row.referencia_billetera } : {}),
+        ...(row.cheque ? { cheque: row.cheque } : {}),
       })),
       detalles: this.buildSaleDetailPayload(),
       id_pedido: this.loadedOrderId,
@@ -1384,6 +1546,7 @@ export class Sales implements OnInit {
   }
 
   protected cancelarPago(): void {
+    this.salePaymentRows.filter((row) => row.cobroId).forEach((row) => this.discardQr(row));
     this.registerError = '';
     this.registerFieldErrors = [];
     this.closePaymentTab();
@@ -1391,6 +1554,9 @@ export class Sales implements OnInit {
   }
 
   private openPaymentTab(): void {
+    // Se vuelve a consultar al abrir cada cobro: si el servidor activo la billetera despues de cargar
+    // esta pantalla, el QR y la tarjeta usan la integracion real sin tener que recargar la pagina.
+    this.loadBilleteraConfig();
     this.showPaymentTab = true;
     this.salePaymentRows = [this.createPaymentRow(undefined, this.total)];
     this.activeTab = 'payment';
@@ -1462,7 +1628,7 @@ export class Sales implements OnInit {
         .filter((id): id is number => id !== null),
     );
 
-    return this.paymentMethods.find((method) => !usedMethodIds.has(method.id))?.id ?? null;
+    return this.movementPaymentMethods.find((method) => !usedMethodIds.has(method.id))?.id ?? null;
   }
 
   private getRemainingPaymentAmount(): number {
@@ -1761,10 +1927,10 @@ export class Sales implements OnInit {
   private loadPaymentMethods(): void {
     this.loadingPaymentMethods = true;
 
-    this.productService.getMetodosPago().subscribe({
+    this.productService.getMetodosPago(true).subscribe({
       next: (methods) => {
         this.paymentMethods = methods.map((method) => this.mapPaymentMethod(method));
-        this.selectedPaymentMethodId = this.paymentMethods[0]?.id ?? null;
+        this.selectedPaymentMethodId = this.movementPaymentMethods[0]?.id ?? null;
         if (this.salePaymentRows.length > 0) {
           this.salePaymentRows = this.salePaymentRows.map((row) => ({
             ...row,
@@ -2055,6 +2221,7 @@ export class Sales implements OnInit {
       estadoFactura: sale.estado_siat ?? null,
       metodosPago: paymentLabels,
       metodosPagoIds: paymentMethodIds,
+      cheque: salePayments.find((payment) => payment.cheque)?.cheque,
       articulos: saleDetails.reduce((total, detail) => total + Number(detail.cantidad ?? 0), 0),
       subtotal: Number(sale.subtotal ?? 0),
       descuentoTotal: Number(sale.descuento_total ?? 0),

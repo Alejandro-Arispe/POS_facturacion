@@ -49,6 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/inventario/tipos-movimiento").permitAll()
                         .requestMatchers("/api/empresas/tipos-movimiento-caja").permitAll()
                         .requestMatchers("/api/pagos/webhook").permitAll()
+                        .requestMatchers("/api/billetera/webhook").permitAll()
                         .requestMatchers("/api/invitaciones/**").permitAll()
                         .requestMatchers("/h2-console/**").denyAll()
                         .requestMatchers("/ws/**").permitAll()

@@ -1,11 +1,21 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
+
 class ApiConstants {
-  /// Por USB: `adb reverse tcp:8000 tcp:8000` y este host apunta al backend local.
-  /// Remoto: pasar `--dart-define=API_BASE_URL=https://pos-backend-app.duckdns.org`
-  /// LAN WiFi: `--dart-define=API_BASE_URL=http://TU_IP:8000`
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8000',
-  );
+  static const String _envUrl = String.fromEnvironment('API_BASE_URL');
+
+  /// En emulador Android, 127.0.0.1 apunta al propio emulador.
+  /// Para conectar con el backend de la PC host se debe usar 10.0.2.2.
+  /// En celular físico por USB: usar `adb reverse tcp:8000 tcp:8000` o IP local de la PC.
+  static String get baseUrl {
+    if (_envUrl.isNotEmpty) return _envUrl;
+    // El APK de release (celular real) usa el servidor desplegado en AWS.
+    if (kReleaseMode) return 'http://52.71.40.111';
+    if (!kIsWeb && Platform.isAndroid) {
+      return 'http://10.0.2.2:8000';
+    }
+    return 'http://127.0.0.1:8000';
+  }
 
   static const String login = '/api/auth/login';
   static const String register = '/api/auth/register';

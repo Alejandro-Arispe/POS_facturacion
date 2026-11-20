@@ -239,13 +239,13 @@ public class InventarioService {
         stock = stockRepository.save(stock);
 
         if (stock.getStockMinimo() != null && stock.getCantidad() <= stock.getStockMinimo()) {
-            Sucursal sucursal = sucursalRepository.findById(idSucursal).orElse(null);
             try {
                 notificationService.enviarAlerta(
                         idEmpresa,
-                        "Stock bajo en \"" + (sucursal != null ? sucursal.getNombre() : idSucursal) + "\"",
-                        "El producto " + producto.getNombre() + " tiene stock actual " + stock.getCantidad()
-                                + " y el stock minimo es " + stock.getStockMinimo() + ".",
+                        "⚠️ Stock bajo: " + producto.getNombre(),
+                        "Quedan " + stock.getCantidad() + " "
+                                + (producto.getUnidadMedida() == null ? "unidades" : producto.getUnidadMedida())
+                                + " — mínimo: " + stock.getStockMinimo(),
                         Map.of(
                                 "id_producto", String.valueOf(producto.getIdProducto()),
                                 "id_sucursal", String.valueOf(idSucursal),
