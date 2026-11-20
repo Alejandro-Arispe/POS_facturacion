@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api_service.dart';
 import '../../core/constants/app_palette.dart';
+import '../../core/services/fcm_global_service.dart';
 import '../../shared/widgets/estado_views.dart';
 import '../catalogo/producto_model.dart';
 import 'pedido_model.dart';
@@ -20,6 +23,23 @@ class _PedidoDetallePageState extends State<PedidoDetallePage> {
   late Pedido _pedido = widget.pedido;
   bool _cargando = false;
   bool _cancelando = false;
+  StreamSubscription<dynamic>? _pushSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Solo refresca si el push es de este pedido ("Pedido #12 ..." no debe disparar el #1).
+    final propio = RegExp('Pedido #${_pedido.idPedido}\\b');
+    _pushSub = FcmGlobalService.instance.pedidoUpdates.listen((m) {
+      if (mounted && propio.hasMatch(m.notification?.title ?? '')) _refrescar();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pushSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> _refrescar() async {
     setState(() => _cargando = true);

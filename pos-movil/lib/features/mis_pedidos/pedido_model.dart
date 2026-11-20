@@ -3,6 +3,20 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_palette.dart';
 import '../../shared/widgets/estado_views.dart';
 
+/// Etiqueta en español de un estado de pedido (mismo mapeo que el pipe web estadoPedido).
+String estadoPedido(String estado) => switch (estado) {
+      'enviado' => 'Enviado por cliente',
+      'en_revision' => 'En revisión',
+      'confirmado' => 'Confirmado',
+      'rechazado' => 'Rechazado',
+      'cancelado' => 'Cancelado',
+      'en_preparacion' => 'En preparación',
+      'listo_para_recoger' => 'Listo para recoger',
+      'convertido_en_venta' => 'Cobrado en caja',
+      'entregado' => 'Entregado',
+      final otro => otro,
+    };
+
 class PedidoDetalle {
   final int idDetalle;
   final int idProducto;
@@ -82,18 +96,7 @@ class Pedido {
   bool get puedeCancelar =>
       estado == 'enviado' || estado == 'en_revision';
 
-  String get estadoTexto => switch (estado) {
-        'enviado' => 'Enviado',
-        'en_revision' => 'En revisión',
-        'confirmado' => 'Confirmado',
-        'en_preparacion' => 'En preparación',
-        'listo_para_recoger' => 'Listo para recoger',
-        'convertido_en_venta' => 'Convertido en venta',
-        'entregado' => 'Entregado',
-        'cancelado' => 'Cancelado',
-        'rechazado' => 'Rechazado',
-        final otro => otro.isEmpty ? '—' : otro,
-      };
+  String get estadoTexto => estado.isEmpty ? '—' : estadoPedido(estado);
 
   Color get estadoColor => switch (estado) {
         'enviado' || 'en_revision' => AppPalette.warning,

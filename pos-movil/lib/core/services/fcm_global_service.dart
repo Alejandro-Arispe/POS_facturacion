@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -27,6 +28,12 @@ class FcmGlobalService {
   Stream<Map<String, dynamic>> get notificationTaps =>
       _notificationTapController.stream;
 
+  final StreamController<RemoteMessage> _pedidoUpdatesController =
+      StreamController<RemoteMessage>.broadcast();
+
+  /// Push en foreground cuyo título contiene "Pedido #" (cambio de estado de un pedido).
+  Stream<RemoteMessage> get pedidoUpdates => _pedidoUpdatesController.stream;
+
   Map<String, dynamic>? _pendingNotificationTap;
   Map<String, dynamic>? get pendingNotificationTap => _pendingNotificationTap;
 
@@ -41,16 +48,8 @@ class FcmGlobalService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // 0. Solicitar permisos de notificación al inicializar
-    try {
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    } catch (e) {
-      debugPrint('[FCM Global] Error al solicitar permisos al inicializar: $e');
-    }
+    // El permiso NO se pide aquí (bloquearía runApp con la pantalla en blanco):
+    // se pide con [requestPermission] tras el primer frame (ver main.dart).
 
     // 1. Inicializar flutter_local_notifications
     const AndroidInitializationSettings initAndroid =
@@ -62,9 +61,18 @@ class FcmGlobalService {
       settings: initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         debugPrint('[FCM Global] Tap en notificación local: ${response.payload}');
-        if (response.payload != null) {
-          _notificationTapController.add({'id_empresa': response.payload});
+        final payload = response.payload;
+        if (payload == null || payload.isEmpty) return;
+        try {
+          final decoded = jsonDecode(payload);
+          if (decoded is Map) {
+            _notificationTapController.add(Map<String, dynamic>.from(decoded));
+            return;
+          }
+        } catch (_) {
+          // Payload antiguo: solo traía el id_empresa como texto plano.
         }
+        _notificationTapController.add({'id_empresa': payload});
       },
     );
 
@@ -102,6 +110,10 @@ class FcmGlobalService {
       debugPrint(
           '[FCM Global Foreground] Recibido: ${message.notification?.title}');
       _showLocalNotification(message);
+      if (isPedidoNotification(message.data) ||
+          (message.notification?.title?.contains('Pedido #') ?? false)) {
+        _pedidoUpdatesController.add(message);
+      }
     });
 
     // 5. Listener de tap en background
@@ -142,7 +154,9 @@ class FcmGlobalService {
     const String channelId = 'credit_payments_channel_v2';
     const String channelName = 'Cobros de Crédito';
     const String channelDesc = 'Notificaciones de abonos y pagos de crédito registrados';
-    final String? companyIdStr = message.data['id_empresa']?.toString();
+    // Se envía todo el data (id_empresa, id_pedido, id_cxc...) para que el tap
+    // en el banner foreground navegue igual que un tap en background.
+    final String payload = jsonEncode(message.data);
     final int notifId = notification.hashCode;
 
     debugPrint('[FCM Global] Mostrando banner local: title=${notification.title} id=$notifId channelId=$channelId');
@@ -166,7 +180,7 @@ class FcmGlobalService {
           title: notification.title,
           body: notification.body,
           notificationDetails: notifDetails,
-          payload: companyIdStr,
+          payload: payload,
         )
         .then((_) {
           debugPrint('[FCM Global] Banner local mostrado exitosamente en canal: $channelId');
@@ -174,6 +188,36 @@ class FcmGlobalService {
         .catchError((Object e) {
           debugPrint('[FCM Global] ERROR mostrando banner local: $e');
         });
+  }
+
+  /// `true` si el push se refiere a un pedido (lleva `id_pedido` en el data).
+  static bool isPedidoNotification(Map<String, dynamic> data) =>
+      data['id_pedido'] != null && data['id_pedido'].toString().isNotEmpty;
+
+  /// Último estado conocido del permiso de notificaciones.
+  AuthorizationStatus? permissionStatus;
+
+  bool get permissionGranted =>
+      permissionStatus == AuthorizationStatus.authorized ||
+      permissionStatus == AuthorizationStatus.provisional;
+
+  /// Pide el permiso de notificaciones (Android 13+ / iOS).
+  /// Si el usuario ya respondió, el sistema no vuelve a mostrar el diálogo y
+  /// solo devuelve el estado actual. Seguro de llamar varias veces.
+  Future<AuthorizationStatus> requestPermission() async {
+    try {
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      permissionStatus = settings.authorizationStatus;
+      debugPrint('[FCM Global] Estado del permiso: $permissionStatus');
+    } catch (e) {
+      debugPrint('[FCM Global] Error al solicitar permisos: $e');
+      permissionStatus ??= AuthorizationStatus.notDetermined;
+    }
+    return permissionStatus!;
   }
 
   /// Libera los listeners.

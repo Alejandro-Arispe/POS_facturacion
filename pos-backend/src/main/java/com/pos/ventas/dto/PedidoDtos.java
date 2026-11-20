@@ -52,6 +52,7 @@ public final class PedidoDtos {
         private Integer idDetalle;
         private Integer idPedido;
         private Integer idProducto;
+        private String nombreProducto;
         private Integer cantidad;
         private BigDecimal precioUnitarioEstimado;
         private BigDecimal descuentoEstimado;
@@ -66,6 +67,7 @@ public final class PedidoDtos {
         private Integer idEmpresa;
         private Integer idSucursal;
         private Integer idCliente;
+        private String clienteNombre;
         private Integer idVenta;
         private String estado;
         private BigDecimal subtotalEstimado;

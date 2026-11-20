@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/router.dart';
 import '../../core/api_service.dart';
 import '../../core/constants/app_palette.dart';
+import '../../core/services/fcm_global_service.dart';
 import '../../shared/widgets/estado_views.dart';
 import '../catalogo/producto_model.dart';
 import 'pedido_model.dart';
@@ -19,11 +22,27 @@ class _PedidosPageState extends State<PedidosPage> {
   List<Pedido> _pedidos = [];
   bool _cargando = true;
   String? _error;
+  StreamSubscription<dynamic>? _pushSub;
+  StreamSubscription<dynamic>? _tapSub;
 
   @override
   void initState() {
     super.initState();
     _cargar();
+    _pushSub = FcmGlobalService.instance.pedidoUpdates.listen((_) {
+      if (mounted) _cargar();
+    });
+    // Tap en un push de pedido (app en background): recargar el estado.
+    _tapSub = FcmGlobalService.instance.notificationTaps.listen((data) {
+      if (mounted && FcmGlobalService.isPedidoNotification(data)) _cargar();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pushSub?.cancel();
+    _tapSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargar() async {

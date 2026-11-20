@@ -30,4 +30,10 @@ void main() async {
   await FcmGlobalService.instance.initialize();
 
   runApp(const MyApp());
+
+  // Pedir el permiso de notificaciones apenas se dibuja la primera pantalla
+  // (Android 13+ muestra el diálogo "Permitir notificaciones").
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    FcmGlobalService.instance.requestPermission();
+  });
 }

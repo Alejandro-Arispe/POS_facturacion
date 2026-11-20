@@ -80,12 +80,12 @@ export function normalizeStockNotification(item: any): NotificationViewModel {
   const payload = normalizePayload(item.payload);
   const display = extractStockDisplay(payload);
   const fecha = item.fecha || item.created_at || item.createdAt || new Date().toISOString();
-  const titulo = item.titulo || payload.title || (display.sucursal_nombre ? `Stock under "${display.sucursal_nombre}"` : 'Notification');
+  const titulo = item.titulo || payload.title || (display.sucursal_nombre ? `⚠️ Stock bajo en ${display.sucursal_nombre}` : 'Notificación');
   const esAlertaStock = Boolean(
     display.sucursal_nombre ||
       display.producto_nombre ||
       display.cantidad !== null ||
-      /stock under/i.test(String(titulo)),
+      /stock (under|bajo)/i.test(String(titulo)),
   );
 
   return {
@@ -106,7 +106,7 @@ export function buildIncomingStockNotification(payload: any): NotificationViewMo
   const normalizedPayload = normalizeIncomingPayload(payload);
   return normalizeStockNotification({
     id: normalizedPayload.id ?? null,
-    titulo: normalizedPayload.title || 'Notification',
+    titulo: normalizedPayload.title || 'Notificación',
     mensaje: normalizedPayload.body || normalizedPayload.message || '',
     fecha: new Date().toISOString(),
     leido: false,
@@ -119,16 +119,16 @@ export function buildStockDetailModel(item: NotificationViewModel): Notification
   const productoFallback = payload.producto_id ?? payload.id_producto ?? 'N/A';
 
   return {
-    titulo: item.titulo || (item.display.sucursal_nombre ? `Stock under "${item.display.sucursal_nombre}"` : 'Notification'),
+    titulo: item.titulo || (item.display.sucursal_nombre ? `⚠️ Stock bajo en ${item.display.sucursal_nombre}` : 'Notificación'),
     mensaje: item.mensaje,
     fecha: item.fecha,
     fechaLegible: item.fechaLegible,
     payload,
     fields: [
-      { label: 'Branch', value: item.display.sucursal_nombre || 'N/A' },
-      { label: 'Product', value: item.display.producto_nombre || String(productoFallback) },
-      { label: 'Quantity', value: item.display.cantidad === null ? 'N/A' : String(item.display.cantidad) },
-      { label: 'Date', value: item.fechaLegible || item.fecha || 'N/A' },
+      { label: 'Sucursal', value: item.display.sucursal_nombre || 'N/A' },
+      { label: 'Producto', value: item.display.producto_nombre || String(productoFallback) },
+      { label: 'Cantidad', value: item.display.cantidad === null ? 'N/A' : String(item.display.cantidad) },
+      { label: 'Fecha', value: item.fechaLegible || item.fecha || 'N/A' },
     ],
   };
 }

@@ -28,7 +28,7 @@ public class NotificationReadPolicy {
     }
     public Map<String,Object> payload(Map<String,Object> raw) {
         Map<String,Object> safe=new LinkedHashMap<>();
-        for(String key:List.of("id_empresa","id_usuario","id_producto","id_sucursal","id_cxc","nombre_producto","stock_actual","stock_minimo","monto_credito","monto_pagado","saldo_pendiente","estado")) {
+        for(String key:List.of("id_empresa","id_usuario","id_producto","id_pedido","id_sucursal","id_cxc","nombre_producto","stock_actual","stock_minimo","monto_credito","monto_pagado","saldo_pendiente","estado")) {
             Object value=raw.get(key);
             if(value instanceof Number || value instanceof Boolean || value instanceof String text && text.length()<=200) safe.put(key,value);
         }

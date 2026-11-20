@@ -23,6 +23,7 @@ import com.pos.notifications.service.NotificationService;
 import com.pos.productos.domain.Producto;
 import com.pos.productos.repo.ProductoRepository;
 import com.pos.usuarios.domain.Usuario;
+import com.pos.usuarios.repo.UsuarioRepository;
 import com.pos.ventas.domain.PedidoCliente;
 import com.pos.ventas.domain.PedidoClienteDetalle;
 import com.pos.ventas.dto.PedidoDtos;
@@ -47,6 +48,7 @@ public class PedidoService {
     private final ProductoRepository productoRepository;
     private final StockRepository stockRepository;
     private final NotificationService notificationService;
+    private final UsuarioRepository usuarioRepository;
 
     public PedidoService(
             EmpresaAccess empresaAccess,
@@ -55,7 +57,8 @@ public class PedidoService {
             ClienteRepository clienteRepository,
             ProductoRepository productoRepository,
             StockRepository stockRepository,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            UsuarioRepository usuarioRepository) {
         this.empresaAccess = empresaAccess;
         this.pedidoRepository = pedidoRepository;
         this.detalleRepository = detalleRepository;
@@ -63,6 +66,7 @@ public class PedidoService {
         this.productoRepository = productoRepository;
         this.stockRepository = stockRepository;
         this.notificationService = notificationService;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @Transactional
@@ -142,7 +146,8 @@ public class PedidoService {
                     "Cliente: " + nombreCliente + " — Total estimado: Bs " + pedido.getTotalEstimado(),
                     Map.of(
                             "id_empresa", String.valueOf(idEmpresa),
-                            "id_sucursal", String.valueOf(pedido.getIdSucursal())));
+                            "id_sucursal", String.valueOf(pedido.getIdSucursal()),
+                            "id_pedido", String.valueOf(pedido.getIdPedido())));
         } catch (Exception ignored) {
         }
         return toResponse(pedido);
@@ -245,6 +250,7 @@ public class PedidoService {
                         Map.of(
                                 "id_empresa", String.valueOf(idEmpresa),
                                 "id_usuario", String.valueOf(cliente.getIdUsuario()),
+                                "id_pedido", String.valueOf(idPedidoFinal),
                                 "estado", estadoFinal));
             } catch (Exception ignored) {
             }
@@ -268,12 +274,21 @@ public class PedidoService {
         }
     }
 
+    private String nombreCliente(Integer idCliente) {
+        return clienteRepository.findById(idCliente)
+                .flatMap(c -> usuarioRepository.findById(c.getIdUsuario()))
+                .map(Usuario::getPersona)
+                .map(p -> p.getNombreCompleto())
+                .orElse("Cliente #" + idCliente);
+    }
+
     private PedidoDtos.PedidoResponse toResponse(PedidoCliente pedido) {
         PedidoDtos.PedidoResponse dto = new PedidoDtos.PedidoResponse();
         dto.setIdPedido(pedido.getIdPedido());
         dto.setIdEmpresa(pedido.getIdEmpresa());
         dto.setIdSucursal(pedido.getIdSucursal());
         dto.setIdCliente(pedido.getIdCliente());
+        dto.setClienteNombre(nombreCliente(pedido.getIdCliente()));
         dto.setIdVenta(pedido.getIdVenta());
         dto.setEstado(pedido.getEstado());
         dto.setSubtotalEstimado(pedido.getSubtotalEstimado());
@@ -292,6 +307,8 @@ public class PedidoService {
             item.setIdDetalle(detalle.getIdDetalle());
             item.setIdPedido(pedido.getIdPedido());
             item.setIdProducto(detalle.getIdProducto());
+            item.setNombreProducto(productoRepository.findById(detalle.getIdProducto())
+                    .map(Producto::getNombre).orElse("Producto #" + detalle.getIdProducto()));
             item.setCantidad(detalle.getCantidad());
             item.setPrecioUnitarioEstimado(detalle.getPrecioUnitarioEstimado());
             item.setDescuentoEstimado(detalle.getDescuentoEstimado());

@@ -167,22 +167,23 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _initFirebaseMessaging() async {
-    final messaging = FirebaseMessaging.instance;
-
-    // 1. Solicitar permiso (Android 13+, iOS)
-    try {
-      final NotificationSettings settings = await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-      debugPrint('[FCM] Estado del permiso: ${settings.authorizationStatus}');
-      if (settings.authorizationStatus == AuthorizationStatus.denied) {
-        debugPrint('[FCM] El usuario RECHAZÓ los permisos de notificación. No se recibirán pushes.');
-        return;
+    // 1. Permiso (Android 13+, iOS). Normalmente ya se pidió al abrir la app;
+    // si ya fue respondido el sistema no vuelve a mostrar el diálogo.
+    // Aunque lo niegue, el token se registra igual: si luego lo activa desde
+    // Ajustes, los push empiezan a llegar sin tener que volver a iniciar sesión.
+    final status = await FcmGlobalService.instance.requestPermission();
+    if (status == AuthorizationStatus.denied) {
+      debugPrint('[FCM] Permiso de notificaciones DENEGADO: no se mostrarán banners hasta activarlo en Ajustes.');
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Las notificaciones están desactivadas. Actívalas en Ajustes > Aplicaciones para recibir avisos de pedidos y créditos.',
+            ),
+            duration: Duration(seconds: 6),
+          ),
+        );
       }
-    } catch (e) {
-      debugPrint('[FCM] Error al solicitar permisos: $e');
     }
 
     // 2. Token refresh — re-registrar en backend si el token cambia
@@ -214,6 +215,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _handleNotificationTapData(Map<String, dynamic> data) {
+    // Los push de pedidos los atiende HomeShell (pestaña Pedidos).
+    if (FcmGlobalService.isPedidoNotification(data)) return;
     final companyIdStr = data['id_empresa'];
     final companyId = companyIdStr != null ? int.tryParse(companyIdStr.toString()) : null;
     _goToCreditsForCompany(companyId);

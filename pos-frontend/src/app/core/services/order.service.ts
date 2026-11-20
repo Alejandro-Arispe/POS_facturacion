@@ -6,6 +6,7 @@ export interface OrderDetail {
   id_detalle: number;
   id_pedido: number;
   id_producto: number;
+  nombre_producto?: string;
   cantidad: number;
   precio_unitario_estimado: string;
   descuento_estimado: string;
@@ -17,8 +18,9 @@ export interface Order {
   id_empresa: number;
   id_sucursal: number;
   id_cliente: number;
+  cliente_nombre?: string;
   id_venta: number | null;
-  estado: string; // 'enviado', 'en_revision', 'confirmado', 'en_preparacion', 'listo_para_recoger', 'convertido_en_venta', 'cancelado', 'rechazado'
+  estado: string; // 'enviado', 'en_revision', 'confirmado', 'en_preparacion', 'listo_para_recoger', 'convertido_en_venta', 'entregado', 'cancelado', 'rechazado'
   subtotal_estimado: string;
   descuento_estimado: string;
   total_estimado: string;

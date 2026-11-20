@@ -3,10 +3,11 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { OrderService, Order } from '../../../../../core/services/order.service';
 import { CashRegisterService } from '../../../../../core/services/cash-register.service';
+import { EstadoPedidoPipe } from '../../../../../shared/pipes/pedido-estado.pipe';
 
 @Component({
   selector: 'app-orders-inbox',
-  imports: [CommonModule],
+  imports: [CommonModule, EstadoPedidoPipe],
   templateUrl: './orders-inbox.html',
   styleUrl: './orders-inbox.css',
   standalone: true
