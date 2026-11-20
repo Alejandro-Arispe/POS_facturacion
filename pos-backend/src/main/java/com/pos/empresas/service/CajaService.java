@@ -201,10 +201,11 @@ public class CajaService {
 				.orElseThrow(() -> ApiException.notFound("Tipo de movimiento de caja no encontrado."));
         if (!Set.of("INGRESO","EGRESO","AJUSTE_POSITIVO","AJUSTE_NEGATIVO").contains(tipo.getNombre().toUpperCase(java.util.Locale.ROOT)))
             throw ApiException.badRequest("Apertura y cierre se generan desde sus operaciones específicas.");
-		if (datos.idMetodoPago() != null) {
-			metodoPagoRepository.findById(datos.idMetodoPago())
-					.orElseThrow(() -> ApiException.notFound("Metodo de pago no encontrado."));
-		}
+        MetodoPago metodo = metodoPagoRepository.findById(datos.idMetodoPago())
+                .orElseThrow(() -> ApiException.notFound("Metodo de pago no encontrado."));
+        if (metodo.esCheque()) {
+            throw ApiException.badRequest("El cheque se registra desde el cobro de una venta.");
+        }
 
 		try {
 			MovimientoCaja movimiento = new MovimientoCaja();

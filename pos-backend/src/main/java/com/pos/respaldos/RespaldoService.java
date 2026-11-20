@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import org.hibernate.Session;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -31,6 +32,8 @@ import com.pos.empresas.repo.EmpresaRepository;
 import com.pos.empresas.repo.HistorialSuscripcionRepository;
 import com.pos.empresas.repo.PlanRepository;
 import com.pos.empresas.repo.SucursalRepository;
+import com.pos.empresas.service.PlanPolicy;
+import com.pos.common.mail.EmailService;
 import com.pos.productos.domain.CategoriaProducto;
 import com.pos.productos.domain.Producto;
 import com.pos.productos.domain.SubcategoriaProducto;
@@ -52,6 +55,7 @@ import com.pos.usuarios.domain.Usuario;
 import com.pos.usuarios.repo.PermisoRepository;
 import com.pos.usuarios.repo.RolPermisoRepository;
 import com.pos.usuarios.repo.RolRepository;
+import com.pos.respaldos.ConfiguracionRespaldoRepository;
 
 import jakarta.persistence.EntityManager;
 import tools.jackson.core.JacksonException;
@@ -85,9 +89,16 @@ public class RespaldoService {
     private final ConfiguracionSistemaRepository configuracionSistemaRepository;
     private final HistorialSuscripcionRepository historialSuscripcionRepository;
     private final PlanRepository planRepository;
+    private final ConfiguracionRespaldoRepository configuracionRespaldoRepository;
     private final RespaldoAlmacen almacen;
+    private final RespaldoVentas ventasRespaldo;
+    private final RespaldoExcel excel;
+    private final EmailService emailService;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
+
+    /** Rango maximo de ventas en un respaldo manual, para que el archivo no crezca sin control. */
+    static final int MAX_DIAS_VENTAS = 366;
 
     public RespaldoService(
             EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy, com.pos.common.access.RoleAdministrationPolicy rolePolicy, com.pos.common.access.RbacAudit rbacAudit,
@@ -102,7 +113,11 @@ public class RespaldoService {
             ConfiguracionSistemaRepository configuracionSistemaRepository,
             HistorialSuscripcionRepository historialSuscripcionRepository,
             PlanRepository planRepository,
+            ConfiguracionRespaldoRepository configuracionRespaldoRepository,
             RespaldoAlmacen almacen,
+            RespaldoVentas ventasRespaldo,
+            RespaldoExcel excel,
+            EmailService emailService,
             ObjectMapper objectMapper,
             EntityManager entityManager) {
         this.empresaAccess = empresaAccess; this.dataPolicy=dataPolicy;this.rolePolicy=rolePolicy;this.rbacAudit=rbacAudit;
@@ -117,59 +132,122 @@ public class RespaldoService {
         this.configuracionSistemaRepository = configuracionSistemaRepository;
         this.historialSuscripcionRepository = historialSuscripcionRepository;
         this.planRepository = planRepository;
+        this.configuracionRespaldoRepository = configuracionRespaldoRepository;
         this.almacen = almacen;
+        this.ventasRespaldo = ventasRespaldo;
+        this.excel = excel;
+        this.emailService = emailService;
         this.objectMapper = objectMapper;
         this.entityManager = entityManager;
     }
 
     @Transactional(readOnly = true)
     public RespaldoRespuestas.Generado crear(Integer idEmpresa, Usuario usuario) {
-        requireOwner(usuario,idEmpresa);
-        return guardar(idEmpresa);
+        return crear(idEmpresa, null, usuario);
+    }
+
+    @Transactional(readOnly = true)
+    public RespaldoRespuestas.Generado crear(Integer idEmpresa, Integer idSucursal, Usuario usuario) {
+        return crear(idEmpresa, idSucursal, null, null, usuario);
+    }
+
+    /** Respaldo manual: sin fechas toma las ventas del dia (hora de Bolivia). */
+    @Transactional(readOnly = true)
+    public RespaldoRespuestas.Generado crear(Integer idEmpresa, Integer idSucursal, LocalDate desde, LocalDate hasta,
+            Usuario usuario) {
+        requireOwner(usuario, idEmpresa);
+        LocalDate hoy = LocalDate.now(RespaldoScheduler.ZONA);
+        LocalDate fin = hasta == null ? (desde == null ? hoy : desde) : hasta;
+        LocalDate inicio = desde == null ? fin : desde;
+        if (inicio.isAfter(fin)) {
+            throw ApiException.badRequest("La fecha 'desde' no puede ser posterior a 'hasta'.");
+        }
+        if (inicio.plusDays(MAX_DIAS_VENTAS).isBefore(fin)) {
+            throw ApiException.badRequest("El rango de ventas admite hasta " + MAX_DIAS_VENTAS + " días.");
+        }
+        return guardar(idEmpresa, idSucursal, inicio, fin);
     }
 
     @Transactional(readOnly = true)
     public void exportarProgramado(Integer idEmpresa) {
+        exportarProgramado(idEmpresa, null, "DIARIO");
+    }
+
+    /** Respaldo del scheduler: cada empresa en su propia transaccion para que un fallo no afecte a las demas. */
+    @Transactional(readOnly = true)
+    public RespaldoRespuestas.Generado exportarProgramado(Integer idEmpresa, Integer idSucursal, String frecuencia) {
         if (!empresaRepository.existsById(idEmpresa)) {
-            return;
+            return null;
         }
-        guardar(idEmpresa);
+        LocalDate hoy = LocalDate.now(RespaldoScheduler.ZONA);
+        return guardar(idEmpresa, idSucursal, periodoVentas(frecuencia, hoy), hoy);
+    }
+
+    /**
+     * Inicio del periodo de ventas segun la frecuencia. Incluye el dia anterior completo para que un
+     * respaldo de madrugada no deje fuera las ventas de la noche previa (los periodos se solapan, no hay huecos).
+     */
+    static LocalDate periodoVentas(String frecuencia, LocalDate hoy) {
+        return switch (frecuencia == null ? "DIARIO" : frecuencia.toUpperCase(Locale.ROOT)) {
+            case "SEMANAL" -> hoy.minusDays(7);
+            case "MENSUAL" -> hoy.minusMonths(1);
+            default -> hoy.minusDays(1);
+        };
+    }
+
+    public RespaldoRespuestas.Excel descargarExcel(Integer idEmpresa, Usuario usuario, String archivo) {
+        requireOwner(usuario, idEmpresa);
+        byte[] contenido = excel.generar(almacen.leer(idEmpresa, archivo), archivo);
+        return new RespaldoRespuestas.Excel(archivo.replaceFirst("\\.json$", ".xlsx"), contenido);
     }
 
     public List<RespaldoRespuestas.Resumen> listar(Integer idEmpresa, Usuario usuario) {
-        requireOwner(usuario,idEmpresa);
+        requireOwner(usuario, idEmpresa);
         return almacen.listar(idEmpresa);
     }
 
     public byte[] descargar(Integer idEmpresa, Usuario usuario, String archivo) {
-        requireOwner(usuario,idEmpresa);
+        requireOwner(usuario, idEmpresa);
         return almacen.leer(idEmpresa, archivo);
     }
 
     @Transactional
     public RespaldoRespuestas.Restaurado restaurar(Integer idEmpresa, Usuario usuario, String archivo) {
+        return restaurarDocumento(idEmpresa, usuario, () -> almacen.leer(idEmpresa, archivo), archivo);
+    }
+
+    /** Restaura desde un archivo JSON subido por el usuario (pendrive / almacenamiento local). */
+    @Transactional
+    public RespaldoRespuestas.Restaurado restaurarDesdeBytes(Integer idEmpresa, Usuario usuario, byte[] bytes, String nombreArchivo) {
+        return restaurarDocumento(idEmpresa, usuario, () -> bytes, nombreArchivo != null ? nombreArchivo : "upload");
+    }
+
+    /** Valida permisos antes de leer el contenido y aplica el respaldo. */
+    private RespaldoRespuestas.Restaurado restaurarDocumento(
+            Integer idEmpresa, Usuario usuario, Supplier<byte[]> contenido, String archivo) {
         empresaAccess.requireEmpresa(usuario, idEmpresa);
         rolePolicy.lock(idEmpresa);
-        var capabilities=rolePolicy.companyManager(usuario,idEmpresa,"update");
-        if(capabilities.assignments().stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
+        var capabilities = rolePolicy.companyManager(usuario, idEmpresa, "update");
+        if (capabilities.assignments().stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
             throw ApiException.forbidden("Restaurar un respaldo requiere al administrador propietario.");
-        var creation=rolePolicy.companyManager(usuario,idEmpresa,"create");
-        for(String attribute:List.of("nombre","descripcion","activo","permissions")) {
-            rolePolicy.field(capabilities,"update",attribute);rolePolicy.field(creation,"create",attribute);
+        var creation = rolePolicy.companyManager(usuario, idEmpresa, "create");
+        for (String attribute : List.of("nombre", "descripcion", "activo", "permissions")) {
+            rolePolicy.field(capabilities, "update", attribute);
+            rolePolicy.field(creation, "create", attribute);
         }
-        for(Rol role:rolRepository.findByIdEmpresa(idEmpresa)) rolePolicy.manageable(capabilities,role);
-        var productGrants=dataPolicy.require(usuario,idEmpresa,null,"product:create","product:update","product:delete","company:update","branch:create","branch:update");
-        for(String field:com.pos.common.access.ProductFields.ALL) for(String action:List.of("create","update"))
-            if(!productGrants.allows("product:"+action+":"+field)) throw ApiException.forbidden("Restaurar un respaldo completo requiere poder establecer todos los campos de producto.");
-        RespaldoDocumento documento = parsear(almacen.leer(idEmpresa, archivo));
-        rolePolicy.grants(capabilities,lista(documento.rolPermisos()).stream().filter(g->bool(g.activo(),true)).map(RolPermisoDatos::idPermiso).toList(),lista(documento.rolPermisos()).stream().filter(g->bool(g.activo(),true) && bool(g.puedeDelegar(),false)).map(RolPermisoDatos::idPermiso).toList());
-        Set<String> normalizedNames=new HashSet<>();
-        for(RolDatos role:lista(documento.roles())) {
-            String name=requerido(role.nombre(),"nombre del rol").strip().toUpperCase(Locale.ROOT);
-            if(Set.of("ADMINISTRADOR","SUPERADMIN","SUPER_ADMIN","SUPERADMINISTRADOR","CLIENTE","EMPLEADO").contains(name) || !normalizedNames.add(name))
+        for (Rol role : rolRepository.findByIdEmpresa(idEmpresa)) rolePolicy.manageable(capabilities, role);
+        var productGrants = dataPolicy.require(usuario, idEmpresa, null, "product:create", "product:update", "product:delete", "company:update", "branch:create", "branch:update");
+        for (String field : com.pos.common.access.ProductFields.ALL) for (String action : List.of("create", "update"))
+            if (!productGrants.allows("product:" + action + ":" + field)) throw ApiException.forbidden("Restaurar un respaldo completo requiere poder establecer todos los campos de producto.");
+        RespaldoDocumento documento = parsear(contenido.get());
+        rolePolicy.grants(capabilities, lista(documento.rolPermisos()).stream().filter(g -> bool(g.activo(), true)).map(RolPermisoDatos::idPermiso).toList(), lista(documento.rolPermisos()).stream().filter(g -> bool(g.activo(), true) && bool(g.puedeDelegar(), false)).map(RolPermisoDatos::idPermiso).toList());
+        Set<String> normalizedNames = new HashSet<>();
+        for (RolDatos role : lista(documento.roles())) {
+            String name = requerido(role.nombre(), "nombre del rol").strip().toUpperCase(Locale.ROOT);
+            if (Set.of("ADMINISTRADOR", "SUPERADMIN", "SUPER_ADMIN", "SUPERADMINISTRADOR", "CLIENTE", "EMPLEADO").contains(name) || !normalizedNames.add(name))
                 throw ApiException.badRequest("Nombre de rol reservado o repetido en el respaldo.");
         }
-        rbacAudit.record(usuario,idEmpresa,"ROL_RESTAURAR_RESPALDO","roles="+lista(documento.roles()).size());
+        rbacAudit.record(usuario, idEmpresa, "ROL_RESTAURAR_RESPALDO", "roles=" + lista(documento.roles()).size());
         if (documento.idEmpresa() == null || !idEmpresa.equals(documento.idEmpresa())) {
             throw ApiException.badRequest("El id_empresa del respaldo no coincide con la empresa de la URL.");
         }
@@ -182,43 +260,207 @@ public class RespaldoService {
         return new RespaldoRespuestas.Restaurado(
                 archivo,
                 idEmpresa,
+                documento.idSucursal(),
+                documento.alcance() != null ? documento.alcance() : "EMPRESA_COMPLETA",
                 RespaldoDocumento.TABLAS,
                 RespaldoDocumento.INCLUYE_VENTAS,
                 RespaldoDocumento.MENSAJE_VENTAS);
     }
 
-    private void requireOwner(Usuario usuario,Integer company) {
-        dataPolicy.productFields(dataPolicy.require(usuario,company,null,"product:read","role:read","role:read:permissions"),com.pos.common.access.ProductFields.ALL.toArray(String[]::new));
-        empresaAccess.requireEmpresa(usuario,company);
-        var capabilities=rolePolicy.companyScope(usuario,company);
-        if(capabilities.assignments().stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
+
+    // =========================================================================
+    // Configuración de respaldos automáticos
+    // =========================================================================
+
+    public RespaldoRespuestas.ConfiguracionDTO obtenerConfiguracion(Integer idEmpresa, Usuario usuario) {
+        requireOwner(usuario, idEmpresa);
+        Empresa empresa = empresaRepository.findById(idEmpresa)
+                .orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
+        ConfiguracionRespaldo cfg = configuracionRespaldoRepository.findByEmpresaId(idEmpresa)
+                .orElseGet(() -> crearConfiguracionPorDefecto(empresa));
+        String planCodigo = obtenerCodigoPlan(idEmpresa);
+        boolean permiteAutomatico = "basico".equalsIgnoreCase(planCodigo) || "pro".equalsIgnoreCase(planCodigo);
+        boolean permiteCloudEmail = "pro".equalsIgnoreCase(planCodigo);
+        return toConfiguracionDTO(cfg, planCodigo, permiteAutomatico, permiteCloudEmail);
+    }
+
+    @Transactional
+    public RespaldoRespuestas.ConfiguracionDTO guardarConfiguracion(
+            Integer idEmpresa,
+            RespaldoRespuestas.GuardarConfiguracionDTO dto,
+            Usuario usuario) {
+        requireOwner(usuario, idEmpresa);
+        Empresa empresa = empresaRepository.findById(idEmpresa)
+                .orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
+        String planCodigo = obtenerCodigoPlan(idEmpresa);
+        boolean permiteAutomatico = "basico".equalsIgnoreCase(planCodigo) || "pro".equalsIgnoreCase(planCodigo);
+        boolean permiteCloudEmail = "pro".equalsIgnoreCase(planCodigo);
+
+        // Validaciones por plan
+        if (Boolean.TRUE.equals(dto.activo()) && !permiteAutomatico) {
+            throw ApiException.badRequest("El plan actual no permite respaldos automáticos.");
+        }
+        if (Boolean.TRUE.equals(dto.enviarEmail()) && !permiteCloudEmail) {
+            throw ApiException.badRequest("El envío por correo cloud solo está disponible en el plan Pro.");
+        }
+
+        ConfiguracionRespaldo cfg = configuracionRespaldoRepository.findByEmpresaId(idEmpresa)
+                .orElseGet(() -> crearConfiguracionPorDefecto(empresa));
+
+        if (dto.activo() != null) cfg.setActivo(dto.activo());
+        if (dto.frecuencia() != null) cfg.setFrecuencia(dto.frecuencia().toUpperCase(Locale.ROOT));
+        if (dto.hora() != null) cfg.setHora(dto.hora());
+        if (dto.alcance() != null) cfg.setAlcance(dto.alcance().toUpperCase(Locale.ROOT));
+        if (dto.enviarEmail() != null) cfg.setEnviarEmail(dto.enviarEmail());
+        if (dto.emailDestino() != null) cfg.setEmailDestino(dto.emailDestino().isBlank() ? null : dto.emailDestino().trim());
+
+        // Resolver sucursal si alcance es SUCURSAL
+        if ("SUCURSAL".equalsIgnoreCase(cfg.getAlcance()) && dto.idSucursal() != null) {
+            Sucursal suc = sucursalRepository.findById(dto.idSucursal())
+                    .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
+            if (!idEmpresa.equals(suc.getEmpresa().getIdEmpresa())) {
+                throw ApiException.badRequest("La sucursal no pertenece a esta empresa.");
+            }
+            cfg.setSucursal(suc);
+        } else if (!"SUCURSAL".equalsIgnoreCase(cfg.getAlcance())) {
+            cfg.setSucursal(null);
+        }
+        validarConfiguracion(cfg);
+        cfg.setProgramadoDesde(LocalDateTime.now(RespaldoScheduler.ZONA).withNano(0));
+
+        configuracionRespaldoRepository.save(cfg);
+        return toConfiguracionDTO(cfg, planCodigo, permiteAutomatico, permiteCloudEmail);
+    }
+
+    // =========================================================================
+    // Helpers privados de configuración
+    // =========================================================================
+
+    private static final Set<String> FRECUENCIAS = Set.of("DESACTIVADO", "DIARIO", "SEMANAL", "MENSUAL");
+    private static final Set<String> ALCANCES = Set.of("EMPRESA_COMPLETA", "SUCURSAL");
+
+    private static void validarConfiguracion(ConfiguracionRespaldo cfg) {
+        if (!FRECUENCIAS.contains(cfg.getFrecuencia())) {
+            throw ApiException.badRequest("Frecuencia no válida. Use DESACTIVADO, DIARIO, SEMANAL o MENSUAL.");
+        }
+        if (!ALCANCES.contains(cfg.getAlcance())) {
+            throw ApiException.badRequest("Alcance no válido. Use EMPRESA_COMPLETA o SUCURSAL.");
+        }
+        if ("SUCURSAL".equals(cfg.getAlcance()) && cfg.getSucursal() == null) {
+            throw ApiException.badRequest("Seleccione la sucursal a respaldar.");
+        }
+        if (RespaldoScheduler.horaProgramada(cfg.getHora()) == null) {
+            throw ApiException.badRequest("La hora debe tener el formato HH:mm.");
+        }
+        if (Boolean.TRUE.equals(cfg.getEnviarEmail())
+                && (cfg.getEmailDestino() == null || !EmailService.correoValido(cfg.getEmailDestino()))) {
+            throw ApiException.badRequest("Ingrese un correo de destino válido para el envío del respaldo.");
+        }
+    }
+
+    private ConfiguracionRespaldo crearConfiguracionPorDefecto(Empresa empresa) {
+        ConfiguracionRespaldo cfg = new ConfiguracionRespaldo();
+        cfg.setEmpresa(empresa);
+        cfg.setActivo(false);
+        cfg.setFrecuencia("DESACTIVADO");
+        cfg.setHora("02:00");
+        cfg.setAlcance("EMPRESA_COMPLETA");
+        cfg.setEnviarEmail(false);
+        return configuracionRespaldoRepository.save(cfg);
+    }
+
+    private RespaldoRespuestas.ConfiguracionDTO toConfiguracionDTO(
+            ConfiguracionRespaldo cfg,
+            String planCodigo,
+            boolean permiteAutomatico,
+            boolean permiteCloudEmail) {
+        Integer idSucursal = cfg.getSucursal() != null ? cfg.getSucursal().getIdSucursal() : null;
+        return new RespaldoRespuestas.ConfiguracionDTO(
+                cfg.getIdConfiguracionRespaldo(),
+                cfg.getEmpresa().getIdEmpresa(),
+                cfg.getActivo(),
+                cfg.getFrecuencia(),
+                cfg.getHora(),
+                cfg.getAlcance(),
+                idSucursal,
+                cfg.getEmailDestino(),
+                cfg.getEnviarEmail(),
+                cfg.getUltimoRespaldoExitoso(),
+                planCodigo,
+                permiteAutomatico,
+                permiteCloudEmail);
+    }
+
+    private String obtenerCodigoPlan(Integer idEmpresa) {
+        List<HistorialSuscripcion> activas = historialSuscripcionRepository.findActivasPorEmpresa(idEmpresa, LocalDate.now());
+        if (activas.isEmpty()) {
+            return "gratuito";
+        }
+        return PlanPolicy.defaults(activas.get(0).getPlan()).codigo();
+    }
+    private void requireOwner(Usuario usuario, Integer company) {
+        dataPolicy.productFields(dataPolicy.require(usuario, company, null, "product:read", "role:read", "role:read:permissions"), com.pos.common.access.ProductFields.ALL.toArray(String[]::new));
+        empresaAccess.requireEmpresa(usuario, company);
+        var capabilities = rolePolicy.companyScope(usuario, company);
+        if (capabilities.assignments().stream().noneMatch(com.pos.common.access.RbacResolver::companyAdministrator))
             throw ApiException.forbidden("Los respaldos completos requieren al administrador propietario.");
     }
 
-    private RespaldoRespuestas.Generado guardar(Integer idEmpresa) {
+    public RespaldoRespuestas.Generado guardar(Integer idEmpresa, Integer idSucursal, LocalDate desde, LocalDate hasta) {
         LocalDateTime fecha = LocalDateTime.now().withNano(0);
-        RespaldoDocumento documento = armar(idEmpresa, fecha);
+        RespaldoDocumento documento = armar(idEmpresa, idSucursal, fecha,
+                ventasRespaldo.leer(idEmpresa, idSucursal, desde, hasta));
         try {
             byte[] json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(documento);
-            String archivo = almacen.guardar(idEmpresa, json, fecha);
+            String archivo = almacen.guardar(idEmpresa, json, fecha, idSucursal);
             return new RespaldoRespuestas.Generado(
                     archivo,
                     fecha,
                     idEmpresa,
+                    idSucursal,
+                    documento.alcance(),
                     RespaldoDocumento.TABLAS,
                     RespaldoDocumento.INCLUYE_VENTAS,
-                    RespaldoDocumento.MENSAJE_VENTAS);
+                    RespaldoDocumento.MENSAJE_VENTAS,
+                    desde,
+                    hasta,
+                    documento.ventasHistorial().cantidadVentas());
         } catch (JacksonException ex) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo serializar el respaldo.");
         }
     }
 
-    private RespaldoDocumento armar(Integer idEmpresa, LocalDateTime fecha) {
+    public RespaldoRespuestas.Generado guardar(Integer idEmpresa, Integer idSucursal) {
+        LocalDate hoy = LocalDate.now(RespaldoScheduler.ZONA);
+        return guardar(idEmpresa, idSucursal, hoy, hoy);
+    }
+
+    public RespaldoRespuestas.Generado guardar(Integer idEmpresa) {
+        return guardar(idEmpresa, null);
+    }
+
+    private RespaldoDocumento armar(Integer idEmpresa, Integer idSucursal, LocalDateTime fecha,
+            RespaldoDocumento.VentasHistorial ventas) {
         Empresa empresa = empresaRepository.findById(idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
-        List<SucursalDatos> sucursales = sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa).stream()
-                .map(this::sucursalDatos)
-                .toList();
+        List<SucursalDatos> sucursales;
+        String alcance = "EMPRESA_COMPLETA";
+        String nombreSucursal = null;
+        if (idSucursal != null) {
+            Sucursal suc = sucursalRepository.findById(idSucursal)
+                    .orElseThrow(() -> ApiException.notFound("Sucursal no encontrada."));
+            if (!idEmpresa.equals(suc.getEmpresa().getIdEmpresa())) {
+                throw ApiException.badRequest("La sucursal no pertenece a esta empresa.");
+            }
+            alcance = "SUCURSAL";
+            nombreSucursal = suc.getNombre();
+            sucursales = List.of(sucursalDatos(suc));
+        } else {
+            sucursales = sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa).stream()
+                    .map(this::sucursalDatos)
+                    .toList();
+        }
+
         List<CategoriaDatos> categorias = categoriaProductoRepository.findByIdEmpresa(idEmpresa).stream()
                 .map(this::categoriaDatos)
                 .toList();
@@ -240,7 +482,7 @@ public class RespaldoService {
                         enlace.getIdRolPermiso(),
                         rol.getIdRol(),
                         enlace.getPermiso().getIdPermiso(),
-                        enlace.getActivo(),enlace.getPuedeDelegar()));
+                        enlace.getActivo(), enlace.getPuedeDelegar()));
             }
         }
         ConfiguracionDatos configuracion = configuracionSistemaRepository.findByEmpresa_IdEmpresa(idEmpresa)
@@ -251,6 +493,9 @@ public class RespaldoService {
                 .toList();
         return new RespaldoDocumento(
                 idEmpresa,
+                idSucursal,
+                nombreSucursal,
+                alcance,
                 fecha,
                 RespaldoDocumento.INCLUYE_VENTAS,
                 RespaldoDocumento.MENSAJE_VENTAS,
@@ -263,7 +508,8 @@ public class RespaldoService {
                 rolesDatos,
                 permisos,
                 configuracion,
-                historial);
+                historial,
+                ventas);
     }
 
     /**
@@ -287,7 +533,7 @@ public class RespaldoService {
         ids(historial, HistorialDatos::idHistorialSuscripcion, "historial_suscripcion");
         validar(idEmpresa, documento.empresa(), sucursales, categorias, subcategorias, productos, roles, permisos,
                 documento.configuracionSistema(), historial, idsCategorias, idsSubcategorias, idsRoles, idsSucursales,
-                idsProductos);
+                idsProductos, documento.idSucursal() == null);
         entityManager.clear();
 
         actualizarEmpresa(idEmpresa, documento.empresa());
@@ -317,9 +563,12 @@ public class RespaldoService {
             guardarSucursal(idEmpresa, fila);
         }
         soltar();
-        borrarSi("delete from Sucursal s where s.empresa.idEmpresa = :idEmpresa",
-                "and s.idSucursal not in :ids", idEmpresa, idsSucursales);
-        soltar();
+        // Un respaldo de una sola sucursal no trae las demas: no se deben borrar.
+        if (documento.idSucursal() == null) {
+            borrarSi("delete from Sucursal s where s.empresa.idEmpresa = :idEmpresa",
+                    "and s.idSucursal not in :ids", idEmpresa, idsSucursales);
+            soltar();
+        }
         reemplazarRoles(idEmpresa, roles, permisos, idsRoles);
         soltar();
         guardarConfiguracion(idEmpresa, documento.configuracionSistema());
@@ -348,7 +597,8 @@ public class RespaldoService {
             Set<Integer> idsSubcategorias,
             Set<Integer> idsRoles,
             Set<Integer> idsSucursales,
-            Set<Integer> idsProductos) {
+            Set<Integer> idsProductos,
+            boolean respaldoCompleto) {
         if (empresa == null || empresa.idEmpresa() == null || !idEmpresa.equals(empresa.idEmpresa())) {
             throw ApiException.badRequest("El id_empresa del respaldo no coincide con la empresa de la URL.");
         }
@@ -432,7 +682,8 @@ public class RespaldoService {
                 }
             });
         }
-        for (Sucursal actual : sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa)) {
+        // Solo un respaldo de la empresa completa quita las sucursales que no trae.
+        for (Sucursal actual : respaldoCompleto ? sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa) : List.<Sucursal>of()) {
             if (!idsSucursales.contains(actual.getIdSucursal()) && sucursalEnUso(idEmpresa, actual.getIdSucursal())) {
                 throw ApiException.badRequest("No se quita la sucursal \"" + actual.getNombre()
                         + "\" porque tiene cajas, stock, pedidos o personal. No se borran ventas.");

@@ -15,10 +15,17 @@ import {
 } from '../../../../../../core/services/product.service';
 import {
   CashRegisterService,
+  ChequePaymentRequest,
   RegisterCreditPaymentRequest,
 } from '../../../../../../core/services/cash-register.service';
 import { Navbar } from '../../../../../../shared/components/navbar/navbar';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
+import {
+  ChequePaymentFields,
+  chequePaymentError,
+  emptyChequePayment,
+  isChequePaymentMethod,
+} from '../../../../../../shared/components/cheque-payment-fields/cheque-payment-fields';
 
 type CreditTab = 'receivables' | 'payment';
 
@@ -40,11 +47,12 @@ interface CreditPaymentRow {
   id: number;
   paymentMethodId: number | null;
   amount: number | null;
+  cheque?: ChequePaymentRequest;
 }
 
 @Component({
   selector: 'app-credit-collections',
-  imports: [MoneyPipe, FormsModule, Navbar, Sidebar],
+  imports: [MoneyPipe, FormsModule, Navbar, Sidebar, ChequePaymentFields],
   templateUrl: './credit_collections.html',
   styleUrl: './credit_collections.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -123,6 +131,33 @@ export class CreditCollections implements OnInit {
 
   protected updatePaymentAmount(row: CreditPaymentRow, value: number | string | null): void {
     row.amount = this.normalizeMoney(value);
+    if (row.cheque) row.cheque = { ...row.cheque, cobrado: false };
+  }
+
+  protected changePaymentMethod(row: CreditPaymentRow, methodId: number | null): void {
+    row.paymentMethodId = methodId;
+    const method = this.paymentMethods.find((option) => option.id === methodId);
+    row.cheque = method && isChequePaymentMethod(method.name) ? emptyChequePayment() : undefined;
+  }
+
+  protected get canAddPaymentRow(): boolean {
+    return this.paymentRows.length < this.paymentMethods.length;
+  }
+
+  protected addPaymentRow(): void {
+    if (this.canAddPaymentRow) {
+      this.paymentRows = [...this.paymentRows, this.createPaymentRow(undefined, this.remainingPaymentAmount)];
+    }
+  }
+
+  protected removePaymentRow(row: CreditPaymentRow): void {
+    if (this.paymentRows.length > 1) {
+      this.paymentRows = this.paymentRows.filter((payment) => payment.id !== row.id);
+    }
+  }
+
+  protected isPaymentMethodDisabled(row: CreditPaymentRow, methodId: number): boolean {
+    return this.paymentRows.some((payment) => payment.id !== row.id && payment.paymentMethodId === methodId);
   }
 
   protected get remainingPaymentAmount(): number {
@@ -139,6 +174,7 @@ export class CreditCollections implements OnInit {
   }
 
   protected registerCreditPayment(): void {
+    if (this.savingPayment) return;
     this.paymentError = '';
     this.paymentMessage = '';
 
@@ -155,6 +191,7 @@ export class CreditCollections implements OnInit {
     const payments = this.paymentRows.map((row) => ({
       id_metodo_pago: row.paymentMethodId,
       monto_pagado: this.normalizeMoney(row.amount),
+      cheque: row.cheque,
     }));
 
     if (payments.length === 0) {
@@ -170,6 +207,12 @@ export class CreditCollections implements OnInit {
     if (payments.some((payment) => payment.monto_pagado <= 0)) {
       this.paymentError = 'Ingresa un monto mayor a 0 en cada fila.';
       return;
+    }
+
+    const cheque = payments.find((payment) => payment.cheque)?.cheque;
+    if (cheque) {
+      this.paymentError = chequePaymentError(cheque);
+      if (this.paymentError) return;
     }
 
     const totalPayment = this.roundCurrency(
@@ -188,6 +231,7 @@ export class CreditCollections implements OnInit {
       pagos_credito: payments.map((payment) => ({
         id_metodo_pago: Number(payment.id_metodo_pago),
         monto_pagado: payment.monto_pagado.toFixed(2),
+        ...(payment.cheque ? { cheque: payment.cheque } : {}),
       })),
     };
 
@@ -349,14 +393,17 @@ export class CreditCollections implements OnInit {
   private loadPaymentMethods(): void {
     this.loadingPaymentMethods = true;
 
-    this.productService.getMetodosPago().subscribe({
+    this.productService.getMetodosPago(true).subscribe({
       next: (methods) => {
-        this.paymentMethods = methods.map((method) => this.mapPaymentMethod(method));
-        this.paymentRows = this.paymentRows.map((row) => ({
-          ...row,
-          paymentMethodId:
-            row.paymentMethodId ?? this.getFirstAvailablePaymentMethodId(row.id),
-        }));
+        const allowedMethods = new Set(['EFECTIVO', 'QR', 'TARJETA', 'TRANSFERENCIA', 'CHEQUE']);
+        this.paymentMethods = methods
+          .filter((method) => allowedMethods.has(method.nombre.trim().toUpperCase()))
+          .map((method) => this.mapPaymentMethod(method));
+        for (const row of this.paymentRows) {
+          if (row.paymentMethodId === null) {
+            this.changePaymentMethod(row, this.getFirstAvailablePaymentMethodId(row.id));
+          }
+        }
         this.loadingPaymentMethods = false;
         this.cdr.detectChanges();
       },
@@ -372,11 +419,9 @@ export class CreditCollections implements OnInit {
     id = this.nextPaymentRowId++,
     amount: number | null = null,
   ): CreditPaymentRow {
-    return {
-      id,
-      paymentMethodId: this.getFirstAvailablePaymentMethodId(id),
-      amount,
-    };
+    const row: CreditPaymentRow = { id, paymentMethodId: null, amount };
+    this.changePaymentMethod(row, this.getFirstAvailablePaymentMethodId(id));
+    return row;
   }
 
   private getFirstAvailablePaymentMethodId(rowId?: number): number | null {
@@ -387,7 +432,8 @@ export class CreditCollections implements OnInit {
         .filter((id): id is number => id !== null),
     );
 
-    return this.paymentMethods.find((method) => !usedMethodIds.has(method.id))?.id ?? null;
+    const available = this.paymentMethods.filter((method) => !usedMethodIds.has(method.id));
+    return available.find((method) => !isChequePaymentMethod(method.name))?.id ?? available[0]?.id ?? null;
   }
 
   private mapPaymentMethod(method: MetodoPago): PaymentMethodOption {

@@ -41,16 +41,28 @@
 
           <div class="form-group">
             <label class="label" for="contrasena">{{ 'Contrasena' | t }}</label>
-            <input
-              class="input"
-              id="contrasena"
-              name="contrasena"
-              type="password"
-              placeholder="Ingresa tu contrasena"
-              autocomplete="current-password"
-              required
-              [(ngModel)]="contrasena"
-            />
+            <div class="password-field">
+              <input
+                class="input"
+                id="contrasena"
+                name="contrasena"
+                [type]="mostrarContrasena ? 'text' : 'password'"
+                placeholder="Ingresa tu contrasena"
+                autocomplete="current-password"
+                required
+                [(ngModel)]="contrasena"
+              />
+              <button
+                class="password-toggle"
+                type="button"
+                (click)="mostrarContrasena = !mostrarContrasena"
+                [attr.aria-label]="mostrarContrasena ? 'Ocultar contrasena' : 'Mostrar contrasena'"
+                [attr.aria-pressed]="mostrarContrasena"
+                [title]="mostrarContrasena ? 'Ocultar contrasena' : 'Mostrar contrasena'"
+              >
+                <app-icon [name]="mostrarContrasena ? 'eyeOff' : 'eye'" [size]="18" />
+              </button>
+            </div>
           </div>
 
           @if (errorLogin) {

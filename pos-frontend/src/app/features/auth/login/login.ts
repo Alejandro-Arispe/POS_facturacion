@@ -8,10 +8,11 @@ import { OnboardingService } from '../../../core/services/onboarding.service';
 import { CompanyService } from '../../../core/services/company.service';
 import { CompanyPermissionsService } from '../../../core/services/company-permissions.service';
 import { OnboardingSteps } from '../../../shared/components/onboarding-steps/onboarding-steps';
+import { Icon } from '../../../shared/components/icon/icon';
 
 @Component({
   selector: 'app-login',
-  imports: [TranslatePipe, FormsModule, RouterLink, OnboardingSteps],
+  imports: [TranslatePipe, FormsModule, RouterLink, OnboardingSteps, Icon],
   templateUrl: './login.html',
   styleUrl: './login.css',
 })
@@ -19,6 +20,8 @@ export class Login {
   protected readonly idPlan: number | null;
   protected email = '';
   protected contrasena = '';
+  /** Permite ver la contrasena mientras se escribe (boton del ojo). */
+  protected mostrarContrasena = false;
   protected cargandoLogin = false;
   protected errorLogin = '';
   protected mostrarModalRecuperacion = false;

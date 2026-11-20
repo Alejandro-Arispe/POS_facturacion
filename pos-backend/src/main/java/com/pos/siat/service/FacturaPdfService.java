@@ -33,7 +33,9 @@ import com.pos.ventas.domain.Factura;
 public class FacturaPdfService {
 
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-    private static final Map<Integer, String> METODOS = Map.of(1, "EFECTIVO", 2, "TARJETA", 7, "TRANSFERENCIA / QR");
+    private static final Map<Integer, String> METODOS = Map.of(
+            1, "EFECTIVO", 2, "TARJETA", 3, "CHEQUE", 5, "OTROS", 7, "TRANSFERENCIA / QR",
+            11, "EFECTIVO - CHEQUE", 16, "TARJETA - CHEQUE");
     private static final Font TITULO = new Font(Font.HELVETICA, 14, Font.BOLD);
     private static final Font NEGRITA = new Font(Font.HELVETICA, 9, Font.BOLD);
     private static final Font NORMAL = new Font(Font.HELVETICA, 9);

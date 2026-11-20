@@ -35,3 +35,6 @@ data/
 
 ### Variables locales (claves de API)
 .env
+
+# Respaldos generados por la app: contienen datos de las empresas, nunca subirlos
+/respaldos/

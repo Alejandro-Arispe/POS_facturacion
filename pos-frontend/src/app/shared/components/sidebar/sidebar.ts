@@ -123,6 +123,7 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
       ventas: 'receipt',
       'cobro de creditos': 'banknote',
       movimientos: 'chart',
+      'copias de seguridad': 'download',
     };
     return icons[normalized] ?? 'clipboard';
   }
@@ -268,6 +269,10 @@ export class SidebarComponent implements OnChanges, OnInit, OnDestroy {
         link: ['/administrator/settings'],
         queryParams: { companyId: context.companyId },
         permission: 'company:update',
+      },
+      {
+        label: 'Copias de seguridad',
+        link: ['/company', context.companyId, 'settings', 'backup'],
       },
       {
         label: 'Bitácora',

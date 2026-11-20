@@ -18,6 +18,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class MetodoPago {
 
+    public static final String CHEQUE = "CHEQUE";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id_metodo_pago")
@@ -28,4 +30,8 @@ public class MetodoPago {
 
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
+
+    public boolean esCheque() {
+        return nombre != null && CHEQUE.equalsIgnoreCase(nombre.trim());
+    }
 }

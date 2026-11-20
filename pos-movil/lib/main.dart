@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -19,21 +22,43 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
 
-  // Registrar handler de background ANTES de runApp
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
-  // Inicializar canales Android y listeners foreground globales
-  await FcmGlobalService.instance.initialize();
+  // Firebase solo sirve para las notificaciones push: si falla o tarda, la app igual debe abrir.
+  final firebaseListo = await _inicializarFirebase();
 
   runApp(const MyApp());
 
-  // Pedir el permiso de notificaciones apenas se dibuja la primera pantalla
-  // (Android 13+ muestra el diálogo "Permitir notificaciones").
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    FcmGlobalService.instance.requestPermission();
-  });
+  // Los canales de notificacion se inicializan despues de mostrar la primera pantalla,
+  // asi el dialogo de Android no bloquea el arranque.
+  if (firebaseListo) {
+    unawaited(FcmGlobalService.instance.initialize().catchError((Object e) {
+      debugPrint('[FCM] No se pudo inicializar: $e');
+    }));
+
+    // Pedir el permiso de notificaciones apenas se dibuja la primera pantalla
+    // (Android 13+ muestra el diálogo "Permitir notificaciones").
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FcmGlobalService.instance.requestPermission();
+    });
+  }
+}
+
+Future<bool> _inicializarFirebase() async {
+  try {
+    if (Firebase.apps.isEmpty) {
+      // En Android la configuracion sale de android/app/google-services.json (el plugin de Gradle ya
+      // registra la app); pasar otras opciones provoca el error "duplicate-app" y la app no arranca.
+      final usarJson = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      await (usarJson
+              ? Firebase.initializeApp()
+              : Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform))
+          .timeout(const Duration(seconds: 10));
+    }
+    // Registrar handler de background ANTES de runApp
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    return true;
+  } catch (e) {
+    debugPrint('[Firebase] Inicializacion omitida: $e');
+    return false;
+  }
 }

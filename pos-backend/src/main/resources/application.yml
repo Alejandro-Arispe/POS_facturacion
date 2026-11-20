@@ -60,6 +60,12 @@ app:
   cors:
     origins: ${CORS_ORIGINS:http://localhost:4200,http://127.0.0.1:4200,https://pos-frontend-si2.duckdns.org}
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:4200}
+  # Pasarela QR de la Billetera (sin URL ni claves el POS usa el QR y la tarjeta simulados).
+  billetera:
+    api-url: ${BILLETERA_API_URL:}
+    api-key: ${BILLETERA_API_KEY:}
+    webhook-secret: ${BILLETERA_WEBHOOK_SECRET:}
+    acquirer-key: ${BILLETERA_ACQUIRER_KEY:}
   stripe:
     test-only: true
     secret-key: ${STRIPE_SECRET_KEY:}

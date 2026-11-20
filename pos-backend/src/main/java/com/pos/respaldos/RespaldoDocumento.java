@@ -8,13 +8,15 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * Foto JSON de una sola empresa. No incluye ventas: cuelgan de caja_sesion
- * (sucursal, caja, sesión, venta, detalle, factura y pagos).
- * Producto incluye costo porque la columna existe en la entidad.
+ * Foto JSON de una empresa o sucursal.
+ * Permite respaldar toda la empresa (idSucursal = null) o una sucursal específica.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RespaldoDocumento(
         Integer idEmpresa,
+        Integer idSucursal,
+        String nombreSucursal,
+        String alcance,
         LocalDateTime fecha,
         boolean incluyeVentas,
         String mensaje,
@@ -27,15 +29,35 @@ public record RespaldoDocumento(
         List<RolDatos> roles,
         List<RolPermisoDatos> rolPermisos,
         ConfiguracionDatos configuracionSistema,
-        List<HistorialDatos> historialSuscripcion) {
+        List<HistorialDatos> historialSuscripcion,
+        VentasHistorial ventasHistorial) {
 
-    public static final boolean INCLUYE_VENTAS = false;
+    /** Las ventas del periodo se incluyen como copia de consulta (no se restauran). */
+    public static final boolean INCLUYE_VENTAS = true;
 
-    public static final String MENSAJE_VENTAS = "Este respaldo no incluye ventas. "
-            + "Cuelgan de caja_sesion (sucursal, caja, sesión, venta y detalle), además de facturas y pagos. "
-            + "Restaurarlas obligaría a borrar ese historial. "
-            + "No se hace, para no borrar ventas ni datos de otras empresas. "
-            + "La copia sí reemplaza catálogo, sucursales, configuración, roles personalizados y suscripción de esta empresa.";
+    public static final String MENSAJE_VENTAS = "Las ventas del período (detalle, pagos, facturas y cierres de caja) "
+            + "se guardan como copia de consulta: puedes verlas en el JSON o en el Excel del respaldo. "
+            + "Al restaurar no se borra ni se modifica ninguna venta o factura, porque son historial y documentos fiscales. "
+            + "La restauración reemplaza catálogo, sucursales, configuración, roles personalizados y suscripción de esta empresa.";
+
+    /**
+     * Ventas del periodo [desde, hasta] (fechas de venta, ambos dias incluidos). Solo lectura:
+     * la restauracion ignora este bloque. Cada fila es un mapa columna -> valor para que el Excel
+     * y el JSON muestren nombres legibles (sucursal, producto, metodo de pago) sin depender de ids.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record VentasHistorial(
+            LocalDate desde,
+            LocalDate hasta,
+            int cantidadVentas,
+            BigDecimal totalVendido,
+            List<java.util.Map<String, Object>> ventas,
+            List<java.util.Map<String, Object>> detalles,
+            List<java.util.Map<String, Object>> pagos,
+            List<java.util.Map<String, Object>> facturas,
+            List<java.util.Map<String, Object>> sesionesCaja,
+            List<java.util.Map<String, Object>> cierresCaja) {
+    }
 
     public static final List<String> TABLAS = List.of(
             "empresa",

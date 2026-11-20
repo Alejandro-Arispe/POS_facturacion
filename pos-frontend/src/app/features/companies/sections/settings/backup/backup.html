@@ -5,16 +5,19 @@
     <app-sidebar context="company" [companyId]="companyId" />
 
     <section class="backup-content">
+      <!-- Encabezado informativo -->
       <header class="panel backup-header">
-        <p class="badge badge-success">Empresa {{ companyId }}</p>
-        <h1 class="title-xl">Copias de seguridad</h1>
+        <div class="flex items-center justify-between">
+          <p class="badge badge-success">Empresa {{ companyId }}</p>
+          <span class="badge" [ngClass]="config.plan_actual === 'pro' ? 'badge-primary' : 'badge-secondary'">
+            Plan: {{ (config.plan_actual || 'Gratuito') | uppercase }}
+          </span>
+        </div>
+        <h1 class="title-xl">Copias de seguridad y Backups</h1>
         <p class="text-muted">
-          Cada copia guarda solo esta empresa: datos de la empresa, sucursales, catálogo, roles personalizados,
-          configuración y suscripción. Las ventas no se incluyen. Restaurar no borra datos de otras empresas.
+          Gestiona las copias de seguridad de tu empresa. Puedes generar respaldos manuales a demanda, 
+          programar respaldos automáticos en el servidor o recibirlos en tu correo electrónico en la nube.
         </p>
-        <button class="btn btn-primary" type="button" [disabled]="creando || !companyId" (click)="crear()">
-          {{ creando ? 'Creando copia...' : 'Crear copia ahora' }}
-        </button>
       </header>
 
       @if (error) {
@@ -24,12 +27,207 @@
         <p class="panel backup-aviso">{{ aviso }}</p>
       }
 
+      <!-- Grid de Acciones: Respaldo Manual y Configuración Automática -->
+      <div class="backup-cards-grid">
+        <!-- Tarjeta 1: Respaldo Manual -->
+        <div class="panel backup-card">
+          <h2 class="title-md">1. Respaldo Manual</h2>
+          <p class="text-muted text-sm">
+            Genera un respaldo inmediato en formato JSON listo para ser descargado a tu computadora o unidad USB.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label" for="alcanceManualSelect">Alcance del respaldo:</label>
+            <select
+              id="alcanceManualSelect"
+              class="form-select"
+              [(ngModel)]="alcanceManual"
+            >
+              <option value="EMPRESA_COMPLETA">Toda la empresa (Todas las sucursales)</option>
+              <option value="SUCURSAL" [disabled]="sucursales.length === 0">
+                Solo una sucursal específica
+              </option>
+            </select>
+          </div>
+
+          @if (alcanceManual === 'SUCURSAL') {
+            <div class="form-group">
+              <label class="form-label" for="sucursalManualSelect">Seleccionar sucursal:</label>
+              <select
+                id="sucursalManualSelect"
+                class="form-select"
+                [(ngModel)]="sucursalManualId"
+              >
+                @for (s of sucursales; track (s.id || s.idSucursal || s.id_sucursal)) {
+                  <option [ngValue]="s.id || s.idSucursal || s.id_sucursal">
+                    {{ s.nombre }} ({{ s.ciudad || 'Sin ciudad' }})
+                  </option>
+                }
+              </select>
+            </div>
+          }
+
+          <div class="form-group">
+            <span class="form-label">Ventas a incluir (copia de consulta):</span>
+            <div class="backup-dates">
+              <label class="text-sm" for="ventasDesdeInput">Desde</label>
+              <input id="ventasDesdeInput" class="form-input" type="date" [(ngModel)]="ventasDesde" [max]="ventasHasta" />
+              <label class="text-sm" for="ventasHastaInput">Hasta</label>
+              <input id="ventasHastaInput" class="form-input" type="date" [(ngModel)]="ventasHasta" [min]="ventasDesde" />
+            </div>
+            <p class="text-muted text-sm">
+              Se guardan ventas, detalle, pagos, facturas y cierres de caja del período. Al restaurar no se borra ni
+              modifica ninguna venta.
+            </p>
+          </div>
+
+          <button
+            class="btn btn-primary"
+            type="button"
+            [disabled]="creando || !companyId"
+            (click)="crear()"
+          >
+            {{ creando ? 'Generando copia...' : 'Generar y Descargar Respaldo' }}
+          </button>
+        </div>
+
+        <!-- Tarjeta 2: Respaldo Automático y Cloud -->
+        <div class="panel backup-card">
+          <div class="flex items-center justify-between">
+            <h2 class="title-md">2. Respaldo Automático (SaaS)</h2>
+            @if (!config.permite_automatico) {
+              <span class="badge badge-warning">Requiere Plan Básico / Pro</span>
+            }
+          </div>
+          <p class="text-muted text-sm">
+            Programa respaldos automáticos en el servidor y envío directo a tu correo electrónico en la nube.
+          </p>
+
+          @if (cargandoConfig) {
+            <p class="text-muted">Cargando configuración...</p>
+          } @else {
+            <div class="form-group flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="activoAuto"
+                [(ngModel)]="config.activo"
+                [disabled]="!config.permite_automatico"
+              />
+              <label for="activoAuto" class="font-medium cursor-pointer">
+                Habilitar respaldos automáticos
+              </label>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label class="form-label" for="frecuenciaSelect">Frecuencia:</label>
+                <select
+                  id="frecuenciaSelect"
+                  class="form-select"
+                  [(ngModel)]="config.frecuencia"
+                  [disabled]="!config.activo || !config.permite_automatico"
+                >
+                  <option value="DIARIO">Diario</option>
+                  <option value="SEMANAL">Semanal (Domingos)</option>
+                  <option value="MENSUAL">Mensual (1ro de cada mes)</option>
+                </select>
+              </div>
+
+              <div class="form-group flex-1">
+                <label class="form-label" for="horaInput">Hora de ejecución:</label>
+                <input
+                  type="time"
+                  id="horaInput"
+                  class="form-input"
+                  [(ngModel)]="config.hora"
+                  [disabled]="!config.activo || !config.permite_automatico"
+                />
+              </div>
+            </div>
+
+            <!-- Opciones Nube / Email (Plan Pro) -->
+            <div class="cloud-section p-3 rounded-lg border border-slate-200 bg-slate-50 mt-2">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-semibold text-sm">Almacenamiento Cloud / Email</span>
+                @if (!config.permite_cloud_email) {
+                  <span class="badge badge-secondary text-xs">Exclusivo Plan PRO</span>
+                }
+              </div>
+              <div class="form-group flex items-center gap-2 mt-2">
+                <input
+                  type="checkbox"
+                  id="enviarEmailAuto"
+                  [(ngModel)]="config.enviar_email"
+                  [disabled]="!config.activo || !config.permite_cloud_email"
+                />
+                <label for="enviarEmailAuto" class="text-sm cursor-pointer">
+                  Enviar copia adjunta por correo al generarse
+                </label>
+              </div>
+              @if (config.enviar_email) {
+                <div class="form-group mt-2">
+                  <label class="form-label text-xs" for="emailDestinoInput">Correo de destino:</label>
+                  <input
+                    type="email"
+                    id="emailDestinoInput"
+                    class="form-input text-sm"
+                    placeholder="dueño@empresa.com"
+                    [(ngModel)]="config.email_destino"
+                    [disabled]="!config.activo || !config.permite_cloud_email"
+                  />
+                </div>
+              }
+            </div>
+
+            <button
+              class="btn btn-secondary mt-3"
+              type="button"
+              [disabled]="guardandoConfig || !config.permite_automatico"
+              (click)="guardarConfig()"
+            >
+              {{ guardandoConfig ? 'Guardando...' : 'Guardar Programación' }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Tarjeta 3: Restaurar desde archivo externo -->
+      <div class="panel backup-card">
+        <h2 class="title-md">3. Restaurar Copia desde Archivo Externo</h2>
+        <p class="text-muted text-sm">
+          ¿Tienes un respaldo guardado en tu computadora o pendrive? Sube el archivo JSON para restaurar 
+          los catálogos, sucursales y configuraciones de esta empresa.
+        </p>
+
+        <div class="upload-zone flex items-center gap-4 mt-2">
+          <input
+            type="file"
+            accept=".json"
+            (change)="onArchivoSeleccionado($event)"
+            class="form-file-input"
+          />
+          <button
+            class="btn btn-warning"
+            type="button"
+            [disabled]="!archivoSeleccionado || subiendoArchivo"
+            (click)="restaurarArchivoSubido()"
+          >
+            {{ subiendoArchivo ? 'Restaurando archivo...' : 'Restaurar desde archivo subido' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabla: Historial de Respaldos Almacenados -->
       <div class="panel backup-list">
-        <h2>Copias de esta empresa</h2>
+        <div class="flex items-center justify-between">
+          <h2 class="title-md">Historial de Respaldos en el Servidor</h2>
+          <span class="text-muted text-sm">{{ copias.length }} respaldos registrados</span>
+        </div>
+
         @if (cargando) {
           <p class="text-muted">Cargando copias...</p>
         } @else if (copias.length === 0) {
-          <p class="text-muted">Todavía no hay copias. Crea la primera con el botón de arriba.</p>
+          <p class="text-muted">Todavía no hay copias almacenadas en el servidor.</p>
         } @else {
           <div class="table-shell">
             <table class="table">
@@ -37,20 +235,39 @@
                 <tr>
                   <th>Archivo</th>
                   <th>Fecha</th>
+                  <th>Alcance</th>
+                  <th>Ventas</th>
+                  <th>Tamaño</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 @for (copia of copias; track copia.archivo) {
                   <tr>
-                    <td>{{ copia.archivo }}</td>
+                    <td class="font-mono text-sm">{{ copia.archivo }}</td>
                     <td>{{ fechaLegible(copia.fecha) }}</td>
+                    <td>
+                      @if (copia.alcance === 'SUCURSAL') {
+                        <span class="badge badge-info">
+                          Sucursal: {{ copia.nombre_sucursal || copia.id_sucursal || 'Específica' }}
+                        </span>
+                      } @else {
+                        <span class="badge badge-neutral">Toda la empresa</span>
+                      }
+                    </td>
+                    <td class="text-sm">{{ periodoVentas(copia) }}</td>
+                    <td>{{ formatearTamano(copia.tamano_bytes) }}</td>
                     <td class="backup-actions">
-                      <button class="btn btn-secondary" type="button" (click)="descargar(copia.archivo)">
-                        Descargar
+                      <button class="btn btn-secondary btn-sm" type="button" (click)="descargar(copia.archivo)"
+                        title="Archivo JSON: es el que se usa para restaurar">
+                        JSON
+                      </button>
+                      <button class="btn btn-secondary btn-sm" type="button" (click)="descargarExcel(copia.archivo)"
+                        title="Excel con una hoja por tema (ventas, productos, sucursales...). Solo para consulta">
+                        Excel
                       </button>
                       <button
-                        class="btn btn-danger"
+                        class="btn btn-danger btn-sm"
                         type="button"
                         [disabled]="restaurando === copia.archivo"
                         (click)="restaurar(copia.archivo)"

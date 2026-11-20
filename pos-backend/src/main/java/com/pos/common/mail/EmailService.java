@@ -163,6 +163,49 @@ public class EmailService {
                 """.formatted(safeName, safeEmail, login));
     }
 
+    public boolean sendBackupEmail(String to, String nombreEmpresa, String nombreArchivo, byte[] archivoBytes) {
+        if (!isEnabled()) {
+            System.out.println("[MAIL] Envío desactivado (app.mail.enabled=false o SMTP sin configurar); backup omitido a " + to);
+            return false;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(to);
+            helper.setSubject("[POS Respaldo Cloud] Copia de seguridad automática - " + nombreEmpresa);
+            if (mailFrom != null && !mailFrom.isBlank()) {
+                helper.setFrom(mailFrom);
+            }
+            String html = """
+                <html>
+                  <body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px; color: #1e293b;">
+                    <div style="background-color: #ffffff; padding: 24px; border-radius: 8px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0;">
+                      <h2 style="color: #0f172a; margin-top: 0;">Copia de Seguridad Cloud (Plan Pro)</h2>
+                      <p>Se ha generado exitosamente el respaldo automático para tu empresa <strong>%s</strong>.</p>
+                      <p>Adjunto a este correo encontrarás el archivo JSON con toda la información de respaldo.</p>
+                      <div style="background-color: #f1f5f9; padding: 12px 16px; border-radius: 6px; font-family: monospace; font-size: 13px; margin: 16px 0;">
+                        Archivo: %s
+                      </div>
+                      <p style="font-size: 13px; color: #64748b;">
+                        Guarda este archivo en un lugar seguro o almacénalo en tu servicio de almacenamiento en la nube preferido (Google Drive, Dropbox, etc.).
+                      </p>
+                    </div>
+                  </body>
+                </html>
+                """.formatted(
+                    org.springframework.web.util.HtmlUtils.htmlEscape(nombreEmpresa),
+                    org.springframework.web.util.HtmlUtils.htmlEscape(nombreArchivo)
+                );
+            helper.setText(html, true);
+            helper.addAttachment(nombreArchivo, new org.springframework.core.io.ByteArrayResource(archivoBytes), "application/json");
+            mailSender.send(message);
+            return true;
+        } catch (Exception ex) {
+            System.out.println("Error enviando email de respaldo: " + ex.getMessage());
+            return false;
+        }
+    }
+
     private boolean send(String to, String subject, String html) {
         if (!isEnabled()) {
             System.out.println("[MAIL] Envío desactivado (app.mail.enabled=false o SMTP sin configurar); omitido: " + subject);

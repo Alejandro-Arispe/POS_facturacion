@@ -96,6 +96,171 @@ class PosOperationsRbacTests {
         assertThat(count(Venta.class)).isEqualTo(sales+1);assertThat(count(MovimientoInventario.class)).isEqualTo(movements+1);assertThat(count(MovimientoCaja.class)).isEqualTo(money+1);assertThat(stockAmount()).isEqualTo(98);
         getJson(saleUrl(),staff).andExpect(status().isOk()).andExpect(jsonPath("$[0].total").value(40));
     }
+
+    @Test void collectedChequeIsRecordedInHistoryInvoiceAndSeparateCashClosing() throws Exception {
+        permit("sale:create", "sale:read", "invoice:issue", "cash_movement:create", "cash_movement:read",
+                "cash_register:close");
+        int cheque = paymentMethodId("CHEQUE");
+        tx.executeWithoutResult(t -> em.find(Empresa.class, company.getIdEmpresa())
+                .setNit("10000000" + company.getIdEmpresa()));
+
+        getJson("/api/ventas/metodos-pago", staff).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.nombre == 'CHEQUE')]").isEmpty());
+        getJson("/api/ventas/metodos-pago?incluir_cheque=true", staff).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.nombre == 'CHEQUE')].id_metodo_pago").value(cheque));
+
+        postJson(movementUrl(), staff, cashMovement(cashIncome, 10)).andExpect(status().isOk());
+        var body = sale();
+        body.put("factura_linea", true);
+        body.put("pagos", List.of(chequePayment(cheque, 40, true)));
+        var response = postJson(saleUrl(), staff, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("PAGADA"))
+                .andExpect(jsonPath("$.pagos[0].monto").value(40))
+                .andExpect(jsonPath("$.pagos[0].cheque.numero").value("000123"))
+                .andReturn().getResponse();
+        int invoiceId = json.readTree(response.getContentAsString()).path("id_factura").asInt();
+        Factura invoice = em.find(Factura.class, invoiceId);
+        assertThat(invoice.getCodigoMetodoPago()).isEqualTo(3);
+        assertThat(invoice.getXmlGenerado()).contains("<codigoMetodoPago>3</codigoMetodoPago>");
+        var pdf = new com.lowagie.text.pdf.PdfReader(Base64.getDecoder().decode(invoice.getPdfGenerado()));
+        try {
+            assertThat(new com.lowagie.text.pdf.parser.PdfTextExtractor(pdf).getTextFromPage(1)).contains("CHEQUE");
+        } finally {
+            pdf.close();
+        }
+        getJson(saleUrl(), staff).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].pagos[0].cheque.banco").value("Banco de prueba"))
+                .andExpect(jsonPath("$[0].pagos[0].cheque.fecha_emision").value("2026-11-18"));
+        getJson(movementUrl() + "/resumen", staff).andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumen_por_metodo_pago[?(@.metodo_pago == 'EFECTIVO')].monto_esperado").value(10.0))
+                .andExpect(jsonPath("$.resumen_por_metodo_pago[?(@.metodo_pago == 'CHEQUE')].monto_esperado").value(40.0));
+        var chequeClosing = Map.of("id_metodo_pago", cheque, "monto_esperado", 40, "monto_real", 40, "diferencia", 0);
+        postJson(closeUrl(), staff, List.of(closing(10, 10, 0), chequeClosing)).andExpect(status().isOk());
+    }
+
+    @Test void uncollectedChequeCannotBeRecordedInASaleOrAsAManualMovement() throws Exception {
+        permit("sale:create", "cash_movement:create");
+        int cheque = paymentMethodId("CHEQUE");
+        var body = sale();
+        long sales = count(Venta.class);
+        long cashMovements = count(MovimientoCaja.class);
+        for (var payments : List.of(
+                List.of(chequePayment(cheque, 20, false), Map.of("id_metodo_pago", payment, "monto", 20)),
+                List.of(chequePayment(cheque, 40, false)),
+                List.of(Map.of("id_metodo_pago", cheque, "monto", 40)),
+                List.of(chequePayment(cheque, 20, true)),
+                List.of(chequePayment(payment, 40, true)))) {
+            body.put("pagos", payments);
+            postJson(saleUrl(), staff, body).andExpect(status().isBadRequest());
+        }
+        var movement = Map.of("id_tipo_movimiento_caja", cashIncome, "id_metodo_pago", cheque,
+                "monto", 40, "concepto", "Cheque sin venta");
+        postJson(movementUrl(), staff, movement).andExpect(status().isBadRequest());
+        assertThat(count(Venta.class)).isEqualTo(sales);
+        assertThat(count(MovimientoCaja.class)).isEqualTo(cashMovements);
+        assertThat(stockAmount()).isEqualTo(100);
+    }
+
+    @Test void mixedChequeSalesInvoiceTheCombinationAndKeepSeparateCashMovements() throws Exception {
+        permit("sale:create", "invoice:issue", "cash_movement:read");
+        int cheque = paymentMethodId("CHEQUE");
+        tx.executeWithoutResult(t -> em.find(Empresa.class, company.getIdEmpresa())
+                .setNit("10000000" + company.getIdEmpresa()));
+        var invoiceCodes = Map.of("EFECTIVO", 11, "TARJETA", 16, "TRANSFERENCIA", 5);
+        for (var combination : invoiceCodes.entrySet()) {
+            var body = sale();
+            body.put("factura_linea", true);
+            body.put("pagos", List.of(Map.of("id_metodo_pago", paymentMethodId(combination.getKey()), "monto", 30),
+                    chequePayment(cheque, 10, true)));
+            var response = postJson(saleUrl(), staff, body).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pagos.length()").value(2))
+                    .andExpect(jsonPath("$.pagos[?(@.cheque.numero == '000123')].monto").value(10))
+                    .andReturn().getResponse();
+            int invoiceId = json.readTree(response.getContentAsString()).path("id_factura").asInt();
+            Factura invoice = em.find(Factura.class, invoiceId);
+            assertThat(invoice.getCodigoMetodoPago()).isEqualTo(combination.getValue());
+            assertThat(invoice.getXmlGenerado()).contains("<codigoMetodoPago>" + combination.getValue() + "</codigoMetodoPago>");
+        }
+        getJson(movementUrl() + "/resumen", staff).andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumen_por_metodo_pago[?(@.metodo_pago == 'CHEQUE')].monto_esperado").value(30.0))
+                .andExpect(jsonPath("$.resumen_por_metodo_pago[?(@.metodo_pago == 'EFECTIVO')].monto_esperado").value(30.0));
+    }
+
+    @Test void creditChequeRequiresCollectionAndSupportsPartialAndMixedPayments() throws Exception {
+        permit("sale:create", "sale:collect", "cash_movement:read");
+        var sale = sale();
+        int credit = em.createQuery("select t.idTipoVenta from TipoVenta t where upper(t.nombre)='CREDITO'", Integer.class)
+                .getSingleResult();
+        sale.put("id_tipo_venta", credit);
+        sale.put("id_cliente", client.getIdCliente());
+        sale.remove("pagos");
+        var response = postJson(saleUrl(), staff, sale).andExpect(status().isOk()).andReturn().getResponse();
+        int saleId = json.readTree(response.getContentAsString()).path("id_venta").asInt();
+        int account = em.createQuery("select c.idCxc from CuentaPorCobrar c where c.venta.idVenta=:id", Integer.class)
+                .setParameter("id", saleId).getSingleResult();
+        int cheque = paymentMethodId("CHEQUE");
+        String collection = "/api/ventas/sesiones/" + session.getIdCajaSesion() + "/pagos-credito";
+        var cash = Map.of("id_metodo_pago", payment, "monto_pagado", 15);
+        var uncollected = Map.of("id_metodo_pago", cheque, "monto_pagado", 10,
+                "cheque", chequeInfo("000001", false));
+        long movements = count(MovimientoCaja.class);
+        postJson(collection, staff, Map.of("id_cxc", account, "pagos_credito", List.of(cash, uncollected)))
+                .andExpect(status().isBadRequest());
+        var overpayment = Map.of("id_metodo_pago", cheque, "monto_pagado", 30,
+                "cheque", chequeInfo("000001", true));
+        postJson(collection, staff, Map.of("id_cxc", account, "pagos_credito", List.of(cash, overpayment)))
+                .andExpect(status().isBadRequest());
+        assertThat(em.find(CuentaPorCobrar.class, account).getSaldoPendiente()).isEqualByComparingTo("40");
+        assertThat(count(MovimientoCaja.class)).isEqualTo(movements);
+
+        var first = Map.of("id_metodo_pago", cheque, "monto_pagado", 10, "cheque", chequeInfo("000001", true));
+        postJson(collection, staff, Map.of("id_cxc", account, "pagos_credito", List.of(first)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.saldo_pendiente").value(30));
+        var second = Map.of("id_metodo_pago", cheque, "monto_pagado", 15, "cheque", chequeInfo("000002", true));
+        postJson(collection, staff, Map.of("id_cxc", account, "pagos_credito", List.of(cash, second)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.saldo_pendiente").value(0))
+                .andExpect(jsonPath("$.pagos_credito[1].cheque.numero").value("000002"));
+        assertThat(em.find(CuentaPorCobrar.class, account).getEstado()).isEqualTo("PAGADA");
+        String history = "/api/empresas/" + company.getIdEmpresa() + "/clientes/" + client.getIdCliente() + "/pagos-credito";
+        getJson(history, customer).andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.cheque.numero == '000001')].monto_pagado").value(10.0));
+        getJson(movementUrl() + "/resumen", staff).andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumen_por_metodo_pago[?(@.metodo_pago == 'CHEQUE')].monto_esperado").value(25.0))
+                .andExpect(jsonPath("$.resumen_por_metodo_pago[?(@.metodo_pago == 'EFECTIVO')].monto_esperado").value(15.0));
+    }
+
+    @Test void existingPaymentMethodsStillSupportSingleAndMixedSales() throws Exception {
+        permit("sale:create");
+        var payments = new ArrayList<Map<String, Integer>>();
+        for (String method : List.of("EFECTIVO", "QR", "TARJETA", "TRANSFERENCIA")) {
+            int id = paymentMethodId(method);
+            var body = sale();
+            body.put("pagos", List.of(Map.of("id_metodo_pago", id, "monto", 40)));
+            postJson(saleUrl(), staff, body).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.pagos[0].metodo_pago.nombre").value(method))
+                    .andExpect(jsonPath("$.pagos[0].cheque").doesNotExist());
+            payments.add(Map.of("id_metodo_pago", id, "monto", 10));
+        }
+        var body = sale();
+        body.put("pagos", payments);
+        postJson(saleUrl(), staff, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagos.length()").value(4))
+                .andExpect(jsonPath("$.total").value(40));
+    }
+
+    private int paymentMethodId(String name) {
+        return em.createQuery("select m.idMetodoPago from MetodoPago m where m.nombre = :name", Integer.class)
+                .setParameter("name", name).getSingleResult();
+    }
+
+    private Map<String, Object> chequePayment(int method, int amount, boolean collected) {
+        return Map.of("id_metodo_pago", method, "monto", amount, "cheque", chequeInfo("000123", collected));
+    }
+
+    private Map<String, Object> chequeInfo(String number, boolean collected) {
+        return Map.of("banco", " Banco de prueba ", "numero", number, "fecha_emision", "2026-11-18", "cobrado", collected);
+    }
+
     @Test void forgedTotalsAndPaymentsNeverPersistPartialSale() throws Exception {
         permit("sale:create");long sales=count(Venta.class),money=count(MovimientoCaja.class);
         for(String key:List.of("subtotal","total")){var body=sale();body.put(key,1);postJson(saleUrl(),staff,body).andExpect(status().isBadRequest());}

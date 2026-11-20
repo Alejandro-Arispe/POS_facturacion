@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
-import { of } from 'rxjs';
+import { NEVER, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sales } from './sales';
 import { CompanyPermissionsService } from '../../../../../../core/services/company-permissions.service';
@@ -14,7 +14,7 @@ import { OrderService } from '../../../../../../core/services/order.service';
 describe('POS con permisos por acción', () => {
   beforeEach(() => { TestBed.resetTestingModule(); localStorage.clear(); });
   function setup(codes: string[]) {
-    const cash={crearMovimientoCajaSesion:vi.fn(), getVentasSesionCaja:vi.fn(() => of([]))};
+    const cash={crearMovimientoCajaSesion:vi.fn(), getVentasSesionCaja:vi.fn(() => of([])), registrarVentaSesionCaja:vi.fn(() => NEVER)};
     TestBed.configureTestingModule({providers:[
       {provide:ActivatedRoute,useValue:{snapshot:{paramMap:convertToParamMap({id:'1',branchId:'2',cashRegisterId:'3'}),queryParamMap:convertToParamMap({sessionId:'4'})}}},
       {provide:Router,useValue:{navigate:vi.fn()}},
@@ -58,6 +58,43 @@ describe('POS con permisos por acción', () => {
     expect(view.total).toBe(36);expect(view.buildSaleDetailPayload()[0].precio_unitario).toBe(18);
     grant(['sale:create']);expect(view.total).toBe(40);expect(view.buildSaleDetailPayload()[0].precio_unitario).toBe(20);
     view.updateItemPrice(item,1);expect(view.total).toBe(40);
+  });
+
+  it('registra un cheque cobrado junto al efectivo y conserva los métodos de movimientos de caja', () => {
+    const { view, cash } = setup(['sale:create']);
+    const chequeMethod = { id: 3, nombre: 'CHEQUE', descripcion: '' };
+    view.paymentMethods = [
+      chequeMethod,
+      { id: 1, nombre: 'EFECTIVO', descripcion: '' },
+      { id: 2, nombre: 'TRANSFERENCIA', descripcion: '' },
+    ];
+    view.selectedSaleTypeId = 1;
+    view.saleDetails = [{ idProducto: 1, precio: 20, cantidad: 2, descuento: 0, descuentoTipo: 'fixed' }];
+    const row = view.createPaymentRow();
+    view.salePaymentRows = [row];
+    expect(row.metodoPagoId).toBe(1);
+    expect(view.movementPaymentMethods.map((method: { id: number }) => method.id)).toEqual([1, 2]);
+
+    view.updatePaymentAmount(row, 15);
+    view.addPaymentRow();
+    const chequeRow = view.salePaymentRows[1];
+    expect(view.isPaymentMethodDisabled(chequeRow, chequeMethod)).toBe(false);
+    view.changePaymentMethod(chequeRow, chequeMethod.id);
+    expect(chequeRow.monto).toBe(25);
+    Object.assign(chequeRow.cheque, { banco: 'Banco de prueba', numero: '000123', fecha_emision: '2026-11-18' });
+    chequeRow.cheque.cobrado = true;
+    view.updatePaymentAmount(chequeRow, 25);
+    view.registrarPago();
+    expect(cash.registrarVentaSesionCaja).not.toHaveBeenCalled();
+
+    chequeRow.cheque.cobrado = true;
+    view.registrarPago();
+    expect(cash.registrarVentaSesionCaja).toHaveBeenCalledWith('4', expect.objectContaining({
+      pagos: [{ id_metodo_pago: 1, monto: 15 }, { id_metodo_pago: 3, monto: 25, cheque: chequeRow.cheque }],
+    }));
+
+    view.changePaymentMethod(chequeRow, 2);
+    expect(chequeRow.cheque).toBeUndefined();
   });
 
 });

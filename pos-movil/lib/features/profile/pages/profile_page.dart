@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../../../app/router.dart';
@@ -105,7 +106,7 @@ class _ProfilePageState extends State<ProfilePage> {
         // Get real Firebase Cloud Messaging token
         String? fcmToken;
         try {
-          fcmToken = await FirebaseMessaging.instance.getToken();
+          if (Firebase.apps.isNotEmpty) fcmToken = await FirebaseMessaging.instance.getToken();
           debugPrint('[FCM] Token obtenido: $fcmToken');
         } catch (e) {
           debugPrint('[FCM] Error al obtener token FCM: $e');
@@ -167,6 +168,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _initFirebaseMessaging() async {
+    // Sin Firebase (configuracion ausente o invalida) la app funciona igual, solo sin notificaciones push.
+    if (Firebase.apps.isEmpty) return;
+
     // 1. Permiso (Android 13+, iOS). Normalmente ya se pidió al abrir la app;
     // si ya fue respondido el sistema no vuelve a mostrar el diálogo.
     // Aunque lo niegue, el token se registra igual: si luego lo activa desde
