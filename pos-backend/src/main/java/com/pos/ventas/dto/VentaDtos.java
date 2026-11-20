@@ -1,11 +1,13 @@
 package com.pos.ventas.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -48,7 +50,12 @@ public final class VentaDtos {
         private BigDecimal monto;
         /** Id del cobro QR en la Billetera (solo metodo QR, cuando la pasarela esta configurada). */
         private String referenciaBilletera;
+        private ChequeCreate cheque;
     }
+
+    public record ChequeCreate(String banco, String numero, LocalDate fechaEmision, Boolean cobrado) {}
+
+    public record ChequeDetalle(String banco, String numero, LocalDate fechaEmision) {}
 
     @Getter
     @Setter
@@ -147,6 +154,8 @@ public final class VentaDtos {
         private BigDecimal monto;
         private LocalDateTime fecha;
         private CatalogoItem metodoPago;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private ChequeDetalle cheque;
     }
 
     @Getter
@@ -182,6 +191,7 @@ public final class VentaDtos {
     public static class PagoCreditoItem {
         private Integer idMetodoPago;
         private BigDecimal montoPagado;
+        private ChequeCreate cheque;
     }
 
     @Getter
@@ -229,6 +239,8 @@ public final class VentaDtos {
         private BigDecimal montoPagado;
         private LocalDateTime fechaPago;
         private CatalogoItem metodoPago;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private ChequeDetalle cheque;
     }
 
     @Getter
@@ -270,6 +282,8 @@ public final class VentaDtos {
         private BigDecimal montoPagado;
         private LocalDateTime fechaPago;
         private CatalogoItem metodoPago;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private ChequeDetalle cheque;
     }
 
     @Getter

@@ -24,6 +24,8 @@ import {
   CashRegisterClosingSummaryResponse,
   SaleHistoryResponse,
   SaleHistoryDetailItem,
+  ChequePaymentDetails,
+  ChequePaymentRequest,
   CashRegisterService,
 } from '../../../../../../core/services/cash-register.service';
 import {
@@ -41,6 +43,12 @@ import { SecureSrc } from '../../../../../../shared/directives/secure-src';
 import { InvoicePrintService } from '../../../../../../core/services/invoice-print.service';
 import { TIPOS_DOCUMENTO_SIN } from '../../../../../../core/services/siat.service';
 import { Sidebar } from '../../../../../../shared/components/sidebar/sidebar';
+import {
+  ChequePaymentFields,
+  chequePaymentError,
+  emptyChequePayment,
+  isChequePaymentMethod,
+} from '../../../../../../shared/components/cheque-payment-fields/cheque-payment-fields';
 
 type SessionViewMode = 'sales' | 'movements';
 type SalesTab = 'register' | 'payment' | 'history';
@@ -123,6 +131,7 @@ interface SalePaymentRow {
   cobroId?: string;
   /** Pago con tarjeta simulado (HU-13): los datos nunca salen del navegador ni se guardan. */
   tarjeta?: CardForm;
+  cheque?: ChequePaymentRequest;
 }
 
 interface CardForm {
@@ -196,6 +205,7 @@ interface SaleHistoryRow {
   estadoFactura: string | null;
   metodosPago: string;
   metodosPagoIds: string;
+  cheque?: ChequePaymentDetails;
   articulos: number;
   subtotal: number;
   descuentoTotal: number;
@@ -210,7 +220,7 @@ type ProductStockRecord = StockSucursalProducto & {
 
 @Component({
   selector: 'app-sales',
-  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar, SecureSrc],
+  imports: [MoneyPipe, CurrencySymbolPipe, CommonModule, FormsModule, Navbar, Sidebar, SecureSrc, ChequePaymentFields],
   templateUrl: './sales.html',
   styleUrl: './sales.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -331,7 +341,9 @@ export class Sales implements OnInit {
         const efectivo = res.resumen_por_metodo_pago?.find(
           (m) => m.metodo_pago?.toUpperCase() === 'EFECTIVO',
         );
-        this.efectivoEsperadoCaja = efectivo?.monto_esperado ?? res.monto_esperado_total ?? 0;
+        const cheque = res.resumen_por_metodo_pago?.find((m) => m.metodo_pago?.toUpperCase() === 'CHEQUE');
+        this.efectivoEsperadoCaja = efectivo?.monto_esperado
+          ?? ((res.monto_esperado_total ?? 0) - (cheque?.monto_esperado ?? 0));
         this.cdr.markForCheck();
       },
       error: () => {},
@@ -353,7 +365,7 @@ export class Sales implements OnInit {
     }
 
     const efectivoMetodo = this.paymentMethods.find((m) => m.nombre.toUpperCase() === 'EFECTIVO');
-    this.quickMovementMetodoPagoId = efectivoMetodo ? efectivoMetodo.id : (this.paymentMethods[0]?.id ?? null);
+    this.quickMovementMetodoPagoId = efectivoMetodo?.id ?? this.movementPaymentMethods[0]?.id ?? null;
 
     this.isQuickMovementModalOpen = true;
     this.cdr.markForCheck();
@@ -392,7 +404,7 @@ export class Sales implements OnInit {
     let idMetodo = this.quickMovementMetodoPagoId;
     if (!idMetodo) {
       const efectivo = this.paymentMethods.find((m) => m.nombre.toUpperCase() === 'EFECTIVO');
-      idMetodo = efectivo ? efectivo.id : (this.paymentMethods[0]?.id ?? 1);
+      idMetodo = efectivo?.id ?? this.movementPaymentMethods[0]?.id ?? 1;
     }
 
     this.savingQuickMovement = true;
@@ -1044,12 +1056,21 @@ export class Sales implements OnInit {
   }
 
   protected get canAddPaymentRow(): boolean {
-    return this.salePaymentRows.length < this.maxPaymentRows && this.salePaymentRows.length < this.paymentMethods.length;
+    return this.salePaymentRows.length < this.maxPaymentRows
+      && this.salePaymentRows.length < this.paymentMethods.length;
   }
 
   protected isPaymentMethodDisabled(paymentRow: SalePaymentRow, method: PaymentMethodOption): boolean {
     if (this.isSaldoAFavorMethod(method) && this.selectedClientSaldoAFavor <= 0) return true;
     return this.salePaymentRows.some((row) => row.id !== paymentRow.id && row.metodoPagoId === method.id);
+  }
+
+  protected get movementPaymentMethods(): PaymentMethodOption[] {
+    return this.paymentMethods.filter((method) => !isChequePaymentMethod(method.nombre));
+  }
+
+  protected isChequeRow(row: SalePaymentRow): boolean {
+    return this.paymentMethods.some((method) => method.id === row.metodoPagoId && isChequePaymentMethod(method.nombre));
   }
 
   protected isSaldoAFavorMethod(method: PaymentMethodOption): boolean {
@@ -1062,6 +1083,7 @@ export class Sales implements OnInit {
 
   protected updatePaymentAmount(row: SalePaymentRow, value: number | string | null): void {
     row.monto = this.normalizeMoney(value);
+    if (row.cheque) row.cheque = { ...row.cheque, cobrado: false };
     // Con la billetera, el QR se emite por un monto fijo: si cambia, se cancela y se genera otro.
     if (this.billeteraConfig.qr_habilitado && row.cobroId && !row.qrConfirmado) this.discardQr(row);
     row.qrConfirmado = false;
@@ -1172,6 +1194,11 @@ export class Sales implements OnInit {
     row.metodoPagoId = methodId;
     row.qrConfirmado = false;
     row.tarjeta = this.isCardRow(row) ? this.emptyCard() : undefined;
+    row.cheque = undefined;
+    if (this.isChequeRow(row)) {
+      row.cheque = emptyChequePayment();
+      if (this.salePaymentRows.length === 1) row.monto = this.total;
+    }
     if (this.isQrRow(row)) void this.generateQr(row);
   }
 
@@ -1427,11 +1454,18 @@ export class Sales implements OnInit {
       return;
     }
 
+    const chequeRow = this.salePaymentRows.find((row) => this.isChequeRow(row));
+    if (chequeRow) {
+      this.registerError = chequePaymentError(chequeRow.cheque);
+      if (this.registerError) return;
+    }
+
     const paymentRows = this.salePaymentRows
       .map((row) => ({
         id_metodo_pago: row.metodoPagoId ?? null,
         monto: this.normalizeMoney(row.monto),
         referencia_billetera: this.isQrRow(row) ? row.cobroId : undefined,
+        cheque: row.cheque,
       }))
       .filter((row) => row.id_metodo_pago !== null || row.monto > 0);
 
@@ -1482,6 +1516,7 @@ export class Sales implements OnInit {
         id_metodo_pago: Number(row.id_metodo_pago),
         monto: row.monto,
         ...(row.referencia_billetera ? { referencia_billetera: row.referencia_billetera } : {}),
+        ...(row.cheque ? { cheque: row.cheque } : {}),
       })),
       detalles: this.buildSaleDetailPayload(),
       id_pedido: this.loadedOrderId,
@@ -1593,7 +1628,7 @@ export class Sales implements OnInit {
         .filter((id): id is number => id !== null),
     );
 
-    return this.paymentMethods.find((method) => !usedMethodIds.has(method.id))?.id ?? null;
+    return this.movementPaymentMethods.find((method) => !usedMethodIds.has(method.id))?.id ?? null;
   }
 
   private getRemainingPaymentAmount(): number {
@@ -1892,10 +1927,10 @@ export class Sales implements OnInit {
   private loadPaymentMethods(): void {
     this.loadingPaymentMethods = true;
 
-    this.productService.getMetodosPago().subscribe({
+    this.productService.getMetodosPago(true).subscribe({
       next: (methods) => {
         this.paymentMethods = methods.map((method) => this.mapPaymentMethod(method));
-        this.selectedPaymentMethodId = this.paymentMethods[0]?.id ?? null;
+        this.selectedPaymentMethodId = this.movementPaymentMethods[0]?.id ?? null;
         if (this.salePaymentRows.length > 0) {
           this.salePaymentRows = this.salePaymentRows.map((row) => ({
             ...row,
@@ -2186,6 +2221,7 @@ export class Sales implements OnInit {
       estadoFactura: sale.estado_siat ?? null,
       metodosPago: paymentLabels,
       metodosPagoIds: paymentMethodIds,
+      cheque: salePayments.find((payment) => payment.cheque)?.cheque,
       articulos: saleDetails.reduce((total, detail) => total + Number(detail.cantidad ?? 0), 0),
       subtotal: Number(sale.subtotal ?? 0),
       descuentoTotal: Number(sale.descuento_total ?? 0),

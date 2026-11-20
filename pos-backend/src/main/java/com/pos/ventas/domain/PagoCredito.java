@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -41,4 +42,7 @@ public class PagoCredito {
 
     @Column(name = "fecha_pago", nullable = false)
     private LocalDateTime fechaPago;
+
+    @Embedded
+    private DatosCheque cheque;
 }

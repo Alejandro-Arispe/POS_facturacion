@@ -202,7 +202,10 @@
                     {{ selectedReceivable.saldo_pendiente | money }}
                   </p>
                 </div>
-
+                <button class="btn btn-secondary" type="button"
+                  [disabled]="savingPayment || !canAddPaymentRow" (click)="addPaymentRow()">
+                  Agregar forma de pago
+                </button>
               </div>
 
               <div class="payment-rows" aria-label="Formas de pago">
@@ -216,12 +219,14 @@
                         class="select"
                         [id]="'creditPaymentMethod-' + paymentRow.id"
                         [name]="'creditPaymentMethod-' + paymentRow.id"
-                        [(ngModel)]="paymentRow.paymentMethodId"
-                        [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
+                        [ngModel]="paymentRow.paymentMethodId"
+                        (ngModelChange)="changePaymentMethod(paymentRow, $event)"
+                        [disabled]="savingPayment || loadingPaymentMethods || paymentMethods.length === 0"
                       >
                         @for (paymentMethod of paymentMethods; track paymentMethod.id) {
                           <option
                             [ngValue]="paymentMethod.id"
+                            [disabled]="isPaymentMethodDisabled(paymentRow, paymentMethod.id)"
                           >
                             {{ paymentMethod.name }}
                           </option>
@@ -243,9 +248,20 @@
                         placeholder="0.00"
                         [ngModel]="paymentRow.amount"
                         (ngModelChange)="updatePaymentAmount(paymentRow, $event)"
+                        [disabled]="savingPayment"
                       />
                     </div>
 
+                    @if (paymentRows.length > 1) {
+                      <button class="btn btn-secondary" type="button" [disabled]="savingPayment"
+                        [attr.aria-label]="'Quitar forma de pago ' + ($index + 1)"
+                        (click)="removePaymentRow(paymentRow)">
+                        Quitar
+                      </button>
+                    }
+                    @if (paymentRow.cheque; as cheque) {
+                      <app-cheque-payment-fields [payment]="cheque" />
+                    }
                   </div>
                 }
               </div>
