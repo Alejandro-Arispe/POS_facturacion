@@ -44,6 +44,7 @@ import {
   LucideChevronLeft,
   LucideEllipsis,
   LucideEye,
+  LucideEyeOff,
   LucidePencil,
   LucideTrash2,
 } from '@lucide/angular';
@@ -92,6 +93,7 @@ const icons = {
   left: LucideChevronLeft,
   more: LucideEllipsis,
   eye: LucideEye,
+  eyeOff: LucideEyeOff,
   edit: LucidePencil,
   trash: LucideTrash2,
 } as const;
