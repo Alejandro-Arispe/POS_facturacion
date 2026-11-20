@@ -282,6 +282,7 @@ public class RespaldoService {
             cfg.setSucursal(null);
         }
         validarConfiguracion(cfg);
+        cfg.setProgramadoDesde(LocalDateTime.now(RespaldoScheduler.ZONA).withNano(0));
 
         configuracionRespaldoRepository.save(cfg);
         return toConfiguracionDTO(cfg, planCodigo, permiteAutomatico, permiteCloudEmail);
@@ -477,7 +478,7 @@ public class RespaldoService {
         ids(historial, HistorialDatos::idHistorialSuscripcion, "historial_suscripcion");
         validar(idEmpresa, documento.empresa(), sucursales, categorias, subcategorias, productos, roles, permisos,
                 documento.configuracionSistema(), historial, idsCategorias, idsSubcategorias, idsRoles, idsSucursales,
-                idsProductos);
+                idsProductos, documento.idSucursal() == null);
         entityManager.clear();
 
         actualizarEmpresa(idEmpresa, documento.empresa());
@@ -541,7 +542,8 @@ public class RespaldoService {
             Set<Integer> idsSubcategorias,
             Set<Integer> idsRoles,
             Set<Integer> idsSucursales,
-            Set<Integer> idsProductos) {
+            Set<Integer> idsProductos,
+            boolean respaldoCompleto) {
         if (empresa == null || empresa.idEmpresa() == null || !idEmpresa.equals(empresa.idEmpresa())) {
             throw ApiException.badRequest("El id_empresa del respaldo no coincide con la empresa de la URL.");
         }
@@ -625,7 +627,8 @@ public class RespaldoService {
                 }
             });
         }
-        for (Sucursal actual : sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa)) {
+        // Solo un respaldo de la empresa completa quita las sucursales que no trae.
+        for (Sucursal actual : respaldoCompleto ? sucursalRepository.findByEmpresa_IdEmpresa(idEmpresa) : List.<Sucursal>of()) {
             if (!idsSucursales.contains(actual.getIdSucursal()) && sucursalEnUso(idEmpresa, actual.getIdSucursal())) {
                 throw ApiException.badRequest("No se quita la sucursal \"" + actual.getNombre()
                         + "\" porque tiene cajas, stock, pedidos o personal. No se borran ventas.");

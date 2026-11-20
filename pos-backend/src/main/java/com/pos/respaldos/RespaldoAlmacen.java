@@ -80,11 +80,14 @@ public class RespaldoAlmacen {
                     if (node.has("alcance")) {
                         alcance = node.get("alcance").asText("EMPRESA_COMPLETA");
                     }
-                    if (node.has("idSucursal") && !node.get("idSucursal").isNull()) {
-                        idSuc = node.get("idSucursal").asInt();
+                    // El respaldo se escribe en snake_case (estrategia global de Jackson).
+                    JsonNode suc = campo(node, "id_sucursal", "idSucursal");
+                    if (suc != null) {
+                        idSuc = suc.asInt();
                     }
-                    if (node.has("nombreSucursal") && !node.get("nombreSucursal").isNull()) {
-                        nomSuc = node.get("nombreSucursal").asText();
+                    JsonNode nombreSuc = campo(node, "nombre_sucursal", "nombreSucursal");
+                    if (nombreSuc != null) {
+                        nomSuc = nombreSuc.asText();
                     }
                 } catch (Exception ignored) {}
 
@@ -186,6 +189,16 @@ public class RespaldoAlmacen {
         } catch (IOException ex) {
             return LocalDateTime.now().withNano(0);
         }
+    }
+
+    private static JsonNode campo(JsonNode node, String... nombres) {
+        for (String nombre : nombres) {
+            JsonNode valor = node.get(nombre);
+            if (valor != null && !valor.isNull()) {
+                return valor;
+            }
+        }
+        return null;
     }
 
     private static Path directorio(Integer idEmpresa) {

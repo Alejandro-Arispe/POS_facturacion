@@ -97,12 +97,21 @@ public class RespaldoScheduler {
 
     static boolean tocaEjecutar(ConfiguracionRespaldo config, LocalDateTime ahora) {
         LocalTime hora = horaProgramada(config.getHora());
-        if (hora == null || ahora.toLocalTime().isBefore(hora)) {
+        if (hora == null) {
             return false;
         }
+        LocalDateTime programado = ahora.toLocalDate().atTime(hora);
+        if (ahora.isBefore(programado)) {
+            return false;
+        }
+        LocalDateTime desde = config.getProgramadoDesde();
+        if (desde != null && programado.isBefore(desde)) {
+            return false; // el horario se guardo despues de la hora de hoy: empieza en la proxima ocurrencia
+        }
         LocalDateTime ultimo = config.getUltimoRespaldoExitoso();
-        if (ultimo != null && !ultimo.toLocalDate().isBefore(ahora.toLocalDate())) {
-            return false; // ya se ejecuto hoy
+        if (ultimo != null && !ultimo.toLocalDate().isBefore(ahora.toLocalDate())
+                && (desde == null || !ultimo.isBefore(desde))) {
+            return false; // ya se ejecuto hoy con este horario
         }
         String frecuencia = config.getFrecuencia() != null ? config.getFrecuencia().toUpperCase() : "DESACTIVADO";
         return switch (frecuencia) {

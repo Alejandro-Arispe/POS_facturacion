@@ -75,5 +75,12 @@ public class ConfiguracionRespaldo {
 
     @Column(name = "ultimo_respaldo_exitoso")
     private java.time.LocalDateTime ultimoRespaldoExitoso;
+
+    /**
+     * Momento (hora de Bolivia) en que se guardo el horario actual. Las ejecuciones anteriores a este
+     * instante no cuentan: el nuevo horario empieza en su proxima ocurrencia.
+     */
+    @Column(name = "programado_desde")
+    private java.time.LocalDateTime programadoDesde;
 }
 
