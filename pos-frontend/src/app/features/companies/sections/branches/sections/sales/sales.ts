@@ -1519,6 +1519,9 @@ export class Sales implements OnInit {
   }
 
   private openPaymentTab(): void {
+    // Se vuelve a consultar al abrir cada cobro: si el servidor activo la billetera despues de cargar
+    // esta pantalla, el QR y la tarjeta usan la integracion real sin tener que recargar la pagina.
+    this.loadBilleteraConfig();
     this.showPaymentTab = true;
     this.salePaymentRows = [this.createPaymentRow(undefined, this.total)];
     this.activeTab = 'payment';
