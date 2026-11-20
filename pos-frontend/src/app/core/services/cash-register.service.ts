@@ -137,6 +137,8 @@ export interface SaleDetailRequest {
 export interface SalePaymentRequest {
   id_metodo_pago: number;
   monto: number;
+  /** Id del cobro QR de la Billetera (solo metodo QR con la pasarela configurada). */
+  referencia_billetera?: string;
 }
 
 export interface CreateSaleRequest {

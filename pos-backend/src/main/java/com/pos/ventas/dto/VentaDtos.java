@@ -46,6 +46,8 @@ public final class VentaDtos {
     public static class PagoCreate {
         private Integer idMetodoPago;
         private BigDecimal monto;
+        /** Id del cobro QR en la Billetera (solo metodo QR, cuando la pasarela esta configurada). */
+        private String referenciaBilletera;
     }
 
     @Getter

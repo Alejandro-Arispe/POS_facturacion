@@ -78,6 +78,7 @@ public class VentaService {
     private final com.pos.siat.service.SiatFacturaService siatFacturaService;
     private final com.pos.ventas.repo.FacturaRepository facturaRepository;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.ventas.repo.AutorizacionCreditoRepository autorizacionCreditoRepository;
+    @org.springframework.beans.factory.annotation.Autowired private com.pos.billetera.service.BilleteraService billeteraService;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.usuarios.repo.UsuarioRepository usuarioRepository;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.common.security.PasswordService passwordService;
     @org.springframework.beans.factory.annotation.Autowired private com.pos.auditoria.service.BitacoraService bitacoraService;
@@ -332,6 +333,14 @@ public class VentaService {
                 ventaPago.setMonto(pago.getMonto());
                 ventaPago.setFecha(LocalDateTime.now());
                 ventaPagoRepository.save(ventaPago);
+                // Pasarela QR de la Billetera: el pago QR debe estar confirmado (PAGADO) y se usa una sola vez.
+                // Si la falla, se revierte toda la venta por estar en la misma transaccion.
+                if (billeteraService.qrHabilitado() && metodoPagoRepository.findById(pago.getIdMetodoPago())
+                        .map(m -> "QR".equalsIgnoreCase(m.getNombre().trim())).orElse(false)) {
+                    if (pago.getReferenciaBilletera() == null || pago.getReferenciaBilletera().isBlank())
+                        throw ApiException.badRequest("El pago QR debe confirmarse con la billetera.");
+                    billeteraService.consumirParaVenta(pago.getReferenciaBilletera(), pago.getMonto(), idEmpresa, venta.getIdVenta());
+                }
                 // El saldo a favor no es dinero que entra a la caja.
                 boolean saldoAFavor = metodoPagoRepository.findById(pago.getIdMetodoPago()).map(this::esSaldoAFavor).orElse(false);
                 if (tipoIngreso != null && !saldoAFavor) {

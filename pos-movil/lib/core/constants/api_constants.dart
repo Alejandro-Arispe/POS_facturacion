@@ -1,5 +1,5 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kReleaseMode;
 
 class ApiConstants {
   static const String _envUrl = String.fromEnvironment('API_BASE_URL');
@@ -9,6 +9,8 @@ class ApiConstants {
   /// En celular físico por USB: usar `adb reverse tcp:8000 tcp:8000` o IP local de la PC.
   static String get baseUrl {
     if (_envUrl.isNotEmpty) return _envUrl;
+    // El APK de release (celular real) usa el servidor desplegado en AWS.
+    if (kReleaseMode) return 'http://52.71.40.111';
     if (!kIsWeb && Platform.isAndroid) {
       return 'http://10.0.2.2:8000';
     }
