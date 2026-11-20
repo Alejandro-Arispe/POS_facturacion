@@ -69,7 +69,7 @@ public class RespaldoScheduler {
                         ? config.getSucursal().getIdSucursal()
                         : null;
 
-                RespaldoRespuestas.Generado generado = respaldoService.exportarProgramado(idEmpresa, idSucursal);
+                RespaldoRespuestas.Generado generado = respaldoService.exportarProgramado(idEmpresa, idSucursal, config.getFrecuencia());
                 if (generado == null) {
                     continue;
                 }

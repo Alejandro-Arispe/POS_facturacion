@@ -1,5 +1,6 @@
 package com.pos.respaldos;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,7 +17,10 @@ public final class RespaldoRespuestas {
             String alcance,
             List<String> tablas,
             boolean incluyeVentas,
-            String mensaje) {
+            String mensaje,
+            LocalDate ventasDesde,
+            LocalDate ventasHasta,
+            int cantidadVentas) {
     }
 
     public record Resumen(
@@ -25,7 +29,14 @@ public final class RespaldoRespuestas {
             String alcance,
             Integer idSucursal,
             String nombreSucursal,
-            long tamanoBytes) {
+            long tamanoBytes,
+            LocalDate ventasDesde,
+            LocalDate ventasHasta,
+            Integer cantidadVentas) {
+    }
+
+    /** Respaldo convertido a Excel para descargar. */
+    public record Excel(String nombre, byte[] contenido) {
     }
 
     public record Restaurado(
@@ -65,6 +76,8 @@ public final class RespaldoRespuestas {
     }
 
     public record CrearManualDTO(
-            Integer idSucursal) {
+            Integer idSucursal,
+            LocalDate desde,
+            LocalDate hasta) {
     }
 }

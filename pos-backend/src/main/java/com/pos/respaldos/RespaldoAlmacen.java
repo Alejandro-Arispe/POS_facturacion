@@ -5,6 +5,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -74,6 +75,9 @@ public class RespaldoAlmacen {
                 String alcance = "EMPRESA_COMPLETA";
                 Integer idSuc = null;
                 String nomSuc = null;
+                LocalDate ventasDesde = null;
+                LocalDate ventasHasta = null;
+                Integer cantidadVentas = null;
                 try {
                     byte[] bytes = Files.readAllBytes(path);
                     JsonNode node = mapper.readTree(bytes);
@@ -89,6 +93,14 @@ public class RespaldoAlmacen {
                     if (nombreSuc != null) {
                         nomSuc = nombreSuc.asText();
                     }
+                    // Respaldos anteriores a la inclusion de ventas no traen este bloque.
+                    JsonNode ventas = campo(node, "ventas_historial", "ventasHistorial");
+                    if (ventas != null) {
+                        JsonNode d = campo(ventas, "desde"), h = campo(ventas, "hasta"), n = campo(ventas, "cantidad_ventas");
+                        ventasDesde = d == null ? null : LocalDate.parse(d.asText());
+                        ventasHasta = h == null ? null : LocalDate.parse(h.asText());
+                        cantidadVentas = n == null ? null : n.asInt();
+                    }
                 } catch (Exception ignored) {}
 
                 res.add(new RespaldoRespuestas.Resumen(
@@ -97,7 +109,10 @@ public class RespaldoAlmacen {
                         alcance,
                         idSuc,
                         nomSuc,
-                        tamano));
+                        tamano,
+                        ventasDesde,
+                        ventasHasta,
+                        cantidadVentas));
             }
             return res.stream()
                     .sorted(Comparator.comparing(RespaldoRespuestas.Resumen::fecha).reversed())

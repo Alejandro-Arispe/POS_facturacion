@@ -30,14 +30,16 @@ public class RespaldoController {
     }
 
     /**
-     * Respaldo manual: acepta payload opcional { "id_sucursal": 1 } o sin cuerpo (toda la empresa).
+     * Respaldo manual: payload opcional { "id_sucursal": 1, "desde": "2026-11-01", "hasta": "2026-11-20" }.
+     * Sin sucursal respalda toda la empresa; sin fechas incluye las ventas del dia.
      */
     @PostMapping
     public RespaldoRespuestas.Generado crear(
             @PathVariable Integer idEmpresa,
             @RequestBody(required = false) RespaldoRespuestas.CrearManualDTO dto) {
         Integer idSucursal = dto != null ? dto.idSucursal() : null;
-        return respaldoService.crear(idEmpresa, idSucursal, SecurityUtils.currentUser());
+        return respaldoService.crear(idEmpresa, idSucursal, dto != null ? dto.desde() : null,
+                dto != null ? dto.hasta() : null, SecurityUtils.currentUser());
     }
 
     @GetMapping
@@ -54,6 +56,21 @@ public class RespaldoController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + archivo + "\"")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(cuerpo);
+    }
+
+    /**
+     * El mismo respaldo en Excel (una hoja por tema) para verlo o compartirlo. Solo lectura: para restaurar se usa el JSON.
+     */
+    @GetMapping("/{archivo:.+}/excel")
+    public ResponseEntity<byte[]> descargarExcel(
+            @PathVariable Integer idEmpresa,
+            @PathVariable String archivo) {
+        RespaldoRespuestas.Excel excel = respaldoService.descargarExcel(idEmpresa, SecurityUtils.currentUser(), archivo);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + excel.nombre() + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel.contenido());
     }
 
     /**

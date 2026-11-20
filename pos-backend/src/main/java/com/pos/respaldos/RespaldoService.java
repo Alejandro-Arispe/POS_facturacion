@@ -91,9 +91,14 @@ public class RespaldoService {
     private final PlanRepository planRepository;
     private final ConfiguracionRespaldoRepository configuracionRespaldoRepository;
     private final RespaldoAlmacen almacen;
+    private final RespaldoVentas ventasRespaldo;
+    private final RespaldoExcel excel;
     private final EmailService emailService;
     private final ObjectMapper objectMapper;
     private final EntityManager entityManager;
+
+    /** Rango maximo de ventas en un respaldo manual, para que el archivo no crezca sin control. */
+    static final int MAX_DIAS_VENTAS = 366;
 
     public RespaldoService(
             EmpresaAccess empresaAccess, com.pos.common.access.DataReadPolicy dataPolicy, com.pos.common.access.RoleAdministrationPolicy rolePolicy, com.pos.common.access.RbacAudit rbacAudit,
@@ -110,6 +115,8 @@ public class RespaldoService {
             PlanRepository planRepository,
             ConfiguracionRespaldoRepository configuracionRespaldoRepository,
             RespaldoAlmacen almacen,
+            RespaldoVentas ventasRespaldo,
+            RespaldoExcel excel,
             EmailService emailService,
             ObjectMapper objectMapper,
             EntityManager entityManager) {
@@ -127,6 +134,8 @@ public class RespaldoService {
         this.planRepository = planRepository;
         this.configuracionRespaldoRepository = configuracionRespaldoRepository;
         this.almacen = almacen;
+        this.ventasRespaldo = ventasRespaldo;
+        this.excel = excel;
         this.emailService = emailService;
         this.objectMapper = objectMapper;
         this.entityManager = entityManager;
@@ -139,22 +148,57 @@ public class RespaldoService {
 
     @Transactional(readOnly = true)
     public RespaldoRespuestas.Generado crear(Integer idEmpresa, Integer idSucursal, Usuario usuario) {
+        return crear(idEmpresa, idSucursal, null, null, usuario);
+    }
+
+    /** Respaldo manual: sin fechas toma las ventas del dia (hora de Bolivia). */
+    @Transactional(readOnly = true)
+    public RespaldoRespuestas.Generado crear(Integer idEmpresa, Integer idSucursal, LocalDate desde, LocalDate hasta,
+            Usuario usuario) {
         requireOwner(usuario, idEmpresa);
-        return guardar(idEmpresa, idSucursal);
+        LocalDate hoy = LocalDate.now(RespaldoScheduler.ZONA);
+        LocalDate fin = hasta == null ? (desde == null ? hoy : desde) : hasta;
+        LocalDate inicio = desde == null ? fin : desde;
+        if (inicio.isAfter(fin)) {
+            throw ApiException.badRequest("La fecha 'desde' no puede ser posterior a 'hasta'.");
+        }
+        if (inicio.plusDays(MAX_DIAS_VENTAS).isBefore(fin)) {
+            throw ApiException.badRequest("El rango de ventas admite hasta " + MAX_DIAS_VENTAS + " días.");
+        }
+        return guardar(idEmpresa, idSucursal, inicio, fin);
     }
 
     @Transactional(readOnly = true)
     public void exportarProgramado(Integer idEmpresa) {
-        exportarProgramado(idEmpresa, null);
+        exportarProgramado(idEmpresa, null, "DIARIO");
     }
 
     /** Respaldo del scheduler: cada empresa en su propia transaccion para que un fallo no afecte a las demas. */
     @Transactional(readOnly = true)
-    public RespaldoRespuestas.Generado exportarProgramado(Integer idEmpresa, Integer idSucursal) {
+    public RespaldoRespuestas.Generado exportarProgramado(Integer idEmpresa, Integer idSucursal, String frecuencia) {
         if (!empresaRepository.existsById(idEmpresa)) {
             return null;
         }
-        return guardar(idEmpresa, idSucursal);
+        LocalDate hoy = LocalDate.now(RespaldoScheduler.ZONA);
+        return guardar(idEmpresa, idSucursal, periodoVentas(frecuencia, hoy), hoy);
+    }
+
+    /**
+     * Inicio del periodo de ventas segun la frecuencia. Incluye el dia anterior completo para que un
+     * respaldo de madrugada no deje fuera las ventas de la noche previa (los periodos se solapan, no hay huecos).
+     */
+    static LocalDate periodoVentas(String frecuencia, LocalDate hoy) {
+        return switch (frecuencia == null ? "DIARIO" : frecuencia.toUpperCase(Locale.ROOT)) {
+            case "SEMANAL" -> hoy.minusDays(7);
+            case "MENSUAL" -> hoy.minusMonths(1);
+            default -> hoy.minusDays(1);
+        };
+    }
+
+    public RespaldoRespuestas.Excel descargarExcel(Integer idEmpresa, Usuario usuario, String archivo) {
+        requireOwner(usuario, idEmpresa);
+        byte[] contenido = excel.generar(almacen.leer(idEmpresa, archivo), archivo);
+        return new RespaldoRespuestas.Excel(archivo.replaceFirst("\\.json$", ".xlsx"), contenido);
     }
 
     public List<RespaldoRespuestas.Resumen> listar(Integer idEmpresa, Usuario usuario) {
@@ -362,9 +406,10 @@ public class RespaldoService {
             throw ApiException.forbidden("Los respaldos completos requieren al administrador propietario.");
     }
 
-    public RespaldoRespuestas.Generado guardar(Integer idEmpresa, Integer idSucursal) {
+    public RespaldoRespuestas.Generado guardar(Integer idEmpresa, Integer idSucursal, LocalDate desde, LocalDate hasta) {
         LocalDateTime fecha = LocalDateTime.now().withNano(0);
-        RespaldoDocumento documento = armar(idEmpresa, idSucursal, fecha);
+        RespaldoDocumento documento = armar(idEmpresa, idSucursal, fecha,
+                ventasRespaldo.leer(idEmpresa, idSucursal, desde, hasta));
         try {
             byte[] json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(documento);
             String archivo = almacen.guardar(idEmpresa, json, fecha, idSucursal);
@@ -376,17 +421,26 @@ public class RespaldoService {
                     documento.alcance(),
                     RespaldoDocumento.TABLAS,
                     RespaldoDocumento.INCLUYE_VENTAS,
-                    RespaldoDocumento.MENSAJE_VENTAS);
+                    RespaldoDocumento.MENSAJE_VENTAS,
+                    desde,
+                    hasta,
+                    documento.ventasHistorial().cantidadVentas());
         } catch (JacksonException ex) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo serializar el respaldo.");
         }
+    }
+
+    public RespaldoRespuestas.Generado guardar(Integer idEmpresa, Integer idSucursal) {
+        LocalDate hoy = LocalDate.now(RespaldoScheduler.ZONA);
+        return guardar(idEmpresa, idSucursal, hoy, hoy);
     }
 
     public RespaldoRespuestas.Generado guardar(Integer idEmpresa) {
         return guardar(idEmpresa, null);
     }
 
-    private RespaldoDocumento armar(Integer idEmpresa, Integer idSucursal, LocalDateTime fecha) {
+    private RespaldoDocumento armar(Integer idEmpresa, Integer idSucursal, LocalDateTime fecha,
+            RespaldoDocumento.VentasHistorial ventas) {
         Empresa empresa = empresaRepository.findById(idEmpresa)
                 .orElseThrow(() -> ApiException.notFound("Empresa no encontrada."));
         List<SucursalDatos> sucursales;
@@ -454,7 +508,8 @@ public class RespaldoService {
                 rolesDatos,
                 permisos,
                 configuracion,
-                historial);
+                historial,
+                ventas);
     }
 
     /**

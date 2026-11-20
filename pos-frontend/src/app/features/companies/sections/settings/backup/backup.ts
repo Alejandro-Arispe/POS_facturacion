@@ -16,6 +16,9 @@ interface RespaldoResumen {
   id_sucursal?: number;
   nombre_sucursal?: string;
   tamano_bytes?: number;
+  ventas_desde?: string | null;
+  ventas_hasta?: string | null;
+  cantidad_ventas?: number | null;
 }
 
 interface RespaldoResultado {
@@ -27,6 +30,9 @@ interface RespaldoResultado {
   tablas: string[];
   incluye_ventas: boolean;
   mensaje: string;
+  ventas_desde?: string;
+  ventas_hasta?: string;
+  cantidad_ventas?: number;
 }
 
 interface ConfiguracionRespaldoDTO {
@@ -67,6 +73,9 @@ export class CompanyBackup implements OnInit {
   protected creando = false;
   protected alcanceManual: 'EMPRESA_COMPLETA' | 'SUCURSAL' = 'EMPRESA_COMPLETA';
   protected sucursalManualId: number | null = null;
+  // Periodo de ventas del respaldo manual (por defecto, el dia de hoy).
+  protected ventasDesde = this.hoy();
+  protected ventasHasta = this.hoy();
 
   // Estado para configuración automática
   protected config: ConfiguracionRespaldoDTO = {
@@ -108,15 +117,25 @@ export class CompanyBackup implements OnInit {
     this.error = '';
     this.aviso = '';
 
+    if (this.ventasDesde && this.ventasHasta && this.ventasDesde > this.ventasHasta) {
+      this.error = 'La fecha "desde" no puede ser posterior a "hasta".';
+      this.creando = false;
+      return;
+    }
     const payload = {
       id_sucursal: this.alcanceManual === 'SUCURSAL' ? this.sucursalManualId : null,
+      desde: this.ventasDesde || null,
+      hasta: this.ventasHasta || null,
     };
 
     this.api
       .post<RespaldoResultado, typeof payload>(this.ruta(), payload)
       .subscribe({
         next: (respuesta) => {
-          this.aviso = respuesta.mensaje || 'Copia de seguridad creada exitosamente.';
+          const ventas = respuesta.cantidad_ventas ?? 0;
+          this.aviso = `Copia creada con ${ventas} venta${ventas === 1 ? '' : 's'} del período `
+            + `${respuesta.ventas_desde ?? ''} al ${respuesta.ventas_hasta ?? ''}. `
+            + (respuesta.mensaje || '');
           this.creando = false;
           this.cdr.detectChanges();
           this.cargar();
@@ -234,21 +253,45 @@ export class CompanyBackup implements OnInit {
 
   protected descargar(archivo: string): void {
     const url = `${this.api.getBaseUrl()}/api/empresas/${this.companyId}/respaldos/${encodeURIComponent(archivo)}`;
+    this.bajarArchivo(url, archivo, 'No se pudo descargar la copia.');
+  }
+
+  /** Mismo respaldo en Excel (una hoja por tema), para verlo o compartirlo. Para restaurar se usa el JSON. */
+  protected descargarExcel(archivo: string): void {
+    const url = `${this.api.getBaseUrl()}/api/empresas/${this.companyId}/respaldos/${encodeURIComponent(archivo)}/excel`;
+    this.bajarArchivo(url, archivo.replace(/\.json$/, '.xlsx'), 'No se pudo generar el Excel de la copia.');
+  }
+
+  protected periodoVentas(r: RespaldoResumen): string {
+    if (r.cantidad_ventas == null) {
+      return 'Sin ventas (copia anterior)';
+    }
+    const periodo = r.ventas_desde === r.ventas_hasta ? `${r.ventas_desde}` : `${r.ventas_desde} al ${r.ventas_hasta}`;
+    return `${r.cantidad_ventas} venta${r.cantidad_ventas === 1 ? '' : 's'} · ${periodo}`;
+  }
+
+  private bajarArchivo(url: string, nombre: string, mensajeError: string): void {
     this.http.get(url, { responseType: 'blob' }).subscribe({
       next: (blob) => {
         const enlace = document.createElement('a');
         const objectUrl = URL.createObjectURL(blob);
         enlace.href = objectUrl;
-        enlace.download = archivo;
+        enlace.download = nombre;
         enlace.click();
         URL.revokeObjectURL(objectUrl);
         this.cdr.detectChanges();
       },
       error: () => {
-        this.error = 'No se pudo descargar la copia.';
+        this.error = mensajeError;
         this.cdr.detectChanges();
       },
     });
+  }
+
+  /** Fecha de hoy (local) en formato yyyy-MM-dd para los campos de fecha. */
+  private hoy(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   protected fechaLegible(fecha: string): string {

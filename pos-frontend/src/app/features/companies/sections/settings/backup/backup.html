@@ -67,6 +67,20 @@
             </div>
           }
 
+          <div class="form-group">
+            <span class="form-label">Ventas a incluir (copia de consulta):</span>
+            <div class="backup-dates">
+              <label class="text-sm" for="ventasDesdeInput">Desde</label>
+              <input id="ventasDesdeInput" class="form-input" type="date" [(ngModel)]="ventasDesde" [max]="ventasHasta" />
+              <label class="text-sm" for="ventasHastaInput">Hasta</label>
+              <input id="ventasHastaInput" class="form-input" type="date" [(ngModel)]="ventasHasta" [min]="ventasDesde" />
+            </div>
+            <p class="text-muted text-sm">
+              Se guardan ventas, detalle, pagos, facturas y cierres de caja del período. Al restaurar no se borra ni
+              modifica ninguna venta.
+            </p>
+          </div>
+
           <button
             class="btn btn-primary"
             type="button"
@@ -222,6 +236,7 @@
                   <th>Archivo</th>
                   <th>Fecha</th>
                   <th>Alcance</th>
+                  <th>Ventas</th>
                   <th>Tamaño</th>
                   <th>Acciones</th>
                 </tr>
@@ -240,10 +255,16 @@
                         <span class="badge badge-neutral">Toda la empresa</span>
                       }
                     </td>
+                    <td class="text-sm">{{ periodoVentas(copia) }}</td>
                     <td>{{ formatearTamano(copia.tamano_bytes) }}</td>
                     <td class="backup-actions">
-                      <button class="btn btn-secondary btn-sm" type="button" (click)="descargar(copia.archivo)">
-                        Descargar
+                      <button class="btn btn-secondary btn-sm" type="button" (click)="descargar(copia.archivo)"
+                        title="Archivo JSON: es el que se usa para restaurar">
+                        JSON
+                      </button>
+                      <button class="btn btn-secondary btn-sm" type="button" (click)="descargarExcel(copia.archivo)"
+                        title="Excel con una hoja por tema (ventas, productos, sucursales...). Solo para consulta">
+                        Excel
                       </button>
                       <button
                         class="btn btn-danger btn-sm"
