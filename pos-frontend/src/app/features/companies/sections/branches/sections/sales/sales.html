@@ -519,6 +519,10 @@
                         />
                       </div>
 
+                      @if (paymentRow.cheque; as cheque) {
+                        <app-cheque-payment-fields [payment]="cheque" />
+                      }
+
                       @if (isQrRow(paymentRow) && billeteraConfig.qr_habilitado) {
                         <div class="qr-payment" role="group" aria-label="Pago con QR de la billetera">
                           @if (qrBusy.has(paymentRow.id)) {
@@ -843,9 +847,9 @@
                           id="paymentMethod"
                           name="paymentMethod"
                           [(ngModel)]="selectedPaymentMethodId"
-                          [disabled]="loadingPaymentMethods || paymentMethods.length === 0"
+                          [disabled]="loadingPaymentMethods || movementPaymentMethods.length === 0"
                         >
-                          @for (paymentMethod of paymentMethods; track paymentMethod.id) {
+                          @for (paymentMethod of movementPaymentMethods; track paymentMethod.id) {
                             <option [ngValue]="paymentMethod.id">{{ paymentMethod.nombre }}</option>
                           }
                         </select>
@@ -999,6 +1003,14 @@
           <span class="summary-label">METODOS DE PAGO</span>
           <span class="summary-value">{{ selectedSaleDetail.metodosPago }}</span>
         </div>
+        @if (selectedSaleDetail.cheque; as cheque) {
+          <div class="summary-item span-full">
+            <span class="summary-label">CHEQUE</span>
+            <span class="summary-value">
+              {{ cheque.banco }} · N.º {{ cheque.numero }} · Emitido el {{ cheque.fecha_emision | date:'dd/MM/yyyy' }}
+            </span>
+          </div>
+        }
       </div>
 
       <div class="table-shell detail-table-shell">

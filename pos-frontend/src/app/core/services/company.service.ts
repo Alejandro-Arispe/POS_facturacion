@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiService } from './api.service';
+import type { ChequePaymentDetails } from './cash-register.service';
 import { CompanyActiveSubscription, CompanyPermission } from './company-permissions.service';
 
 export interface ClientPaymentHistoryItem {
@@ -11,6 +12,7 @@ export interface ClientPaymentHistoryItem {
   monto_pagado: number;
   fecha_pago: string | null;
   metodo_pago: { nombre?: string } | null;
+  cheque?: ChequePaymentDetails;
 }
 
 export interface Company {
@@ -190,6 +192,7 @@ export interface CreditPayment {
   monto_pagado: string | number;
   fecha_pago: string;
   metodo_pago: CreditPaymentMethod;
+  cheque?: ChequePaymentDetails;
 }
 
 export interface ReceivableSaleProduct {

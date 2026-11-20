@@ -122,7 +122,14 @@
                     <td>{{ pago.fecha_pago | date: 'dd/MM/yyyy HH:mm' }}</td>
                     <td>{{ pago.id_venta }}</td>
                     <td>{{ pago.id_cxc }}</td>
-                    <td>{{ pago.metodo_pago?.nombre ?? '-' }}</td>
+                    <td>
+                      {{ pago.metodo_pago?.nombre ?? '-' }}
+                      @if (pago.cheque; as cheque) {
+                        <div class="text-muted">
+                          {{ cheque.banco }} · N.º {{ cheque.numero }} · {{ cheque.fecha_emision | date: 'dd/MM/yyyy' }}
+                        </div>
+                      }
+                    </td>
                     <td>{{ pago.monto_pagado | money }}</td>
                   </tr>
                 }

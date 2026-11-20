@@ -34,6 +34,7 @@ import com.pos.usuarios.domain.Usuario;
 import com.pos.usuarios.repo.UsuarioRepository;
 import com.pos.ventas.domain.DetalleVenta;
 import com.pos.ventas.domain.Factura;
+import com.pos.ventas.domain.MetodoPago;
 import com.pos.ventas.domain.Venta;
 import com.pos.ventas.repo.DetalleVentaRepository;
 import com.pos.ventas.repo.FacturaRepository;
@@ -115,6 +116,18 @@ public class SiatFacturaService {
     @Transactional
     public Factura emitir(Venta venta, CajaSesion sesion, Cliente cliente, Comprador comprador, String metodoPagoNombre,
             boolean enviarCorreo) {
+        List<String> metodos = metodoPagoNombre == null ? List.of() : List.of(metodoPagoNombre);
+        return emitirConMetodosPago(venta, sesion, cliente, comprador, metodos, enviarCorreo);
+    }
+
+    @Transactional
+    public Factura emitirConMetodosPago(Venta venta, CajaSesion sesion, Cliente cliente, Comprador comprador,
+            List<String> metodosPorMonto) {
+        return emitirConMetodosPago(venta, sesion, cliente, comprador, metodosPorMonto, true);
+    }
+
+    private Factura emitirConMetodosPago(Venta venta, CajaSesion sesion, Cliente cliente, Comprador comprador,
+            List<String> metodosPorMonto, boolean enviarCorreo) {
         Empresa empresa = sesion.getCaja().getSucursal().getEmpresa();
         Integer idSucursal = sesion.getCaja().getSucursal().getIdSucursal();
         // HU-17: validación previa. Si algo falla no se envía nada al SIN y el PDV recibe un mensaje por campo.
@@ -196,7 +209,7 @@ public class SiatFacturaService {
         factura.setNitCliente(documento);
         factura.setRazonSocialCliente(razonSocial);
         factura.setCodigoTipoDocumento(tipoDocumento);
-        factura.setCodigoMetodoPago(codigoMetodoPago(metodoPagoNombre));
+        factura.setCodigoMetodoPago(codigoMetodoPago(metodosPorMonto));
         factura.setMontoTotal(venta.getTotal());
         factura.setIva(iva);
         factura.setCuis(cuis);
@@ -473,10 +486,21 @@ public class SiatFacturaService {
     }
 
     /** Código SIN del método de pago a partir del nombre registrado en el sistema. */
-    private static int codigoMetodoPago(String nombre) {
-        String n = nombre == null ? "" : nombre.trim().toUpperCase(Locale.ROOT);
-        return switch (n) {
+    private static int codigoMetodoPago(List<String> metodosPorMonto) {
+        List<String> nombres = metodosPorMonto.stream()
+                .map(nombre -> nombre.trim().toUpperCase(Locale.ROOT))
+                .toList();
+        if (nombres.size() > 1 && nombres.contains(MetodoPago.CHEQUE)) {
+            Set<String> combinacion = Set.copyOf(nombres);
+            if (combinacion.equals(Set.of("EFECTIVO", MetodoPago.CHEQUE))) return 11;
+            if (combinacion.equals(Set.of("TARJETA", MetodoPago.CHEQUE))) return 16;
+            // El SIAT usa Otros para métodos sin código en la paramétrica.
+            return 5;
+        }
+        String principal = nombres.isEmpty() ? "" : nombres.get(0);
+        return switch (principal) {
             case "TARJETA" -> 2;
+            case MetodoPago.CHEQUE -> 3;
             case "QR", "TRANSFERENCIA" -> 7;
             default -> 1;
         };

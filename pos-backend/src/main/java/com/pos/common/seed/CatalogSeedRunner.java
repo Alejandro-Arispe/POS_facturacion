@@ -287,6 +287,7 @@ public class CatalogSeedRunner implements ApplicationRunner {
         seedMetodoPago("TARJETA", "Pago con tarjeta");
         seedMetodoPago("SALDO A FAVOR", "Saldo a favor del cliente por devoluciones");
         seedMetodoPago("TRANSFERENCIA", "Pago por transferencia bancaria");
+        seedMetodoPago(MetodoPago.CHEQUE, "Pago con cheque cobrado");
     }
 
     private void seedMetodoPago(String nombre, String descripcion) {
